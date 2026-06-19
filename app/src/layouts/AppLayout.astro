@@ -5,6 +5,11 @@ const { title = "Trellis", description = "Posture → planner → Structure → 
   Astro.props;
 const base = import.meta.env.BASE_URL.replace(/\/$/, "");
 const year = new Date().getFullYear();
+
+// Build stamp so the live site always shows exactly what's deployed.
+const sha = (process.env.GITHUB_SHA ?? "").slice(0, 7);
+const buildDate = new Date().toISOString().slice(0, 10);
+const buildLabel = sha ? `${buildDate} · ${sha}` : `${buildDate} · dev`;
 ---
 
 <!doctype html>
@@ -26,11 +31,19 @@ const year = new Date().getFullYear();
         class="text-muted-foreground mx-auto flex max-w-7xl flex-col gap-2 px-5 py-6 text-xs sm:flex-row sm:items-center"
       >
         <span>Trellis — Posture → planner → Structure → reconcile loop.</span>
-        <span class="sm:ml-auto">
+        <span class="sm:ml-auto flex items-center gap-2">
+          <a class="hover:text-foreground" href={`${base}/docs/changelog`}>What's new</a>
+          <span>·</span>
           <a class="hover:text-foreground" href={`${base}/docs/overview`}>Docs</a>
-          <span class="mx-2">·</span>
+          <span>·</span>
           <a class="hover:text-foreground" href="https://github.com/hakkiki/trellis">GitHub</a>
-          <span class="mx-2">·</span>
+          <span>·</span>
+          <a
+            class="border-border/60 hover:text-foreground rounded-full border px-2 py-0.5 font-mono"
+            href={`${base}/docs/changelog`}
+            title="Deployed build">{buildLabel}</a
+          >
+          <span>·</span>
           <span>© {year}</span>
         </span>
       </div>
