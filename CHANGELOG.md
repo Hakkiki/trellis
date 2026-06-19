@@ -7,6 +7,11 @@ The simulator deploys continuously from `main`, so entries are grouped by date r
 
 ### Added
 
+- **Polish pass**: the guided tour popovers are now **themed to the Trellis palette** (no more stock
+  white box); the landing page is refreshed (current "what's new" pill, cost-drift / ownership /
+  self-upgrade stress cards); a **Reset** control clears saved state for a clean demo; the **overview
+  service tiles tint by the active lens** (cost / health / security) and show $/mo in the cost lens; and
+  the 3D stage is **GPU-composited** (`will-change` + `contain`) so orbit/zoom stays smooth.
 - **Topology that scales to many services**: the 3D stage no longer crowds every service into the same
   cells. By default it shows a **grouped overview** — one tile per service per region (name · state ·
   resource count) — and you **tap a tile (or a service chip) to drill into that one service's full

@@ -57,7 +57,7 @@ import {
   servicesOf,
 } from "@/sim/model";
 import { ALL_STATES, type State, stateColorVar } from "@/sim/state";
-import { loadSession, saveSession } from "@/sim/store";
+import { clearSession, loadSession, saveSession } from "@/sim/store";
 import Stage3D from "./Stage3D";
 import { startTour } from "./tour";
 import {
@@ -193,6 +193,19 @@ export default function Simulator() {
     refresh();
   };
 
+  // Reset to a clean slate: clear saved state and start from the default posture.
+  const resetAll = () => {
+    void clearSession();
+    engineRef.current = new Engine(DEFAULT_POSTURE);
+    setForm(DEFAULT_POSTURE);
+    setRunning(false);
+    setSelected(null);
+    setServiceFocus("all");
+    setView("state");
+    setLayout("stage");
+    refresh();
+  };
+
   const plan = snap?.plan ?? null;
   const phase = snap?.phase ?? "empty";
   const resources = snap?.resources ?? [];
@@ -204,7 +217,7 @@ export default function Simulator() {
 
   return (
     <div className="dark text-foreground space-y-4">
-      <Guide onTour={startTour} />
+      <Guide onTour={startTour} onReset={resetAll} />
       <div className="grid gap-4 lg:grid-cols-[300px_1fr_340px]">
         {/* ---- Left: Posture ---- */}
         <Card id="tour-posture" className="h-fit min-w-0">
@@ -682,7 +695,7 @@ export default function Simulator() {
   );
 }
 
-function Guide({ onTour }: { onTour: () => void }) {
+function Guide({ onTour, onReset }: { onTour: () => void; onReset: () => void }) {
   return (
     <Card>
       <CardContent className="pt-4">
@@ -690,9 +703,19 @@ function Guide({ onTour }: { onTour: () => void }) {
           <div className="flex items-center gap-2 text-sm font-medium">
             <Compass className="text-primary size-4" /> New here? Start with the guide.
           </div>
-          <Button size="sm" variant="secondary" onClick={onTour}>
-            Take the tour
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={onReset}
+              title="Clear saved state and start over"
+            >
+              Reset
+            </Button>
+            <Button size="sm" variant="secondary" onClick={onTour}>
+              Take the tour
+            </Button>
+          </div>
         </div>
         <Accordion type="single" collapsible className="text-sm">
           <AccordionItem value="what">
