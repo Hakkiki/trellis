@@ -1,0 +1,12 @@
+{
+  "name": "trellis-deck-marp-export",
+  "private": true,
+  "description": "Portable Marp bundle of the \"trellis-deck\" Lattice deck",
+  "scripts": {
+    "pdf": "marp trellis-deck.md --config-file marp.config.cjs --allow-local-files -o trellis-deck.pdf",
+    "html": "marp trellis-deck.md --config-file marp.config.cjs --allow-local-files -o trellis-deck.html"
+  },
+  "dependencies": {
+    "@marp-team/marp-cli": "^4.3.1"
+  }
+}

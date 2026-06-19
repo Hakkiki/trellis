@@ -1,0 +1,372 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Trellis — behavioral simulator</title>
+<style>
+  :root{
+    --bg:#15110D; --panel:#1f1a14; --panel2:#272016; --line:#3a3024;
+    --ink:#FAF7F2; --mut:#9a8f7d; --blue:#4FA8DA; --green:#6FBF8F;
+    --rose:#B66074; --gold:#C8A040; --violet:#9a86d6; --grey:#6b6256;
+    --converged:var(--green); --converging:var(--blue); --degraded:var(--gold);
+    --drifted:var(--violet); --stalled:var(--rose); --frozen:var(--grey); --planned:#4a4030;
+    --grx:58deg; --grz:-1deg; --scale:1;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%}
+  body{background:radial-gradient(120% 120% at 50% -10%,#241d15,#100c08 70%);color:var(--ink);
+    font:14px/1.45 ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,sans-serif;overflow:hidden}
+  .app{display:grid;grid-template-columns:268px 1fr 312px;grid-template-rows:52px 1fr;height:100vh}
+  header{grid-column:1/4;display:flex;align-items:center;gap:18px;padding:0 18px;border-bottom:1px solid var(--line);background:#130f0a}
+  .brand{display:flex;align-items:center;gap:11px;font-weight:600}
+  .brand b{font-size:16px}.brand span{color:var(--mut);font-weight:400;font-size:12px}
+  .clock{margin-left:auto;color:var(--mut);font-variant-numeric:tabular-nums;font-size:12px}
+  .envpill{display:flex;align-items:center;gap:7px;padding:5px 11px;border:1px solid var(--line);border-radius:999px;font-size:12px;background:#1a150f}
+  .dot{width:9px;height:9px;border-radius:50%;background:var(--green);box-shadow:0 0 8px currentColor}
+  .views{display:flex;gap:4px}
+  .views button{font-size:11px;padding:4px 9px;border-radius:7px;border:1px solid var(--line);background:#1a150f;color:var(--mut);cursor:pointer}
+  .views button.on{color:var(--ink);border-color:var(--blue);background:#15212b}
+  aside{padding:14px;overflow:auto;border-right:1px solid var(--line);background:var(--panel)}
+  aside.right{border-right:0;border-left:1px solid var(--line)}
+  h2{font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--mut);margin:2px 0 10px}
+  h2:not(:first-child){margin-top:20px}
+  .field{margin-bottom:11px}
+  .field label{display:block;font-size:11px;color:var(--mut);margin-bottom:4px}
+  select,input[type=range]{width:100%}
+  select{background:var(--panel2);color:var(--ink);border:1px solid var(--line);border-radius:7px;padding:6px 8px}
+  .crit{display:flex;gap:6px}
+  .crit button{flex:1;padding:6px 0;border:1px solid var(--line);background:var(--panel2);color:var(--mut);border-radius:7px;cursor:pointer;font-size:12px}
+  .crit button.on{color:#15110D;font-weight:700}
+  .crit button[data-c="0"].on{background:var(--rose);border-color:var(--rose)}
+  .crit button[data-c="1"].on{background:var(--gold);border-color:var(--gold)}
+  .crit button[data-c="2"].on{background:var(--green);border-color:var(--green)}
+  .crit button[data-c="3"].on{background:var(--mut);border-color:var(--mut)}
+  .btn{display:block;width:100%;padding:9px;margin-top:8px;border-radius:8px;border:1px solid var(--line);background:var(--panel2);color:var(--ink);cursor:pointer;font-weight:600;font-size:13px;transition:.12s}
+  .btn:hover{border-color:var(--blue)}
+  .btn.primary{background:linear-gradient(#1c3a4d,#15212b);border-color:var(--blue)}
+  .btn.warn{background:#2b1a1f;border-color:#5a2f3a}
+  .btn:disabled{opacity:.4;cursor:not-allowed}
+  .evgrid{display:grid;grid-template-columns:1fr 1fr;gap:7px}
+  .evgrid .btn{margin-top:0;font-weight:500;font-size:12px;padding:8px 6px}
+  .hint{font-size:10.5px;color:var(--mut);margin-top:10px;line-height:1.5}
+  /* stage */
+  main{position:relative;overflow:hidden;cursor:grab;background:radial-gradient(58% 44% at 50% 52%,#2a2017 0%,transparent 72%)}
+  main.drag{cursor:grabbing}
+  main::after{content:"";position:absolute;inset:0;pointer-events:none;background:radial-gradient(72% 62% at 50% 50%,transparent 42%,#000a)}
+  .scene{position:absolute;inset:0;perspective:1500px;perspective-origin:50% 38%}
+  .lattice-bg{position:absolute;inset:0;opacity:.05;background-image:
+    repeating-linear-gradient(45deg,#fff 0 1px,transparent 1px 26px),repeating-linear-gradient(-45deg,#fff 0 1px,transparent 1px 26px)}
+  .camhint{position:absolute;left:14px;bottom:12px;font-size:11px;color:var(--mut);opacity:.7}
+  .promote{position:absolute;top:12px;left:50%;transform:translateX(-50%);display:flex;align-items:center;gap:9px;background:#130f0acc;border:1px solid var(--line);border-radius:999px;padding:6px 8px 6px 15px;font-size:12px}
+  .promote .lane{color:var(--mut)}.promote .lane b{color:var(--ink);margin-left:3px;font-variant-numeric:tabular-nums}
+  .promote .arr{color:var(--mut);opacity:.6}
+  .promote-btn{font-size:11px;padding:4px 11px;border-radius:999px;border:1px solid var(--green);background:#16241b;color:var(--green);cursor:pointer}
+  .promote-btn:disabled{opacity:.4;cursor:not-allowed;border-color:var(--line);color:var(--mut)}
+  .ground{position:absolute;left:50%;top:46%;width:760px;height:520px;margin:-260px 0 0 -380px;
+    transform-style:preserve-3d;transform:rotateX(var(--grx)) rotateZ(var(--grz)) scale(var(--scale))}
+  .regions,.weave,.nodes{position:absolute;inset:0;transform-style:preserve-3d}
+  .region{position:absolute;border:1px solid #ffffff22;border-radius:14px;background:linear-gradient(#ffffff0e,#ffffff04);box-shadow:inset 0 0 40px #0006}
+  .region .rlabel{position:absolute;top:8px;left:12px;font-size:12px;color:#cdbfa6;transform:rotateX(calc(-1*var(--grx)));transform-origin:top left;letter-spacing:.04em}
+  .subnet{position:absolute;border:1px dashed #ffffff20;border-radius:9px}
+  .subnet .slabel{position:absolute;top:-7px;left:8px;font-size:9px;color:#9a8f7d;background:#1b1610;padding:0 5px;transform:rotateX(calc(-1*var(--grx)));transform-origin:top left}
+  .wire{position:absolute;height:2px;transform-origin:0 50%;border-radius:2px;opacity:.5;
+    background:repeating-linear-gradient(90deg,var(--wc,#4FA8DA) 0 7px,transparent 7px 15px);background-size:15px 100%;animation:flow 1.3s linear infinite}
+  .wire.repl{height:1.6px;--wc:#6FBF8F;opacity:.7;animation-duration:2.4s}
+  @keyframes flow{to{background-position:15px 0}}
+  .weave[data-view=state]{--wc:#4FA8DA}.weave[data-view=cost]{--wc:#d8923f}.weave[data-view=health]{--wc:#6FBF8F}
+  .node{position:absolute;width:68px;height:52px;margin:-26px 0 0 -34px;transform-style:preserve-3d;
+    transform:translateZ(38px) rotateZ(calc(-1*var(--grz))) rotateX(calc(-1*var(--grx)));
+    transition:opacity .5s,left .55s cubic-bezier(.3,.8,.3,1),top .55s cubic-bezier(.3,.8,.3,1)}
+  .node .face{position:absolute;inset:0;border-radius:10px;border:1px solid var(--st);overflow:hidden;
+    background:linear-gradient(165deg,#261d12,#0f0a06);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;
+    box-shadow:0 1px 0 #ffffff12 inset,0 8px 18px #0009,0 0 18px -5px var(--st)}
+  .node .accent{position:absolute;top:0;left:0;right:0;height:3px;background:var(--st);box-shadow:0 0 8px var(--st)}
+  .node .ico{color:var(--st);line-height:0;display:block;margin-top:4px}
+  .node .kind{font-size:8px;color:#cdbfa6;font-weight:700;letter-spacing:.09em;text-transform:uppercase}
+  .node .name{font-size:8.5px;color:var(--mut)}
+  .node .led{position:absolute;top:6px;right:7px;width:6px;height:6px;border-radius:50%;background:var(--st);box-shadow:0 0 8px var(--st)}
+  .node .stem{position:absolute;left:50%;top:100%;width:2px;height:38px;margin-left:-1px;background:linear-gradient(var(--st),transparent);transform-origin:top;transform:rotateX(var(--grx))}
+  .node .shadow{position:absolute;left:50%;top:100%;width:42px;height:14px;margin:34px 0 0 -21px;border-radius:50%;background:#0009;filter:blur(3px);transform:rotateX(var(--grx))}
+  .node.pulse .led{animation:pulse 1.1s infinite}
+  .node.pulse .face{animation:cardglow 1.3s infinite}
+  .node.appearing{opacity:0}
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+  @keyframes cardglow{0%,100%{box-shadow:0 1px 0 #ffffff12 inset,0 8px 18px #0009,0 0 12px -6px var(--st)}50%{box-shadow:0 1px 0 #ffffff12 inset,0 8px 18px #0009,0 0 24px -2px var(--st)}}
+  .frozenbadge{position:absolute;top:-9px;left:-9px;font-size:13px;filter:drop-shadow(0 1px 2px #000)}
+  /* right panel */
+  .proof{font-size:12px}
+  .proofrow{padding:7px 0;border-bottom:1px solid var(--line)}
+  .proofrow .h{display:flex;gap:8px;align-items:center}
+  .proofrow .why{color:var(--mut);font-size:11px;margin-top:2px}
+  .proofrow.sens .why{color:#cdbfa6}
+  .chip{font-size:10px;padding:1px 7px;border-radius:999px;border:1px solid var(--line);color:var(--mut)}
+  .log{font-size:11.5px;line-height:1.5}
+  .log .e{padding:5px 0;border-bottom:1px solid #ffffff0d;display:flex;gap:8px}
+  .log .t{color:var(--mut);font-variant-numeric:tabular-nums;flex:none}
+  .log .who{color:var(--blue);flex:none}
+  .log .msg{color:#d9cfbb}
+  .log .e.heal .who{color:var(--green)}.log .e.warn .who{color:var(--gold)}
+  .log .e.glass .who{color:var(--rose)}.log .e.gate .who{color:var(--gold)}
+  .legend{display:flex;flex-wrap:wrap;gap:6px 12px;font-size:11px;color:var(--mut)}
+  .legend i{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:5px;vertical-align:-1px}
+  .stat{display:flex;justify-content:space-between;font-size:12px;padding:3px 0;color:var(--mut)}
+  .stat b{color:var(--ink);font-variant-numeric:tabular-nums}
+  .empty{color:var(--mut);font-size:12px;text-align:center;padding:40px 0}
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <div class="brand">
+      <svg width="26" height="26" viewBox="0 0 128 128"><g transform="rotate(45 64 64)" stroke="#4FA8DA" stroke-width="6" fill="none" stroke-linecap="round"><rect x="40" y="40" width="48" height="48" rx="3"/><line x1="40" y1="64" x2="88" y2="64"/><line x1="64" y1="40" x2="64" y2="88"/></g><circle cx="64" cy="64" r="9" fill="#B66074"/></svg>
+      <b>Trellis</b><span>behavioral simulator · simulated cloud, real dynamics</span>
+    </div>
+    <div class="views" id="views">
+      <button data-view="state" class="on">State</button><button data-view="cost">Cost</button><button data-view="health">Health</button>
+    </div>
+    <div class="envpill"><span class="dot" id="envdot"></span><span id="envtext">—</span></div>
+    <div class="clock" id="clock">t+0s</div>
+  </header>
+
+  <aside class="left">
+    <h2>Posture — what you declare</h2>
+    <div class="field"><label>Intent</label><select id="intent"><option>payments service</option><option>data platform</option><option>internal tool</option></select></div>
+    <div class="field"><label>Criticality (a preset)</label>
+      <div class="crit" id="crit"><button data-c="0" class="on">C0</button><button data-c="1">C1</button><button data-c="2">C2</button><button data-c="3">C3</button></div></div>
+    <div class="field"><label>Resilience</label><select id="resilience"><option value="aa">active-active</option><option value="ap">active-passive</option><option value="single">single-region</option></select></div>
+    <div class="field"><label>Regions</label><select id="regions"><option value="2">2 — us-east, eu-west</option><option value="1">1 — us-east</option></select></div>
+    <div class="field"><label>Budget ($/mo)</label><input type="range" id="budget" min="2000" max="16000" step="500" value="9000"><div class="stat"><span>ceiling</span><b id="budgetval">$9,000</b></div></div>
+    <button class="btn primary" id="plan">Plan →</button>
+    <button class="btn" id="apply" disabled>Approve &amp; apply ✓</button>
+    <h2>Inject events</h2>
+    <div class="evgrid">
+      <button class="btn" id="ev-fail">Fail a node</button><button class="btn" id="ev-drift">Inject drift</button>
+      <button class="btn" id="ev-outage">Region outage</button><button class="btn warn" id="ev-glass">Break glass</button>
+    </div>
+    <button class="btn" id="ev-ratify" style="display:none">Ratify break-glass (Author)</button>
+    <div class="hint">Change Criticality / Resilience / Regions after applying — Trellis rolls it out as a <b>transition</b> (expand-contract), not a redefine. Drag the stage to orbit · scroll to zoom.</div>
+  </aside>
+
+  <main id="stage">
+    <div class="scene"><div class="lattice-bg"></div><div class="ground" id="ground"></div></div>
+    <div class="promote" id="promote">
+      <span class="lane">dev <b id="vdev">—</b></span><span class="arr">→</span>
+      <span class="lane">staging <b id="vstaging">—</b></span><span class="arr">→</span>
+      <span class="lane">prod <b id="vprod">—</b></span>
+      <button class="promote-btn" id="promote-btn" disabled>Promote →</button>
+    </div>
+    <div class="camhint">drag to orbit · scroll to zoom</div>
+  </main>
+
+  <aside class="right">
+    <h2>Plan — a proof, not a guess</h2>
+    <div class="proof" id="proof"><div class="empty">Declare a posture, then <b>Plan</b>.</div></div>
+    <h2>Resources &amp; cost</h2>
+    <div class="stat"><span>resources</span><b id="rcount">0</b></div>
+    <div class="stat"><span>monthly cost</span><b id="costval">$0</b></div>
+    <div class="stat"><span>vs budget</span><b id="budgetcmp">—</b></div>
+    <h2>State legend</h2>
+    <div class="legend">
+      <span><i style="background:var(--converged)"></i>Converged</span><span><i style="background:var(--converging)"></i>Converging</span>
+      <span><i style="background:var(--degraded)"></i>Degraded</span><span><i style="background:var(--drifted)"></i>Drifted</span>
+      <span><i style="background:var(--stalled)"></i>Stalled</span><span><i style="background:var(--frozen)"></i>Frozen</span>
+    </div>
+    <h2>Audit — every action, with why</h2>
+    <div class="log" id="log"></div>
+  </aside>
+</div>
+
+<script>
+const $=s=>document.querySelector(s),$$=s=>[...document.querySelectorAll(s)];
+const REGIONS=["us-east","eu-west"];
+const STATE_VAR={Converged:"--converged",Converging:"--converging",Degraded:"--degraded",Drifted:"--drifted",Stalled:"--stalled",Frozen:"--frozen",Planned:"--planned"};
+const COST={edge:140,app:220,data:480};
+const ICON={
+  edge:'<svg viewBox="0 0 16 16" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.3"><circle cx="8" cy="8" r="6"/><path d="M2 8h12M8 2c2.4 1.8 2.4 10.2 0 12M8 2c-2.4 1.8-2.4 10.2 0 12"/></svg>',
+  app:'<svg viewBox="0 0 16 16" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.3"><rect x="2.5" y="3" width="11" height="10" rx="2"/><path d="M2.5 6.5h11M6 6.5V13"/></svg>',
+  data:'<svg viewBox="0 0 16 16" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.3"><ellipse cx="8" cy="4" rx="5" ry="2"/><path d="M3 4v8c0 1.1 2.2 2 5 2s5-.9 5-2V4"/></svg>'};
+let S={posture:{intent:"payments service",crit:0,res:"aa",regions:2,budget:9000},resources:[],approved:false,clock:0,view:"state",planned:false,shapeDirty:true};
+let cam={rx:58,rz:-1,scale:1};
+S.ver=0; S.env={dev:0,staging:0,prod:0};
+function bumpVersion(){S.ver++;S.env.dev=S.ver;renderPromote();}
+function renderPromote(){const f=v=>v?"v"+v:"—";$("#vdev").textContent=f(S.env.dev);$("#vstaging").textContent=f(S.env.staging);$("#vprod").textContent=f(S.env.prod);
+  $("#promote-btn").disabled=!(S.env.staging<S.env.dev||S.env.prod<S.env.staging);
+  $("#promote-btn").textContent=(S.env.dev>0&&S.env.prod===S.env.dev)?"Promoted ✓":"Promote →";}
+
+const appReplicas=c=>[3,2,2,1][c];
+const rkey=r=>`${r.ri}-${r.kind}-${r.idx}`;
+function planStructure(p){
+  const regs=REGIONS.slice(0,p.res==="single"?1:p.regions),out=[];
+  regs.forEach((rg,ri)=>{
+    const active=p.res==="ap"?ri===0:true, idx={edge:0,app:0,data:0};
+    out.push(mk("edge",rg,ri,idx.edge++,active?"load balancer":"standby LB",`public entry for ${rg}`+(p.res==="ap"&&!active?" (passive)":"")));
+    const n=Math.max(1,appReplicas(p.crit)-(p.res==="ap"&&!active?1:0));
+    for(let i=0;i<n;i++) out.push(mk("app",rg,ri,idx.app++,`app ${i+1}`,`C${p.crit} → ${appReplicas(p.crit)} replicas/region for availability`));
+    out.push(mk("data",rg,ri,idx.data++,ri===0?"primary db":"replica db",ri===0?"system of record":`cross-region replica (RPO from C${p.crit})`));
+  });
+  return out;
+}
+function mk(kind,region,ri,idx,name,why){return {kind,region,ri,idx,name,why,desired:"present",observed:"absent",state:"Planned",failed:false,drift:false,frozen:false,heal:0,cost:COST[kind]};}
+const costOf=()=>S.resources.filter(r=>!r._leaving&&(r.observed==="present"||r.state!=="Planned")).reduce((s,r)=>s+r.cost,0);
+
+function log(who,msg,cls=""){const e=document.createElement("div");e.className="e "+cls;
+  e.innerHTML=`<span class="t">t+${S.clock}s</span><span class="who">${who}</span><span class="msg">${msg}</span>`;
+  const L=$("#log");L.prepend(e);while(L.children.length>60)L.lastChild.remove();}
+
+function doPlan(){
+  const next=planStructure(S.posture);
+  if(!S.resources.length||!S.approved){
+    S.resources=next.map(r=>(r.state="Planned",r)); if(!S.approved)$("#apply").disabled=false;
+    log("planner",`compiled posture → ${next.length} resources. plan is a proof; review &amp; approve.`,"gate");
+  }else{
+    const byKey=new Map(S.resources.filter(r=>!r._leaving).map(r=>[rkey(r),r])),nextKeys=new Set(next.map(rkey));
+    let added=0;const merged=[];
+    next.forEach(nr=>{const ex=byKey.get(rkey(nr));
+      if(ex){ex.name=nr.name;ex.why=nr.why;ex.cost=nr.cost;ex.desired="present";merged.push(ex);}
+      else{nr.state="Converging";nr.observed="absent";added++;merged.push(nr);}});
+    const removed=S.resources.filter(r=>!r._leaving&&!nextKeys.has(rkey(r)));
+    removed.forEach(r=>r._leaving=true);
+    S.resources=merged.concat(removed);
+    if(added||removed.length){log("planner",`transition (expand-contract): +${added} / −${removed.length}. a path, not a target — invariants held at each step.`,"gate");bumpVersion();}
+    if(removed.length) setTimeout(()=>{S.resources=S.resources.filter(r=>!r._leaving);S.shapeDirty=true;renderTopo();updateStats();},950);
+  }
+  S.planned=true;S.shapeDirty=true;renderProof();renderTopo();updateStats();
+}
+function sensitivity(p){
+  if(p.res==="single") return "raise to active-passive (2nd region) for disaster recovery — about +$0.8k/mo.";
+  if(p.res==="ap") return "raise to active-active to remove the failover gap — about +$"+(COST.edge+COST.app+COST.data)/1000+"k/mo.";
+  if(p.crit>0) return `raise to C${p.crit-1} for +1 app replica per region — about +$${(COST.app*(S.posture.res==="single"?1:p.regions))/1000}k/mo.`;
+  return "at C0 active-active: this is the resilience ceiling for the current budget.";
+}
+function renderProof(){
+  const byReg={};S.resources.filter(r=>!r._leaving).forEach(r=>(byReg[r.region]??=[]).push(r));
+  $("#proof").innerHTML=Object.entries(byReg).map(([rg,rs])=>
+    `<div class="proofrow"><div class="h"><span class="chip">${rg}</span><b>${rs.length} resources</b></div><div class="why">${rs[0].why}</div></div>`).join("")
+    +`<div class="proofrow"><div class="why">objective: meet resilience &amp; RPO at minimum cost; every resource traces to the posture.</div></div>`
+    +`<div class="proofrow sens"><div class="h"><span class="chip">sensitivity</span></div><div class="why">${sensitivity(S.posture)}</div></div>`;
+}
+function doApply(){if(!S.planned)return;S.approved=true;$("#apply").disabled=true;
+  log("gate","approved = merge. minted ephemeral credential scoped to this diff.","gate");
+  bumpVersion();
+  S.resources.forEach(r=>{if(r.state==="Planned")r.state="Converging";});renderTopo();}
+
+// ---- reconciler ----
+function tick(){S.clock++;$("#clock").textContent="t+"+S.clock+"s";
+  if(S.approved) S.resources.forEach(r=>{
+    if(r._leaving)return;
+    if(r.frozen){r.state="Frozen";return;}
+    if(r.failed){if(r.state!=="Degraded"&&r.heal===0){r.state="Degraded";r.heal=2;log("reconciler",`${r.region}/${r.name} unhealthy → self-healing within approved envelope`,"heal");}
+      if(r.heal>0&&--r.heal===0){r.failed=false;r.observed="present";r.state="Converging";}return;}
+    if(r.drift){r.state="Drifted";log("reconciler",`drift on ${r.region}/${r.name} → correcting`,"warn");r.drift=false;r.heal=1;return;}
+    if(r.observed!=="present"){r.state="Converging";if(Math.random()<.55)r.observed="present";return;}
+    if(r.heal>0){r.state="Converging";if(--r.heal===0)r.state="Converged";return;}
+    r.state="Converged";});
+  renderTopo();updateStats();updateEnv();}
+
+// ---- events ----
+const pick=f=>{const c=S.resources.filter(r=>!r._leaving&&f(r));return c[Math.floor(Math.random()*c.length)];};
+$("#ev-fail").onclick=()=>{if(!S.approved)return;const r=pick(x=>x.kind==="app"&&!x.failed&&!x.frozen);if(r){r.failed=true;log("chaos",`killed ${r.region}/${r.name}`,"warn");}};
+$("#ev-drift").onclick=()=>{if(!S.approved)return;const r=pick(x=>!x.drift&&!x.frozen);if(r){r.drift=true;log("chaos",`out-of-band change on ${r.region}/${r.name}`,"warn");}};
+$("#ev-outage").onclick=()=>{if(!S.approved)return;const rg=REGIONS[0];S.resources.filter(x=>x.region===rg&&!x.frozen&&!x._leaving).forEach(x=>x.failed=true);log("chaos",`region outage: ${rg} — failing over / self-healing`,"warn");};
+$("#ev-glass").onclick=()=>{if(!S.approved)return;const r=pick(x=>!x.frozen);if(r){r.frozen=true;$("#ev-ratify").style.display="block";log("incident-cmdr",`BREAK-GLASS on ${r.region}/${r.name} — time-boxed, dual-controlled. debt to repay.`,"glass");}};
+$("#ev-ratify").onclick=()=>{S.resources.forEach(r=>{if(r.frozen){r.frozen=false;r.observed="present";r.heal=1;}});$("#ev-ratify").style.display="none";log("operator","ratified break-glass via Author — debt repaid, reconciler resumes.","gate");};
+
+// ---- topology render (key-based, incremental) ----
+function ensureLayers(g){if(!g.dataset.init){g.innerHTML='<div class="regions"></div><div class="weave"></div><div class="nodes"></div>';g.dataset.init="1";}}
+function regionBox(ri,total){const gap=28,w=(760-gap*(total+1))/total;return {x:gap+ri*(w+gap),y:64,w,h:418};}
+function layout(){ // assign cx,cy to each live resource; returns region list
+  const live=S.resources.filter(r=>!r._leaving), regs=[...new Set(live.map(r=>r.ri))].sort((a,b)=>a-b);
+  regs.forEach(ri=>{const rb=regionBox(ri,regs.length),rs=live.filter(r=>r.ri===ri);
+    const lane={edge:0,app:1,data:2},cnt={},seen={};rs.forEach(r=>cnt[r.kind]=(cnt[r.kind]||0)+1);
+    rs.forEach(r=>{const li=lane[r.kind],n=cnt[r.kind],k=(seen[r.kind]=(seen[r.kind]||0),seen[r.kind]++);
+      r.cx=rb.x+(rb.w/(n+1))*(k+1); r.cy=rb.y+44+li*120+52;});});
+  return regs;
+}
+function rebuildRegions(g,regs){const R=g.querySelector(".regions");R.innerHTML="";
+  regs.forEach(ri=>{const rb=regionBox(ri,regs.length),reg=document.createElement("div");reg.className="region";
+    reg.style.cssText=`left:${rb.x}px;top:${rb.y}px;width:${rb.w}px;height:${rb.h}px`;
+    reg.innerHTML=`<div class="rlabel">▣ ${REGIONS[ri]} · Region (Frame)</div>`;
+    ["public · Cell","private · Cell","data · Cell"].forEach((s,si)=>{const sn=document.createElement("div");sn.className="subnet";
+      sn.style.cssText=`left:14px;top:${44+si*120}px;width:${rb.w-28}px;height:104px`;sn.innerHTML=`<div class="slabel">${s}</div>`;reg.appendChild(sn);});
+    R.appendChild(reg);});}
+function wire(W,a,b,cls){if(!a||!b)return;const dx=b.cx-a.cx,dy=b.cy-a.cy,len=Math.hypot(dx,dy),ang=Math.atan2(dy,dx)*180/Math.PI;
+  const d=document.createElement("div");d.className="wire"+(cls?" "+cls:"");d.style.cssText=`left:${a.cx}px;top:${a.cy}px;width:${len}px;transform:rotate(${ang}deg)`;W.appendChild(d);}
+function drawWeave(g){const W=g.querySelector(".weave");W.innerHTML="";const live=S.resources.filter(r=>!r._leaving);
+  const regs=[...new Set(live.map(r=>r.ri))];
+  regs.forEach(ri=>{const rs=live.filter(r=>r.ri===ri),edge=rs.find(r=>r.kind==="edge"),apps=rs.filter(r=>r.kind==="app"),data=rs.find(r=>r.kind==="data");
+    apps.forEach(a=>{wire(W,edge,a);wire(W,a,data);});});
+  const datas=regs.map(ri=>live.find(r=>r.ri===ri&&r.kind==="data")).filter(Boolean);
+  if(datas.length===2) wire(W,datas[0],datas[1],"repl"); // cross-region replication
+}
+function renderTopo(){
+  const g=$("#ground");ensureLayers(g);
+  const _W=g.querySelector(".weave");if(_W)_W.dataset.view=S.view;
+  if(S.shapeDirty){
+    const regs=layout(),N=g.querySelector(".nodes");
+    if(g.dataset.regs!==regs.join(",")){rebuildRegions(g,regs);g.dataset.regs=regs.join(",");}
+    const want=new Set(S.resources.filter(r=>!r._leaving).map(rkey));
+    // remove stale node els
+    [...N.children].forEach(el=>{if(!want.has(el.dataset.k)){el.classList.add("appearing");setTimeout(()=>el.remove(),500);}});
+    // create/move
+    S.resources.filter(r=>!r._leaving).forEach(r=>{let el=N.querySelector(`[data-k="${rkey(r)}"]`);
+      if(!el){el=document.createElement("div");el.className="node appearing";el.dataset.k=rkey(r);
+        el.innerHTML=`<div class="stem"></div><div class="shadow"></div><div class="face"><span class="accent"></span><span class="led"></span><span class="ico">${ICON[r.kind]||""}</span><span class="kind">${r.kind}</span><span class="name">${r.name}</span></div><div class="frozenbadge" style="display:none">🔒</div>`;
+        N.appendChild(el);requestAnimationFrame(()=>requestAnimationFrame(()=>el.classList.remove("appearing")));}
+      el.querySelector(".name").textContent=r.name;
+      el.style.left=r.cx+"px";el.style.top=r.cy+"px";});
+    drawWeave(g);S.shapeDirty=false;
+  }
+  S.resources.forEach(r=>{const el=$("#ground .nodes").querySelector(`[data-k="${rkey(r)}"]`);if(!el)return;
+    let col;if(S.view==="cost"){const t=Math.min(1,r.cost/480);col=`hsl(${30-t*30} 70% 55%)`;}
+    else if(S.view==="health")col=(r.failed||r.frozen)?"var(--stalled)":"var(--converged)";
+    else col=`var(${STATE_VAR[r.state]})`;
+    el.style.setProperty("--st",col);
+    el.classList.toggle("pulse",["Converging","Degraded","Drifted"].includes(r.state)&&S.view==="state");
+    el.querySelector(".frozenbadge").style.display=r.frozen?"block":"none";
+    if(!el.classList.contains("appearing"))el.style.opacity=(r._leaving)?0:((r.state==="Planned"&&!S.approved)?.5:1);});
+}
+function updateStats(){$("#rcount").textContent=S.resources.filter(r=>!r._leaving).length;
+  const c=costOf();$("#costval").textContent="$"+c.toLocaleString();const over=c>S.posture.budget,cmp=$("#budgetcmp");
+  cmp.textContent=(over?"+":"")+"$"+(c-S.posture.budget).toLocaleString()+(over?" OVER":" ok");cmp.style.color=over?"var(--rose)":"var(--green)";
+  if(over&&!S._wb){S._wb=true;log("finops",`budget breach: $${c.toLocaleString()} > $${S.posture.budget.toLocaleString()} — throttling.`,"warn");}if(!over)S._wb=false;}
+function updateEnv(){if(!S.approved){setEnv("var(--mut)","not deployed");return;}const r=S.resources.filter(x=>!x._leaving);
+  if(r.some(x=>x.frozen))setEnv("var(--frozen)","frozen (break-glass)");
+  else if(r.some(x=>x.failed||x.state==="Degraded"||x.state==="Stalled"))setEnv("var(--degraded)","degraded — self-healing");
+  else if(r.some(x=>x.state==="Converging"||x.state==="Drifted"))setEnv("var(--converging)","converging");
+  else setEnv("var(--green)","converged · healthy");}
+function setEnv(c,t){const d=$("#envdot");d.style.background=c;d.style.color=c;$("#envtext").textContent=t;}
+
+// ---- camera ----
+function setCam(){const g=$("#ground");g.style.setProperty("--grx",cam.rx+"deg");g.style.setProperty("--grz",cam.rz+"deg");g.style.setProperty("--scale",cam.scale);}
+(function camera(){const st=$("#stage");let dragging=false,px,py;
+  st.addEventListener("pointerdown",e=>{dragging=true;px=e.clientX;py=e.clientY;st.classList.add("drag");st.setPointerCapture(e.pointerId);});
+  st.addEventListener("pointermove",e=>{if(!dragging)return;cam.rx=Math.max(30,Math.min(74,cam.rx-(e.clientY-py)*0.3));cam.rz=Math.max(-32,Math.min(32,cam.rz+(e.clientX-px)*0.25));px=e.clientX;py=e.clientY;setCam();});
+  const up=()=>{dragging=false;st.classList.remove("drag");};st.addEventListener("pointerup",up);st.addEventListener("pointercancel",up);
+  st.addEventListener("wheel",e=>{e.preventDefault();cam.scale=Math.max(.6,Math.min(1.8,cam.scale-e.deltaY*0.0012));setCam();},{passive:false});})();
+
+// ---- wiring ----
+$("#plan").onclick=doPlan;$("#apply").onclick=doApply;
+$("#crit").onclick=e=>{const b=e.target.closest("button");if(!b)return;$$("#crit button").forEach(x=>x.classList.remove("on"));b.classList.add("on");S.posture.crit=+b.dataset.c;if(S.planned)doPlan();};
+$("#resilience").onchange=e=>{S.posture.res=e.target.value;if(S.planned)doPlan();};
+$("#regions").onchange=e=>{S.posture.regions=+e.target.value;if(S.planned)doPlan();};
+$("#intent").onchange=e=>{S.posture.intent=e.target.value;};
+$("#budget").oninput=e=>{S.posture.budget=+e.target.value;$("#budgetval").textContent="$"+(+e.target.value).toLocaleString();updateStats();};
+$("#views").onclick=e=>{const b=e.target.closest("button");if(!b)return;$$("#views button").forEach(x=>x.classList.remove("on"));b.classList.add("on");S.view=b.dataset.view;renderTopo();};
+$("#promote-btn").onclick=()=>{
+  if(S.env.staging<S.env.dev){S.env.staging=S.env.dev;log("operator",`promoted v${S.env.staging}: dev → staging — same immutable artifact, re-planned for staging's posture.`,"gate");}
+  else if(S.env.prod<S.env.staging){S.env.prod=S.env.staging;log("operator",`promoted v${S.env.prod}: staging → prod — what you validated is what shipped.`,"gate");}
+  renderPromote();};
+
+// ---- boot ----
+const q=new URLSearchParams(location.search);
+if(q.get("rx"))cam.rx=+q.get("rx");if(q.get("rz"))cam.rz=+q.get("rz");if(q.get("zoom"))cam.scale=+q.get("zoom");
+if(q.get("view")){S.view=q.get("view");$$("#views button").forEach(b=>b.classList.toggle("on",b.dataset.view===S.view));}
+setCam();renderPromote();doPlan();setTimeout(doApply,400);setInterval(tick,1000);
+const demo=q.get("demo");
+if(demo==="chaos"){setTimeout(()=>$("#ev-fail").click(),2200);setTimeout(()=>$("#ev-drift").click(),2350);setTimeout(()=>$("#ev-outage").click(),2500);setTimeout(()=>$("#ev-glass").click(),2700);}
+if(demo==="transition"){setTimeout(()=>$('#crit button[data-c="2"]').click(),2400);}
+if(demo==="promote"){setTimeout(()=>$("#promote-btn").click(),2200);setTimeout(()=>$("#promote-btn").click(),2500);}
+</script>
+</body>
+</html>
