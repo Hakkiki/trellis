@@ -7,6 +7,16 @@ The simulator deploys continuously from `main`, so entries are grouped by date r
 
 ### Added
 
+- **Invariants 18 & 19 — the last two inversion residuals hardened.** (18) **Gate rigor scales to blast
+  radius; the proof must be legible** — attention is rationed: trivial, reversible, in-catalog changes run
+  under a standing human-authored auto-merge policy, high-blast-radius changes escalate (independent
+  second, dual-control), and an unreadable proof *fails the gate* — foreclosing alarm fatigue and
+  rubber-stamping by design. (19) **The control plane is cheap by construction, and its cost is a
+  first-class signal** — each per-division instance is near-stateless and scale-to-zero, with its own cost
+  surfaced as a FinOps signal, so the economic pull to collapse back into one SPOF is visible and governed,
+  not silent. Reconciled the glossary / §9 "one gate" wording so the floor-case auto-merge doesn't read as
+  contradicting per-plan approval. Inversion-hardened set is now **11–19**. Promoted maker/checker.
+
 - **Invariant 17 — independent corroboration above a blast-radius threshold.** Promoted the inversion's
   honest *compiler-bet* residual (K22) into a concrete rule: for a plan whose computed blast radius crosses
   a posture-set threshold, a **second, independently-implemented planner** must reproduce the same realized

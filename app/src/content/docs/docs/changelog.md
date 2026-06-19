@@ -6,6 +6,17 @@ description: Recent changes to the Trellis simulator, newest first.
 What's shipped to the live simulator, newest first. The footer shows the exact build
 (date · commit) currently deployed.
 
+## Closing the last residuals — Invariants 18 & 19
+
+The final two honest residuals from the inversion are now invariants. **Invariant 18** rations attention by
+blast radius — trivial reversible changes run under a standing auto-merge policy, big changes escalate, and
+an unreadable proof *fails the gate* — so alarm fatigue and rubber-stamping can't quietly defeat the gate.
+**Invariant 19** keeps each per-division control plane near-stateless and scale-to-zero with its own cost
+surfaced as a first-class signal, so the economic temptation to collapse back into one SPOF is visible and
+governed. The inversion-hardened set is now 11–19; what remains is honest *remainder* (the compiler bet
+shrinks-not-vanishes; discipline in policy + proof legibility; a re-centralization choice is now deliberate
+and costed), not unaddressed gaps.
+
 ## Bounding the compiler bet — Invariant 17
 
 We went back to the inversion's honest residuals and hardened the biggest one. The **Posture→Structure

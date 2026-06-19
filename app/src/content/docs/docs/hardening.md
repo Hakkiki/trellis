@@ -12,8 +12,8 @@ always invert."* So we did not ask "how does Trellis win?" We asked the opposite
 > outage, an unrecoverable control plane, an unauthorized change that looks authorized?**
 
 Then we walked every kill-path and made sure the design forecloses it. The genuine gaps this surfaced
-became **new normative invariants** (spec [§17](/trellis/docs/spec), Invariants 11–16, plus a second-pass
-residual hardened into Invariant 17). This page is the
+became **new normative invariants** (spec [§17](/trellis/docs/spec), Invariants 11–16, plus later passes
+that hardened the honest residuals into Invariants 17–19). This page is the
 distilled version; the raw red-team enumeration lives in the off-site design bundle.
 
 ## The promises an attacker would target
@@ -114,9 +114,10 @@ The subtlest one. The gate approved a change; it just happened to be bad.
   ephemeral mint credential of [Inv 4](/trellis/docs/spec) — the actuator's short-lived STS session — not
   the auto-rotated workload identity.)
 
-## The honest residual
+## The residuals — bounded, not eliminated
 
-Inversion hardens; it doesn't make a system invincible. What remains, stated plainly:
+Inversion hardens; it doesn't make a system invincible. Each former residual now has an invariant; what
+*genuinely* remains is named honestly:
 
 - **The compiler bet is shrunk, not gone.** A Posture→Structure compiler can emit a subtly wrong Structure
   that *passes* its proof — a proof shows internal consistency, not real-world correctness. **Invariant 17**
@@ -125,16 +126,22 @@ Inversion hardens; it doesn't make a system invincible. What remains, stated pla
   re-validate-against-observed) — the checker outside the blast radius, applied to the planner. That closes
   the easy failures; the honest remainder is that two implementations can share a blind spot, or the
   blueprint itself can be wrong. Still the genuine research risk — now **bounded, not solved.**
-- **Social defeat is real.** A proof nobody reads is magic by another name; alarm fatigue defeats any human
-  gate. The mitigation is to **ration attention by blast radius** — auto-handle the trivial, escalate only
-  what's significant — but discipline, not just design, keeps the gate meaningful.
-- **Economics can re-centralize.** If running N control planes is too expensive, teams will collapse them
-  back into one. The near-stateless, self-managing footprint ([§12](/trellis/docs/spec)) is what keeps the
-  sliced model cheaper than the SPOF it replaces — but it's a pressure to watch, not a law.
+- **Social defeat — now Invariant 18.** A proof nobody reads is magic by another name; alarm fatigue and
+  rubber-stamping defeat any *uniform* gate. **Invariant 18** rations attention by blast radius — trivial,
+  reversible, in-catalog changes run under a standing, human-authored auto-merge policy, while
+  high-blast-radius changes **escalate** (independent second, dual-control) — and makes **proof legibility
+  a hard gate** (an unreadable proof fails). The honest remainder: someone still has to set the policy well
+  and write legible proofs. Design removes the structural trap; discipline keeps it removed.
+- **Economic re-centralization — now Invariant 19.** If running N control planes costs too much, teams
+  collapse them back into one SPOF. **Invariant 19** keeps each instance **near-stateless and
+  scale-to-zero** (so N cost ≈ one mostly-idle one) and surfaces its **own cost as a first-class signal** —
+  the temptation is visible and governed, not silent. The honest remainder: a determined org can still
+  choose to re-centralize; the invariant makes that a deliberate, costed decision rather than a default
+  drift.
 
-## The seven invariants this produced
+## The nine invariants this produced
 
-Folded into the normative spec ([§17](/trellis/docs/spec), 11–17):
+Folded into the normative spec ([§17](/trellis/docs/spec), 11–19):
 
 | # | Invariant | Kill-path it shuts |
 |---|---|---|
@@ -145,5 +152,7 @@ Folded into the normative spec ([§17](/trellis/docs/spec), 11–17):
 | 15 | **The checker sits outside the blast radius** — self-observability, attested signals | Acting on a spoofed or broken telemetry path |
 | 16 | **Bounded by the lease** — never start a write you can't finish; re-mint / wait / refuse; idempotent-resumable backstop | A credential expiring mid-apply, leaving reality half-changed |
 | 17 | **Independent corroboration above a blast-radius threshold** — dual-planner parity on the realized diff + real-world proof checks | A subtly-wrong-but-proof-passing Structure shipping at scale (the compiler bet) |
+| 18 | **Gate rigor scales to blast radius; the proof must be legible** — ration attention, escalate the significant, fail unreadable proofs | Social defeat: alarm fatigue, rubber-stamping |
+| 19 | **The control plane is cheap by construction; its cost is a first-class signal** — near-stateless, scale-to-zero, cost observed | Economic pressure to re-centralize into one SPOF |
 
 In one line: **we found where Trellis would die, and built so it can't go there.**

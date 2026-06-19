@@ -154,7 +154,7 @@ Each kill-path is scored **✓ foreclosed** (already shut), **◑ partial** (mit
 
 | # | Kill-path | Status | Defense / new invariant |
 |---|---|---|---|
-| K5 | Socially defeat the gate — proof too long/frequent → rubber-stamp; alarm fatigue | ◑ partial | §18 gate rigor scales to blast radius; **ration attention by blast radius** (auto-handle trivial, escalate significant). Discipline, not just design (the day-2 G14 finding) |
+| K5 | Socially defeat the gate — proof too long/frequent → rubber-stamp; alarm fatigue | ➕ **Inv 18** (third pass) | **ration attention by blast radius** — trivial/reversible/in-catalog runs under a standing human-authored auto-merge policy; high-blast-radius escalates (independent second, dual-control); **proof legibility is a hard gate** (unreadable proof fails). Remainder: discipline in setting the policy + writing legible proofs |
 | K6 | Mutate desired state out of band so the reconciler "heals" toward the attacker's change | ✓ foreclosed | Inv 3 (Author-only); signed commits + branch protection; reconciler converge-only |
 | K7 | **Confused deputy** — hand the mint an attacker-chosen scope inside a benign proof | ✓ foreclosed | Inv 4 — mint **re-derives** scope from the signed generation; never consumes the planner's asserted scope |
 | K13 | Compromise a maintainer / misconfigured branch protection → a malicious merge is "authorized" (merge *is* the gate) | ➕ **Inv 14** | **separation of duties** (approver ≠ author; high blast radius → second approver outside the team); repo-protection is a **non-loosenable floor** |
@@ -187,8 +187,8 @@ Each kill-path is scored **✓ foreclosed** (already shut), **◑ partial** (mit
 
 | # | Kill-path | Status | Defense |
 |---|---|---|---|
-| K20 | Make **N control planes too expensive** → teams collapse them back into one → re-centralize | ◑ partial | near-stateless, self-managing footprint (§12 no-consensus-store promotion) keeps the sliced model cheaper than the SPOF. A pressure to watch, not a law |
-| K21 | **On-call overload** defeats the human gate + incident routing | ◑ partial | §13 routing by Frame+Criticality; ration attention by blast radius (see K5) |
+| K20 | Make **N control planes too expensive** → teams collapse them back into one → re-centralize | ➕ **Inv 19** (third pass) | each instance **near-stateless + scale-to-zero** (N cost ≈ one mostly-idle) and its **own cost is a first-class FinOps signal** (§13) — the temptation is visible and governed. Remainder: a determined org can still choose to re-centralize, but now deliberately and costed |
+| K21 | **On-call overload** defeats the human gate + incident routing | ➕ **Inv 18** | §13 routing by Frame+Criticality + Inv 18 attention-rationing (auto-merge trivial below the floor) |
 
 ## Family 8 — the compiler bet (defeats P2)
 
@@ -210,8 +210,11 @@ custody**, **separation-of-duties on a non-loosenable gate floor**, **self-obser
 signals**, and **leased applies** (never start a write you can't finish within its credential's
 lifetime). A **second pass** then promoted the compiler-bet residual (K22) to **Invariant 17** —
 independent corroboration (dual-planner parity on the realized diff + real-world proof checks) above a
-blast-radius threshold — bringing the inversion-hardened set to **11–17**. The rest were already
-foreclosed, or remain honest residuals (social defeat of the gate; economic re-centralization pressure)
-carried as guidance, not solved claims.
+blast-radius threshold. A **third pass** hardened the last two residuals: **social defeat** (K5/K21) into
+**Invariant 18** (gate rigor scales to blast radius; the proof must be legible), and **economic
+re-centralization** (K20) into **Invariant 19** (the control plane is cheap by construction and its cost
+is a first-class signal) — bringing the inversion-hardened set to **11–19**. What remains is honest
+*remainder*, not unaddressed gaps: the compiler bet shrinks-not-vanishes, policy/proof discipline must be
+exercised, and a determined org can still choose to re-centralize (now deliberately and costed).
 The headline: **the inversion confirms the spine and closes the "even an approved mistake can't go
 company-wide" gap — Invariant 11 is the direct answer to the original 100%-blast-radius outage.**
