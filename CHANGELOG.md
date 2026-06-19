@@ -7,6 +7,11 @@ The simulator deploys continuously from `main`, so entries are grouped by date r
 
 ### Added
 
+- **Security View (§7)**: a 4th topology lens — a trust/exposure projection. Each resource is tiered
+  **exposed** (internet-facing edge), **sensitive** (data/stateful crown jewels), or **internal** (app),
+  and flagged **at-risk** when it's a third-party dependency (outside the TCB), an exposed surface without
+  per-service isolation (C2/C3 colocation), or crown jewels without compliance coverage. The legend
+  follows the lens; the tier is computed on the engine snapshot.
 - **Cost as a live signal (§13)**: cost is now an *observed* signal, not just a planner input. A **Cost
   spike** injects billed-vs-planned **cost drift** (billed ≫ planned); when billed spend exceeds budget
   it's a **budget-breach** that pages on-call and — by posture (`alert` vs `block`) — **blocks further

@@ -16,6 +16,7 @@ function rv(over: Partial<ResourceView>): ResourceView {
     monthlyCost: 0,
     billedCost: 0,
     costDrifted: false,
+    security: "internal",
     ...over,
   };
 }
@@ -40,12 +41,13 @@ describe("topology views (§13)", () => {
     expect(healthBucket("Unknown")).toBe("unknown");
   });
 
-  it("viewColor selects the lens: state vs cost vs health", () => {
-    const degradedCheap = rv({ state: "Degraded", monthlyCost: 100 });
+  it("viewColor selects the lens: state vs cost vs health vs security", () => {
+    const degradedCheap = rv({ state: "Degraded", monthlyCost: 100, security: "at-risk" });
     // state lens reads the lifecycle color; health lens reads the degraded color;
-    // cost lens reads the heatmap (independent of state).
+    // cost lens reads the heatmap (independent of state); security reads the tier.
     expect(viewColor(degradedCheap, "state", 1000)).toBe("var(--state-degraded)");
     expect(viewColor(degradedCheap, "health", 1000)).toBe("var(--state-degraded)");
     expect(viewColor(degradedCheap, "cost", 1000)).toMatch(/^hsl\(/);
+    expect(viewColor(degradedCheap, "security", 1000)).toBe("var(--state-stalled)");
   });
 });

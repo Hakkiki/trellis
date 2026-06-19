@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { DEFAULT_POSTURE, Engine } from "./engine";
+import { DEFAULT_POSTURE, Engine, securityTier } from "./engine";
 import type { DesiredResource, Manifest, Observation, Posture } from "./model";
 import { plan } from "./planner";
 import { allConverged, Reconciler, type Status } from "./reconcile";
@@ -334,6 +334,38 @@ describe("multi-service ownership (§6)", () => {
     const p = plan(tight, 1);
     expect(p.feasible).toBe(false);
     expect(p.failure).toMatch(/shared across 2 services/);
+  });
+});
+
+describe("security posture projection (§7)", () => {
+  it("classifies trust/exposure tiers and flags the attack surface", () => {
+    // External is always at-risk (third-party, outside our TCB).
+    expect(securityTier("edge", "external", false, true)).toBe("at-risk");
+    // An exposed edge with strong isolation (C0/C1) is exposed, not at-risk.
+    expect(securityTier("edge", "service", false, true)).toBe("exposed");
+    // The same edge with weak isolation (C2/C3 colocate) is at-risk.
+    expect(securityTier("edge", "service", true, true)).toBe("at-risk");
+    // Data/stateful are crown jewels — sensitive when covered, at-risk when not.
+    expect(securityTier("data", "service", false, true)).toBe("sensitive");
+    expect(securityTier("data", "stateful", false, false)).toBe("at-risk");
+    // App compute is the internal baseline.
+    expect(securityTier("app", "service", false, true)).toBe("internal");
+  });
+
+  it("the snapshot tags each resource with a security tier", () => {
+    const e = new Engine(DEFAULT_POSTURE);
+    e.declare(DEFAULT_POSTURE);
+    e.approve();
+    for (let i = 0; i < 30 && !e.snapshot().converged; i++) e.tick();
+    const rs = e.snapshot().resources;
+    // The third-party External is flagged at-risk; the payments-api (C0) edge is
+    // exposed but isolated.
+    expect(rs.find((r) => r.lifecycle === "external")!.security).toBe("at-risk");
+    const payEdge = rs.find((r) => r.service === "payments-api" && r.cell === "edge")!;
+    expect(payEdge.security).toBe("exposed");
+    // internal-dashboard (C3, colocated) edge shares trust → at-risk.
+    const dashEdge = rs.find((r) => r.service === "internal-dashboard" && r.cell === "edge")!;
+    expect(dashEdge.security).toBe("at-risk");
   });
 });
 

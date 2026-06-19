@@ -5,7 +5,7 @@
 // own Criticality (dev=C3 … prod=C0) and re-plans the path against its own
 // observed state. "What you validated is what shipped."
 
-import type { AuditClass, AuditEntry, ResourceView } from "./engine";
+import { type AuditClass, type AuditEntry, type ResourceView, securityTier } from "./engine";
 import type { Criticality, Manifest, Posture, Resilience } from "./model";
 import { manifestCost, resourceCost, plan as runPlanner } from "./planner";
 import { Reconciler, type Status } from "./reconcile";
@@ -252,6 +252,12 @@ export class Fleet {
             monthlyCost: resourceCost(r),
             billedCost: resourceCost(r),
             costDrifted: false,
+            security: securityTier(
+              r.cell,
+              r.lifecycle,
+              env.def.criticality === "C2" || env.def.criticality === "C3",
+              true,
+            ),
           }))
         : [];
       const source = idx > 0 ? this.envs[ORDER[idx - 1]] : null;

@@ -49,6 +49,8 @@ import {
   costColor,
   HEALTH_BUCKETS,
   healthColor,
+  SECURITY_TIERS,
+  securityColor,
   VIEW_LABELS,
   type ViewMode,
   viewColor,
@@ -974,7 +976,7 @@ function ResourceCard({
     r.state === "Drifted" ||
     r.state === "Running" ||
     r.state === "Unavailable";
-  const pulsing = view !== "cost" && unsettled;
+  const pulsing = (view === "state" || view === "health") && unsettled;
   return (
     <button
       onClick={onSelect}
@@ -1023,6 +1025,18 @@ function Legend({ view, maxCost }: { view: ViewMode; maxCost: number }) {
         {HEALTH_BUCKETS.map(({ bucket, label }) => (
           <span key={bucket} className="flex items-center gap-1.5">
             <span className="size-2 rounded-full" style={{ background: healthColor(bucket) }} />
+            {label}
+          </span>
+        ))}
+      </div>
+    );
+  }
+  if (view === "security") {
+    return (
+      <div className="text-muted-foreground flex flex-wrap gap-x-4 gap-y-1 text-[10px]">
+        {SECURITY_TIERS.map(({ tier, label }) => (
+          <span key={tier} className="flex items-center gap-1.5">
+            <span className="size-2 rounded-full" style={{ background: securityColor(tier) }} />
             {label}
           </span>
         ))}

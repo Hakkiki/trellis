@@ -193,7 +193,7 @@ export default function Stage3D({
         {nodes.map(({ r, cx, cy }) => {
           const color = viewColor(r, view, maxCost);
           const isFrozen = frozenIds.has(r.id);
-          const pulsing = view !== "cost" && pulse(r.state);
+          const pulsing = (view === "state" || view === "health") && pulse(r.state);
           return (
             <div
               key={r.id}
