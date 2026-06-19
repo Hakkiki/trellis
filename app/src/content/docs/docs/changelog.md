@@ -6,6 +6,19 @@ description: Recent changes to the Trellis simulator, newest first.
 What's shipped to the live simulator, newest first. The footer shows the exact build
 (date · commit) currently deployed.
 
+## Onboarding & UI polish
+
+The simulator is easier to pick up and share:
+
+- **A collapsible guide** at the top — what this is, how to drive it, and a plain-English list of
+  exactly what's included (every part of the loop).
+- **A guided tour** (driver.js, the same tour library lattice uses) that walks you through Posture →
+  Plan → Approve → topology → lenses → inject reality → ownership → self-upgrade.
+- **A 3D stage that fits any screen** — it auto-scales to its container (no overflow on phones),
+  supports **pinch-to-zoom** on touch, and shows **zoom / reset controls** on hover on desktop.
+- **No more runaway text** — audit and proof entries wrap cleanly instead of forcing a horizontal
+  scroll.
+
 ## Self-upgrade — the loop managing itself
 
 The capstone (spec §16): the control plane manages *itself*. Its **TCB** — planner · proof · gate ·
