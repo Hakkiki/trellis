@@ -33,6 +33,9 @@ interface SimResource {
   // Job lifecycle
   phase?: JobPhase;
   jobTimer: number; // ticks remaining in the current phase
+  // Stateful lifecycle (quorum cluster)
+  nodesTotal: number;
+  nodesDown: number;
 }
 
 // Job phase durations (in ticks).
@@ -72,6 +75,8 @@ export class SimCloud implements Provider {
           // A broken resource lands but stays Degraded — self-heal can't fix
           // the root cause, so the reconciler will flap until a human repairs it.
           r.health = r.broken ? "Degraded" : "Healthy";
+          // A stateful cluster restores its downed nodes on convergence.
+          if (!r.broken) r.nodesDown = 0;
         }
       }
       if (!r.stale) r.observedAtMs = this.nowMs;
@@ -119,6 +124,8 @@ export class SimCloud implements Provider {
         broken: false,
         observedAtMs: this.nowMs,
         jobTimer: 0,
+        nodesTotal: d.lifecycle === "stateful" ? Number(d.spec.nodes ?? "3") : 1,
+        nodesDown: 0,
       };
       this.res.set(d.id, r);
     }
@@ -175,6 +182,8 @@ export class SimCloud implements Provider {
       broken: false,
       observedAtMs: this.nowMs,
       jobTimer: 0,
+      nodesTotal: 1,
+      nodesDown: 0,
     });
   }
 
@@ -199,14 +208,23 @@ export class SimCloud implements Provider {
   }
 
   private toObservation(id: ResourceID, r: SimResource): Observation {
+    const stateful = r.lifecycle === "stateful";
+    const health: Health = !r.exists
+      ? "Unknown"
+      : stateful
+        ? r.nodesDown > 0
+          ? "Degraded"
+          : "Healthy"
+        : r.health;
     return {
       id,
       exists: r.exists,
       spec: cloneSpec(r.observed),
-      health: r.exists ? r.health : "Unknown",
+      health,
       appliedGeneration: r.appliedGen,
       observedAtMs: r.observedAtMs,
       phase: r.lifecycle === "job" ? r.phase : undefined,
+      quorum: stateful ? { healthy: r.nodesTotal - r.nodesDown, total: r.nodesTotal } : undefined,
     };
   }
 
@@ -214,7 +232,12 @@ export class SimCloud implements Provider {
 
   failNode(id: ResourceID) {
     const r = this.res.get(id);
-    if (r) r.health = "Degraded";
+    if (!r) return;
+    if (r.lifecycle === "stateful") {
+      // Lose one node of the quorum cluster.
+      r.nodesDown = Math.min(r.nodesTotal, r.nodesDown + 1);
+    }
+    r.health = "Degraded";
   }
 
   /** A root-cause failure self-heal cannot fix (bad config, exhausted quota).
@@ -223,6 +246,7 @@ export class SimCloud implements Provider {
     const r = this.res.get(id);
     if (r) {
       r.health = "Degraded";
+      if (r.lifecycle === "stateful") r.nodesDown = r.nodesTotal;
       r.broken = true;
     }
   }
@@ -239,6 +263,7 @@ export class SimCloud implements Provider {
     for (const [id, r] of this.res) {
       if (r.region === region && r.exists) {
         r.health = "Degraded";
+        if (r.lifecycle === "stateful") r.nodesDown = r.nodesTotal;
         hit.push(id);
       }
     }

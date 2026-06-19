@@ -18,8 +18,10 @@ export type CellKind = "edge" | "app" | "data";
  * - service  — long-running, reconcile-and-hold (desired = "N healthy replicas").
  * - job      — finite, run-to-completion (a finished job is success, not drift).
  * - external — third-party SaaS Trellis consumes but never provisions; observe-only.
+ * - stateful — a self-run quorum cluster (broker/DB/search); health rolls up by
+ *              quorum (majority serving = Degraded-but-serving; minority = Unavailable).
  */
-export type Lifecycle = "service" | "job" | "external";
+export type Lifecycle = "service" | "job" | "external" | "stateful";
 
 /** The terminal progression of a Job (spec §4). */
 export type JobPhase = "pending" | "running" | "succeeded" | "failed";
@@ -52,6 +54,7 @@ export interface Observation {
   appliedGeneration: Generation;
   observedAtMs: number;
   phase?: JobPhase; // for Job workloads
+  quorum?: { healthy: number; total: number }; // for Stateful workloads
 }
 
 // ---- Posture (what a human declares, spec §2) -----------------------------

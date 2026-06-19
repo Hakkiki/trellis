@@ -253,3 +253,40 @@ describe("circuit breaker + incidents", () => {
     expect(e.snapshot().incidents.length).toBe(0);
   });
 });
+
+describe("stateful clusters (quorum)", () => {
+  const broker: DesiredResource = {
+    id: "b",
+    kind: "stream-broker",
+    spec: { nodes: "3" },
+    generation: 1,
+    lifecycle: "stateful",
+    service: "s",
+    region: "r",
+    cell: "data",
+  };
+
+  it("rolls health up by quorum: 3/3 Converged, 2/3 Degraded, 1/3 Unavailable", () => {
+    const c = new SimCloud({ applyLatency: 0 });
+    c.apply(broker);
+    c.tick();
+    const stateOf = () => derive(broker, c.observe("b"), "Settled", c.now(), 0);
+    expect(stateOf()).toBe("Converged");
+    c.failNode("b");
+    expect(stateOf()).toBe("Degraded"); // 2/3 — majority still serving
+    c.failNode("b");
+    expect(stateOf()).toBe("Unavailable"); // 1/3 — quorum lost
+  });
+
+  it("the planner includes a stateful broker, and it self-heals", () => {
+    const e = new Engine(DEFAULT_POSTURE);
+    e.declare(DEFAULT_POSTURE);
+    e.approve();
+    for (let i = 0; i < 30 && !e.snapshot().converged; i++) e.tick();
+    const b = e.snapshot().resources.find((r) => r.lifecycle === "stateful");
+    expect(b).toBeDefined();
+    e.failNode(b!.id);
+    for (let i = 0; i < 20 && !e.snapshot().converged; i++) e.tick();
+    expect(e.snapshot().converged).toBe(true);
+  });
+});

@@ -13,6 +13,8 @@ export type State =
   | "Degraded"
   | "Stalled"
   | "Frozen"
+  // Stateful quorum roll-up (§4): minority of nodes serving
+  | "Unavailable"
   // Job lifecycle (terminal progression, §4)
   | "Pending"
   | "Running"
@@ -24,6 +26,7 @@ export const ALL_STATES: State[] = [
   "Converging",
   "Drifted",
   "Degraded",
+  "Unavailable",
   "Stalled",
   "Frozen",
   "Unknown",
@@ -45,6 +48,8 @@ export function stateColorVar(s: State): string {
     case "Stalled":
     case "Failed":
       return "var(--state-stalled)";
+    case "Unavailable":
+      return "var(--state-unavailable)";
     case "Frozen":
       return "var(--state-frozen)";
     case "Pending":
@@ -123,6 +128,8 @@ export function derive(
 
   switch (sync) {
     case "InSync":
+      // Stateful clusters roll health up by quorum (§4).
+      if (d.lifecycle === "stateful") return statefulHealth(o);
       if (o.health === "Healthy") return "Converged";
       if (o.health === "Degraded") return "Degraded";
       return "Unknown";
@@ -132,4 +139,13 @@ export function derive(
       return "Drifted";
   }
   return "Unknown";
+}
+
+/** Quorum roll-up for a stateful cluster: all nodes → Converged; a majority
+ *  still serving → Degraded; a minority → Unavailable (quorum lost). */
+function statefulHealth(o: Observation): State {
+  const q = o.quorum ?? { healthy: o.health === "Healthy" ? 1 : 0, total: 1 };
+  if (q.healthy >= q.total) return "Converged";
+  const majority = Math.floor(q.total / 2) + 1;
+  return q.healthy >= majority ? "Degraded" : "Unavailable";
 }
