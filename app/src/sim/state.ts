@@ -59,6 +59,31 @@ export function stateColorVar(s: State): string {
   }
 }
 
+/** Severity ordering for rolling a Frame's state up from its children (§4). */
+const SEVERITY: Record<State, number> = {
+  Converged: 0,
+  Succeeded: 0,
+  Pending: 1,
+  Running: 1,
+  Unknown: 2,
+  Converging: 3,
+  Drifted: 4,
+  Degraded: 5,
+  Frozen: 6,
+  Unavailable: 7,
+  Stalled: 8,
+  Failed: 8,
+};
+
+/** Roll a Frame's state up from its children's states — worst-of (§4). */
+export function rollup(states: State[]): State {
+  if (!states.length) return "Unknown";
+  return states.reduce<State>(
+    (worst, s) => (SEVERITY[s] > SEVERITY[worst] ? s : worst),
+    "Converged",
+  );
+}
+
 /** A Job's State is its terminal progression; completion is success, not drift. */
 function deriveJob(o: Observation): State {
   if (!o.exists || !o.phase) return "Pending";

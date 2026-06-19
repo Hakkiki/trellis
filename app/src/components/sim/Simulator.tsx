@@ -149,6 +149,9 @@ export default function Simulator() {
   const resources = snap?.resources ?? [];
   const sel = resources.find((r) => r.id === selected) ?? resources[0] ?? null;
   const frozenIds = new Set(resources.filter((r) => r.state === "Frozen").map((r) => r.id));
+  const regionState: Record<string, State> = Object.fromEntries(
+    (snap?.regionRollups ?? []).map((r) => [r.region, r.state]),
+  );
 
   return (
     <div className="dark text-foreground grid gap-4 lg:grid-cols-[300px_1fr_340px]">
@@ -305,6 +308,23 @@ export default function Simulator() {
               {snap?.converged ? "converged & holding" : "reconciling…"}
             </Badge>
           )}
+          {phase === "applied" && snap && (
+            <Badge
+              variant="outline"
+              className="gap-1.5"
+              title={snap.envNote}
+              style={{ borderColor: stateColorVar(snap.envRollup) }}
+            >
+              <span
+                className="size-2 rounded-full"
+                style={{
+                  background: stateColorVar(snap.envRollup),
+                  boxShadow: `0 0 6px ${stateColorVar(snap.envRollup)}`,
+                }}
+              />
+              env · {snap.envRollup}
+            </Badge>
+          )}
           {phase === "applied" && (
             <div className="ml-auto flex items-center gap-3 text-xs">
               <button
@@ -361,6 +381,8 @@ export default function Simulator() {
         {phase === "applied" && (
           <Topology
             resources={resources}
+            regionState={regionState}
+            envNote={snap!.envNote}
             selected={sel?.id ?? null}
             onSelect={setSelected}
             layout={layout}
@@ -556,6 +578,8 @@ function EmptyState({ onPlan }: { onPlan: () => void }) {
 
 function Topology({
   resources,
+  regionState,
+  envNote,
   selected,
   onSelect,
   layout,
@@ -564,6 +588,8 @@ function Topology({
   costNow,
 }: {
   resources: ResourceView[];
+  regionState: Record<string, State>;
+  envNote: string;
   selected: string | null;
   onSelect: (id: string) => void;
   layout: "stage" | "grid";
@@ -597,34 +623,58 @@ function Topology({
         {layout === "stage" ? (
           <Stage3D
             resources={resources}
+            regionState={regionState}
             selected={selected}
             frozenIds={frozenIds}
             onSelect={onSelect}
           />
         ) : (
           <div className={cn("grid gap-3", regions.length > 1 ? "md:grid-cols-2" : "")}>
-            {regions.map((region) => (
-              <div key={region} className="border-border/60 rounded-lg border p-3">
-                <div className="text-muted-foreground mb-2 flex items-center gap-1.5 text-xs">
-                  <Network className="size-3" /> {region}
+            {regions.map((region) => {
+              const rs = regionState[region] ?? "Unknown";
+              const rc = stateColorVar(rs);
+              return (
+                <div
+                  key={region}
+                  className="rounded-lg border p-3"
+                  style={{ borderColor: `color-mix(in srgb, ${rc} 40%, transparent)` }}
+                >
+                  <div className="text-muted-foreground mb-2 flex items-center gap-1.5 text-xs">
+                    <Network className="size-3" /> {region}
+                    <span
+                      className="ml-auto flex items-center gap-1 text-[10px]"
+                      style={{ color: rc }}
+                    >
+                      <span
+                        className="size-2 rounded-full"
+                        style={{ background: rc, boxShadow: `0 0 6px ${rc}` }}
+                      />
+                      {rs}
+                    </span>
+                  </div>
+                  <div className="space-y-2">
+                    {order.map((cell) =>
+                      resources
+                        .filter((r) => r.region === region && r.cell === cell)
+                        .map((r) => (
+                          <ResourceCard
+                            key={r.id}
+                            r={r}
+                            selected={r.id === selected}
+                            onSelect={() => onSelect(r.id)}
+                          />
+                        )),
+                    )}
+                  </div>
                 </div>
-                <div className="space-y-2">
-                  {order.map((cell) =>
-                    resources
-                      .filter((r) => r.region === region && r.cell === cell)
-                      .map((r) => (
-                        <ResourceCard
-                          key={r.id}
-                          r={r}
-                          selected={r.id === selected}
-                          onSelect={() => onSelect(r.id)}
-                        />
-                      )),
-                  )}
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
+        )}
+        {envNote && (
+          <p className="text-muted-foreground text-[11px]">
+            <span className="text-foreground font-medium">Environment:</span> {envNote}
+          </p>
         )}
         <Legend />
       </CardContent>

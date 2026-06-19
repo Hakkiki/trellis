@@ -7,6 +7,11 @@ The simulator deploys continuously from `main`, so entries are grouped by date r
 
 ### Added
 
+- **Frame roll-up state (§4)**: a region's state is the worst-of the Service + Stateful workloads it
+  contains, and the environment rolls up from its regions — read by Resilience (active-active keeps
+  serving from the healthy region; active-passive fails over; single is user-visible). Region frames on
+  the 3D stage and the grid headers are tinted by their roll-up, and the header carries an `env · State`
+  badge with a one-line note.
 - **Reconciler safety (§9)**: a change-freeze / maintenance window (holds non-emergency Converge), a
   blast-radius breaker (halts + pages on mass remediation, with operator Proceed), plus the existing
   flap breaker. Region outages no longer hit the third-party External (outside our failure domain).

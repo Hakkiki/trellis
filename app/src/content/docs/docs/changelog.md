@@ -6,6 +6,17 @@ description: Recent changes to the Trellis simulator, newest first.
 What's shipped to the live simulator, newest first. The footer shows the exact build
 (date · commit) currently deployed.
 
+## Frame roll-up state
+
+A **Frame** (a region, and the whole environment) now shows a state rolled up from its children —
+worst-of across the Service and Stateful workloads it contains (spec §4):
+
+- **Region frames** on the 3D stage and the grid headers are tinted by their roll-up, with the state
+  named beside the region.
+- **The environment** carries an `env · State` badge in the header, read through **Resilience**:
+  active-active keeps **serving from the healthy region**, active-passive **fails over to standby**, and
+  single-region impact is **user-visible**. Take a region down (**Region outage**) to watch it.
+
 ## Reconciler safety
 
 The reconciler now governs *when and how hard* it acts (spec §9):
