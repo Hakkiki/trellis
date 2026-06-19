@@ -1099,6 +1099,12 @@ expand-contract/blue-green; C3 → in-place).
   versioned **transition intent** — a short-lived second desired-state layer that retires when the
   transition completes. A re-planned path that **materially diverges** from the approved one **requires
   re-approval**; the gate pins to the approved *pattern + bounds*, not a frozen step list.
+- **Each step runs within its credential's lease (Invariant 16).** Writes use the plan-scoped, time-boxed
+  credential (§7, Invariant 4); a step **never starts unless its worst-case duration fits the credential's
+  remaining lifetime plus a buffer** — otherwise re-mint a fresh credential, wait for one, or refuse and
+  flag. Combined with idempotent, reversible steps, a credential that expires mid-flight can only leave a
+  *resumable* state, never a half-applied one; unavoidably long provider operations are
+  initiate-then-poll under a refreshed lease.
 - **Approval is Criticality-defaulted:** whole-path for routine/low-Criticality; **phase gates for C0 and
   any stateful migration** (approve, validate the phase landed, proceed).
 
@@ -1435,7 +1441,7 @@ down to the boundary; share only what is signed, versioned, and pulled.**
 ## 17. Invariants
 
 The non-negotiable rules a builder must preserve. A violation is a defect, not a tradeoff. Invariants
-1–10 fix the model; **11–15 are the inversion-hardened set** — each forecloses a specific way the
+1–10 fix the model; **11–16 are the inversion-hardened set** — each forecloses a specific way the
 platform could cause the very catastrophe it exists to prevent (the inversion stress test, §21).
 
 1. **Determinism.** A plan is a pure function of *(manifest generation + a pinned provider-state snapshot +
@@ -1499,6 +1505,14 @@ platform could cause the very catastrophe it exists to prevent (the inversion st
     treated as **Unknown, never trusted** (Invariant 7), and a destructive converge requires
     **corroborating** signals, not one source. **No component is the sole verifier of its own
     correctness.**
+16. **Bounded by the lease — never start what you can't finish.** Every write runs on a **plan-scoped,
+    time-boxed credential** (Invariant 4). No unit of work begins unless its **worst-case completion fits
+    the credential's remaining lifetime plus a safety buffer**; otherwise the actuator **re-mints a fresh
+    credential first**, **waits until one is available**, or **refuses and flags** (doing nothing) — never
+    start-and-hope. As the backstop for what estimation gets wrong (expiry, crash, slow provider
+    operations), each apply step is **idempotent and individually reversible**, so an interrupted apply
+    **resumes or rolls back to a defined state**, never a half-applied one; unavoidably long provider
+    operations are **initiate-then-poll under a refreshed lease**, the operation itself idempotent.
 
 ---
 
@@ -1628,11 +1642,12 @@ Other resolutions:
   §12 / §18 (the control plane keeps no consensus store of its own). Promotions from applied decisions to
   normative spec.
 - **Inversion stress test** — applying Munger's inversion ("how would we *guarantee* the catastrophe?")
-  surfaced five real gaps, folded in as **Invariants 11–15**: progressive/reversible convergence (no
+  surfaced six real gaps, folded in as **Invariants 11–16**: progressive/reversible convergence (no
   fleet-wide write), no-floating-fate / fail-static shared surfaces, out-of-band recovery with M-of-N
-  custody, separation-of-duties on a non-loosenable gate floor, and self-observability with attested
-  signals (the checker outside the blast radius). The raw kill-path enumeration is retained off-site in
-  the red-team bundle.
+  custody, separation-of-duties on a non-loosenable gate floor, self-observability with attested
+  signals (the checker outside the blast radius), and **leased applies** (never begin a write you can't
+  finish within its credential's lifetime — re-mint, wait, or refuse — with an idempotent/resumable
+  backstop). The raw kill-path enumeration is retained off-site in the red-team bundle.
 
 ---
 

@@ -132,7 +132,7 @@ shut. The promises an attacker targets: **(P1) containment** (no company-wide ou
 (self-heal to declared state), **(P5) recoverability** (meta-DR).
 
 Each kill-path is scored **✓ foreclosed** (already shut), **◑ partial** (mitigated, residual risk), or
-**➕ GAP → invariant** (real gap; folded into the spec). The five GAPs became spec **Invariants 11–15**.
+**➕ GAP → invariant** (real gap; folded into the spec). The six GAPs became spec **Invariants 11–16**.
 
 ## Family 1 — re-centralize the SPOF (defeats P1)
 
@@ -200,14 +200,15 @@ Each kill-path is scored **✓ foreclosed** (already shut), **◑ partial** (mit
 
 | # | Kill-path | Status | Defense |
 |---|---|---|---|
-| K23 | Plan-scoped **credential expires mid-apply** → half-applied, inconsistent reality | ◑ partial | §10 gated/reversible Actions + re-validate-before-apply; apply must be **idempotent and resumable** (re-mint and continue) or atomically rolled back. Guidance to harden in §10 |
+| K23 | Plan-scoped **credential expires mid-apply** → half-applied, inconsistent reality | ➕ **Inv 16** | **leased apply** — a step never starts unless its worst-case duration fits the credential's remaining lifetime + buffer; else **re-mint / wait / refuse**, never start-and-hope. Idempotent + reversible steps are the backstop → an expiry can only leave a *resumable* state. Long ops are initiate-then-poll under a refreshed lease. The credential is the §7/Inv 4 plan-scoped STS session (not the auto-rotated workload identity) |
 
 ## What inversion produced
 
-Five genuine gaps → five new normative invariants (spec §17, 11–15): **progressive/reversible
+Six genuine gaps → six new normative invariants (spec §17, 11–16): **progressive/reversible
 convergence**, **no-floating-fate / fail-static shared surfaces**, **out-of-band recovery + M-of-N
 custody**, **separation-of-duties on a non-loosenable gate floor**, **self-observability + attested
-signals**. The rest were already foreclosed, or are honest residuals (the compiler bet; social defeat;
-economic re-centralization pressure; apply transactionality) carried as guidance, not solved claims.
+signals**, and **leased applies** (never start a write you can't finish within its credential's
+lifetime). The rest were already foreclosed, or are honest residuals (the compiler bet; social defeat;
+economic re-centralization pressure) carried as guidance, not solved claims.
 The headline: **the inversion confirms the spine and closes the "even an approved mistake can't go
 company-wide" gap — Invariant 11 is the direct answer to the original 100%-blast-radius outage.**

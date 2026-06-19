@@ -6,15 +6,17 @@ description: Recent changes to the Trellis simulator, newest first.
 What's shipped to the live simulator, newest first. The footer shows the exact build
 (date · commit) currently deployed.
 
-## Inversion stress test — five new invariants
+## Inversion stress test — six new invariants
 
 We applied **Munger's inversion** to Trellis: instead of "how does it succeed?", we asked *"how would we
 guarantee it causes the exact catastrophe it exists to prevent?"*, walked every kill-path, and designed
-each one shut. The five genuine gaps became **normative Invariants 11–15** — most importantly **progressive,
+each one shut. The genuine gaps became **normative Invariants 11–16** — most importantly **progressive,
 reversible convergence** (the reconciler never does a fleet-wide write, so even an approved bad change
-can't take a whole division down at once — the direct answer to the original 100%-blast-radius outage).
-A new [Inversion stress test](/trellis/docs/hardening) page tells the story; the raw kill-path enumeration
-is kept off-site in the red-team bundle.
+can't take a whole division down at once — the direct answer to the original 100%-blast-radius outage),
+and **leased applies** (never begin a write you can't finish within its plan-scoped credential's lifetime
+— re-mint, wait, or refuse — with an idempotent/resumable backstop). A new
+[Inversion stress test](/trellis/docs/hardening) page tells the story; the raw kill-path enumeration is
+kept off-site in the red-team bundle.
 
 ## Three decisions promoted into the spec
 
