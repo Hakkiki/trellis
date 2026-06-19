@@ -290,6 +290,53 @@ describe("reconciler safety (§9)", () => {
   });
 });
 
+describe("multi-service ownership (§6)", () => {
+  it("plans every owned Service, attributing spend and state to each owner", () => {
+    const e = new Engine(DEFAULT_POSTURE); // owns payments-api (C0) + internal-dashboard (C3)
+    e.declare(DEFAULT_POSTURE);
+    e.approve();
+    for (let i = 0; i < 30 && !e.snapshot().converged; i++) e.tick();
+    const snap = e.snapshot();
+
+    expect(snap.serviceRollups.map((r) => r.service).sort()).toEqual([
+      "internal-dashboard",
+      "payments-api",
+    ]);
+    // Each owner carries its own resources, and the C0 service costs more than C3.
+    const pay = snap.serviceRollups.find((r) => r.service === "payments-api")!;
+    const dash = snap.serviceRollups.find((r) => r.service === "internal-dashboard")!;
+    expect(pay.monthlyCost).toBeGreaterThan(dash.monthlyCost);
+    // Per-owner spend sums to the environment total.
+    const total = snap.serviceRollups.reduce((s, r) => s + r.monthlyCost, 0);
+    expect(total).toBe(snap.costNow);
+    expect(snap.converged).toBe(true);
+  });
+
+  it("a degraded Service rolls up to its owner without touching its peer", () => {
+    const e = new Engine(DEFAULT_POSTURE);
+    e.declare(DEFAULT_POSTURE);
+    e.approve();
+    for (let i = 0; i < 30 && !e.snapshot().converged; i++) e.tick();
+    const dashApp = e
+      .snapshot()
+      .resources.find((r) => r.service === "internal-dashboard" && r.cell === "app")!;
+    e.hardFailure(dashApp.id);
+    for (let i = 0; i < 25; i++) e.tick();
+    const snap = e.snapshot();
+    const dash = snap.serviceRollups.find((r) => r.service === "internal-dashboard")!;
+    const pay = snap.serviceRollups.find((r) => r.service === "payments-api")!;
+    expect(dash.state).toBe("Stalled"); // the owner reflects its worst child
+    expect(pay.state).toBe("Converged"); // the peer is untouched
+  });
+
+  it("the shared budget binds across Services; an infeasible floor fails loudly", () => {
+    const tight: Posture = { ...DEFAULT_POSTURE, budgetMonthly: 500 };
+    const p = plan(tight, 1);
+    expect(p.feasible).toBe(false);
+    expect(p.failure).toMatch(/shared across 2 services/);
+  });
+});
+
 describe("frame roll-up (§4)", () => {
   it("a Frame's state is the worst-of its children", () => {
     expect(rollup([])).toBe("Unknown");

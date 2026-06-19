@@ -29,8 +29,17 @@ import {
   type EngineSnapshot,
   type Incident,
   type ResourceView,
+  type ServiceRollup,
 } from "@/sim/engine";
-import type { CellKind, Criticality, Kind, Posture, Resilience } from "@/sim/model";
+import {
+  type CellKind,
+  type Criticality,
+  type Kind,
+  type Posture,
+  type Resilience,
+  type ServiceSpec,
+  servicesOf,
+} from "@/sim/model";
 import { ALL_STATES, type State, stateColorVar } from "@/sim/state";
 import { loadSession, saveSession } from "@/sim/store";
 import Stage3D from "./Stage3D";
@@ -99,6 +108,14 @@ export default function Simulator() {
       // existed (e.g. governanceServices) doesn't render the form with missing
       // keys — that would crash on first access.
       const posture: Posture = { ...DEFAULT_POSTURE, ...s.posture };
+      // A session saved before multi-service existed: synthesize its single
+      // Service from the legacy intent/criticality rather than inheriting the
+      // default two.
+      if (!s.posture.services?.length) {
+        posture.services = [
+          { name: s.posture.intent ?? DEFAULT_POSTURE.intent, criticality: posture.criticality },
+        ];
+      }
       setForm(posture);
       e.hydrate(s.audit);
       e.declare(posture);
@@ -172,30 +189,11 @@ export default function Simulator() {
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4 text-sm">
-          <Field label="Intent">
-            <input
-              className="bg-secondary/50 border-input w-full rounded-md border px-2 py-1.5 text-sm"
-              value={form.intent}
-              onChange={(e) => setForm({ ...form, intent: e.target.value })}
+          <Field label="Services — owned by this environment">
+            <ServicesEditor
+              services={servicesOf(form)}
+              onChange={(services) => setForm({ ...form, services })}
             />
-          </Field>
-          <Field label="Criticality">
-            <div className="grid grid-cols-4 gap-1">
-              {CRITS.map((c) => (
-                <button
-                  key={c}
-                  onClick={() => setForm({ ...form, criticality: c })}
-                  className={cn(
-                    "rounded-md border px-1 py-1.5 text-xs font-semibold transition",
-                    form.criticality === c
-                      ? "border-primary bg-primary/20 text-foreground"
-                      : "border-input text-muted-foreground hover:bg-accent",
-                  )}
-                >
-                  {c}
-                </button>
-              ))}
-            </div>
           </Field>
           <Field label="Resilience">
             <Select
@@ -539,12 +537,27 @@ export default function Simulator() {
               <TabsTrigger value="proof" className="flex-1">
                 Proof
               </TabsTrigger>
+              <TabsTrigger value="owners" className="flex-1">
+                Owners
+              </TabsTrigger>
               <TabsTrigger value="audit" className="flex-1">
                 Audit
               </TabsTrigger>
             </TabsList>
             <TabsContent value="proof" className="mt-3">
               <ProofPanel snap={snap} selectedId={sel?.id ?? null} />
+            </TabsContent>
+            <TabsContent value="owners" className="mt-3">
+              <OwnersPanel
+                rollups={snap?.serviceRollups ?? []}
+                budget={snap?.budget ?? 0}
+                envRollup={snap?.envRollup ?? "Unknown"}
+                selectedSlug={sel?.service ?? null}
+                onSelect={(slug) => {
+                  const first = resources.find((r) => r.service === slug);
+                  if (first) setSelected(first.id);
+                }}
+              />
             </TabsContent>
             <TabsContent value="audit" className="mt-3">
               <AuditPanel audit={snap?.audit ?? []} />
@@ -561,6 +574,144 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
     <div>
       <div className="text-muted-foreground mb-1.5 text-xs">{label}</div>
       {children}
+    </div>
+  );
+}
+
+function ServicesEditor({
+  services,
+  onChange,
+}: {
+  services: ServiceSpec[];
+  onChange: (s: ServiceSpec[]) => void;
+}) {
+  const set = (i: number, patch: Partial<ServiceSpec>) =>
+    onChange(services.map((s, idx) => (idx === i ? { ...s, ...patch } : s)));
+  return (
+    <div className="space-y-2">
+      {services.map((s, i) => (
+        <div key={i} className="border-input space-y-1.5 rounded-md border p-2">
+          <div className="flex items-center gap-1.5">
+            <input
+              className="bg-secondary/50 border-input min-w-0 flex-1 rounded-md border px-2 py-1 text-xs"
+              value={s.name}
+              onChange={(e) => set(i, { name: e.target.value })}
+            />
+            {services.length > 1 && (
+              <button
+                title="remove service"
+                onClick={() => onChange(services.filter((_, idx) => idx !== i))}
+                className="text-muted-foreground hover:text-destructive shrink-0 px-1"
+              >
+                ×
+              </button>
+            )}
+          </div>
+          <div className="grid grid-cols-4 gap-1">
+            {CRITS.map((c) => (
+              <button
+                key={c}
+                onClick={() => set(i, { criticality: c })}
+                className={cn(
+                  "rounded-md border px-1 py-1 text-[11px] font-semibold transition",
+                  s.criticality === c
+                    ? "border-primary bg-primary/20 text-foreground"
+                    : "border-input text-muted-foreground hover:bg-accent",
+                )}
+              >
+                {c}
+              </button>
+            ))}
+          </div>
+        </div>
+      ))}
+      <button
+        onClick={() =>
+          onChange([...services, { name: `service-${services.length + 1}`, criticality: "C3" }])
+        }
+        className="border-input text-muted-foreground hover:text-foreground w-full rounded-md border border-dashed px-2 py-1.5 text-xs"
+      >
+        + add service
+      </button>
+    </div>
+  );
+}
+
+function OwnersPanel({
+  rollups,
+  budget,
+  envRollup,
+  selectedSlug,
+  onSelect,
+}: {
+  rollups: ServiceRollup[];
+  budget: number;
+  envRollup: State;
+  selectedSlug: string | null;
+  onSelect: (slug: string) => void;
+}) {
+  if (!rollups.length)
+    return <p className="text-muted-foreground text-xs">Approve a plan to see ownership.</p>;
+  const total = rollups.reduce((sum, r) => sum + r.monthlyCost, 0);
+  return (
+    <div className="space-y-3 text-xs">
+      <div className="border-border/60 flex items-center justify-between border-b pb-2">
+        <span className="flex items-center gap-1.5 font-medium">
+          <span
+            className="size-2 rounded-full"
+            style={{
+              background: stateColorVar(envRollup),
+              boxShadow: `0 0 6px ${stateColorVar(envRollup)}`,
+            }}
+          />
+          environment · {envRollup}
+        </span>
+        <span className={total > budget ? "text-destructive" : "text-muted-foreground"}>
+          ${total} / ${budget}/mo
+        </span>
+      </div>
+      <p className="text-muted-foreground">
+        State and spend attribute to each owning Service (§6) — the read-side of the ownership tree.
+      </p>
+      {rollups.map((r) => {
+        const color = stateColorVar(r.state);
+        const share = budget > 0 ? Math.round((r.monthlyCost / budget) * 100) : 0;
+        return (
+          <button
+            key={r.slug}
+            onClick={() => onSelect(r.slug)}
+            className={cn(
+              "border-border/60 w-full space-y-1 rounded-md border p-2 text-left transition",
+              selectedSlug === r.slug ? "ring-1 ring-[var(--ring)]" : "hover:bg-accent/40",
+            )}
+          >
+            <div className="flex items-center justify-between">
+              <span className="flex items-center gap-1.5 font-medium">
+                <span
+                  className="size-2 rounded-full"
+                  style={{ background: color, boxShadow: `0 0 6px ${color}` }}
+                />
+                {r.service}
+              </span>
+              <Badge variant="secondary" className="px-1 py-0 text-[9px]">
+                {r.criticality}
+              </Badge>
+            </div>
+            <div className="text-muted-foreground flex items-center justify-between text-[10px]">
+              <span>{r.state}</span>
+              <span className="tabular-nums">
+                ${r.monthlyCost}/mo · {share}% of budget
+              </span>
+            </div>
+            <div className="bg-secondary h-1.5 w-full overflow-hidden rounded-full">
+              <div
+                className="h-full rounded-full"
+                style={{ width: `${Math.min(100, share)}%`, background: color }}
+              />
+            </div>
+          </button>
+        );
+      })}
     </div>
   );
 }

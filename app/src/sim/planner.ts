@@ -1,24 +1,28 @@
 // A deterministic rung-2/3 planner (spec §5): compile a Posture into a concrete
-// Structure (a 3-tier blueprint per region) and emit a plan that *is a proof*.
+// Structure (a 3-tier blueprint per region, per Service) and emit a plan that
+// *is a proof*.
 //
 // It genuinely solves the objective program over a small, discrete candidate set
-// (catalog-not-search): Governance is a hard pre-filter, the budget is the bound,
-// and `optimize` chooses between candidates — minimize-cost picks the cheapest
-// that meets the declared floor; maximize-resilience picks the strongest that
-// fits the budget. When nothing is feasible it fails loudly with the binding
+// (catalog-not-search): Governance is a hard pre-filter, the budget is the bound
+// shared across every Service the environment owns, and `optimize` chooses —
+// minimize-cost takes each Service's cheapest realization meeting its floor;
+// maximize-resilience greedily upgrades by score across Services until the shared
+// budget is exhausted. When nothing is feasible it fails loudly with the binding
 // constraint.
 
-import type {
-  CellKind,
-  Criticality,
-  DesiredResource,
-  Generation,
-  Kind,
-  Manifest,
-  Plan,
-  Posture,
-  ProofRow,
-  Resilience,
+import {
+  type CellKind,
+  type Criticality,
+  type DesiredResource,
+  type Generation,
+  type Kind,
+  type Manifest,
+  type Plan,
+  type Posture,
+  type ProofRow,
+  type Resilience,
+  type ServiceSpec,
+  servicesOf,
 } from "./model";
 
 const COMPUTE_COST: Record<string, number> = { small: 120, medium: 300, large: 700 };
@@ -59,7 +63,11 @@ function slug(s: string): string {
   );
 }
 
+/** The resource-ID slug for a Service name (so the UI can join rollups to it). */
+export const serviceSlug = slug;
+
 interface Candidate {
+  service: string;
   resilience: Resilience;
   headroom: number;
   resources: DesiredResource[];
@@ -68,14 +76,17 @@ interface Candidate {
   score: number;
 }
 
+/** Build one realization of a single Service at a given resilience + headroom. */
 function buildCandidate(
+  svcName: string,
+  criticality: Criticality,
   posture: Posture,
   resilience: Resilience,
   headroom: number,
   gen: Generation,
 ): Candidate {
-  const svc = slug(posture.intent);
-  const c = posture.criticality;
+  const svc = slug(svcName);
+  const c = criticality;
   const size = SIZE_FOR[c];
   const replicas = REPLICAS_FOR[c] + headroom;
   const multiAZ = c === "C0" || c === "C1";
@@ -117,7 +128,7 @@ function buildCandidate(
     cost += (activeRegions.length - 1) * REPL_LINK_COST;
   }
 
-  // Every service carries three non-service workloads (§1), placed in the
+  // Every Service carries three non-service workloads (§1), placed in the
   // primary region: a nightly batch Job, an External SaaS dependency, and a
   // self-run stateful broker (a quorum cluster).
   const r0 = activeRegions[0];
@@ -156,11 +167,50 @@ function buildCandidate(
 
   const levelRank = RES_LEVELS.indexOf(resilience);
   const score = levelRank * 1000 + activeRegions.length * 100 + headroom * 10 + (multiAZ ? 5 : 0);
-  return { resilience, headroom, resources, cost, regionsActive: activeRegions.length, score };
+  return {
+    service: svcName,
+    resilience,
+    headroom,
+    resources,
+    cost,
+    regionsActive: activeRegions.length,
+    score,
+  };
 }
 
 function requiredKinds(): Kind[] {
   return CELLS.map((c) => c.kind);
+}
+
+/** Enumerate a Service's candidate set: resilience ≥ declared floor × replica
+ *  headroom, cheapest first (the deterministic selection order). */
+function candidatesFor(
+  svc: ServiceSpec,
+  posture: Posture,
+  floorIdx: number,
+  maxIdx: number,
+  gen: Generation,
+): Candidate[] {
+  const out: Candidate[] = [];
+  for (let i = floorIdx; i <= maxIdx; i++) {
+    for (const headroom of [0, 1]) {
+      out.push(buildCandidate(svc.name, svc.criticality, posture, RES_LEVELS[i], headroom, gen));
+    }
+  }
+  return out.sort((a, b) => a.cost - b.cost);
+}
+
+/** Dedupe Service names (slug collisions would clobber resource IDs). */
+function uniqueServices(posture: Posture): ServiceSpec[] {
+  const seen = new Set<string>();
+  const out: ServiceSpec[] = [];
+  for (const s of servicesOf(posture)) {
+    const key = slug(s.name);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(s);
+  }
+  return out;
 }
 
 export function plan(posture: Posture, gen: Generation): Plan {
@@ -184,68 +234,95 @@ export function plan(posture: Posture, gen: Generation): Plan {
     };
   }
 
-  // --- Enumerate candidates: resilience ≥ declared floor × replica headroom. ---
+  // --- Enumerate per-Service candidate sets against the shared bound. ---
+  const services = uniqueServices(posture);
   const regions = posture.regions.length ? posture.regions : ["us-east-1"];
   const floorIdx = RES_LEVELS.indexOf(posture.resilience);
   const maxIdx = regions.length >= 2 ? RES_LEVELS.length - 1 : 0;
-  const candidates: Candidate[] = [];
-  for (let i = floorIdx; i <= maxIdx; i++) {
-    for (const headroom of [0, 1]) {
-      candidates.push(buildCandidate(posture, RES_LEVELS[i], headroom, gen));
-    }
-  }
+  const candsByService = services.map((s) => ({
+    svc: s,
+    cands: candidatesFor(s, posture, floorIdx, maxIdx, gen),
+  }));
 
-  const feasibleCands = candidates.filter((c) => c.cost <= posture.budgetMonthly);
-
-  // --- Select per the objective program (§5). ---
-  let chosen: Candidate | undefined;
+  // Each Service's floor is its cheapest realization meeting the declared floor.
+  const floorCost = candsByService.reduce((sum, { cands }) => sum + cands[0].cost, 0);
   const objLabel = posture.optimize === "minimize-cost" ? "minimize cost" : "maximize resilience";
-  if (feasibleCands.length) {
-    chosen =
-      posture.optimize === "minimize-cost"
-        ? feasibleCands.reduce((a, b) => (b.cost < a.cost ? b : a))
-        : feasibleCands.reduce((a, b) =>
-            b.score > a.score || (b.score === a.score && b.cost < a.cost) ? b : a,
-          );
-  }
 
-  if (!chosen) {
-    const cheapest = candidates.reduce((a, b) => (b.cost < a.cost ? b : a));
-    const failure = `No realization fits the budget. Cost is bounded by $${posture.budgetMonthly}/mo (the binding constraint); the cheapest structure meeting Criticality ${posture.criticality} + ${posture.resilience} is $${cheapest.cost}/mo.`;
+  if (floorCost > posture.budgetMonthly) {
+    const failure = `No realization fits the budget. Cost is bounded by $${posture.budgetMonthly}/mo (the binding constraint, shared across ${services.length} service${services.length > 1 ? "s" : ""}); the cheapest structure meeting every Service's floor is $${floorCost}/mo.`;
     proof.push({ resourceId: "*", claim: "INFEASIBLE", reason: failure, binding: true });
+    for (const { svc, cands } of candsByService) {
+      proof.push({
+        resourceId: "*",
+        claim: `${svc.name} (${svc.criticality}) floor: $${cands[0].cost}/mo`,
+        reason: `cheapest realization meeting ${posture.resilience}`,
+      });
+    }
     return {
       generation: gen,
       manifest: { generation: gen, resources: {} },
       proof,
-      estMonthlyCost: cheapest.cost,
+      estMonthlyCost: floorCost,
       feasible: false,
       failure,
-      sensitivity: [`Raise budget to ≥ $${cheapest.cost}/mo, or lower Criticality / resilience.`],
+      sensitivity: [`Raise budget to ≥ $${floorCost}/mo, or lower Criticality / resilience.`],
     };
   }
 
-  // --- Proof: objective, the choice, and per-resource derivation. ---
+  // --- Select per the objective program (§5), sharing the budget. ---
+  // Start every Service at its floor, then (maximize-resilience only) greedily
+  // apply the single upgrade with the best score gain that still fits the
+  // remaining budget, across all Services.
+  const chosen = new Map<string, Candidate>();
+  for (const { svc, cands } of candsByService) chosen.set(svc.name, cands[0]);
+  let spend = floorCost;
+
+  if (posture.optimize === "maximize-resilience") {
+    let upgraded = true;
+    while (upgraded) {
+      upgraded = false;
+      let best: { svc: string; cand: Candidate; gain: number; delta: number } | null = null;
+      for (const { svc, cands } of candsByService) {
+        const cur = chosen.get(svc.name)!;
+        for (const cand of cands) {
+          const delta = cand.cost - cur.cost;
+          const gain = cand.score - cur.score;
+          if (gain <= 0 || delta <= 0) continue;
+          if (spend + delta > posture.budgetMonthly) continue;
+          if (
+            !best ||
+            gain > best.gain ||
+            (gain === best.gain && delta < best.delta) ||
+            (gain === best.gain && delta === best.delta && svc.name < best.svc)
+          ) {
+            best = { svc: svc.name, cand, gain, delta };
+          }
+        }
+      }
+      if (best) {
+        spend += best.delta;
+        chosen.set(best.svc, best.cand);
+        upgraded = true;
+      }
+    }
+  }
+
+  const estMonthlyCost = spend;
+
+  // --- Proof: objective, the shared bound, and per-Service derivation. ---
   proof.push({
     resourceId: "*",
-    claim: `objective: ${objLabel} · budget $${posture.budgetMonthly}/mo (bound)`,
+    claim: `objective: ${objLabel} · budget $${posture.budgetMonthly}/mo (shared bound)`,
     reason:
       posture.optimize === "minimize-cost"
-        ? "cost is the objective; Governance + Criticality + declared resilience are hard floors"
-        : "resilience is the objective; budget is the bound; Governance is a hard pre-filter",
+        ? "cost is the objective; Governance + each Service's Criticality + declared resilience are hard floors"
+        : "resilience is the objective; the shared budget is the bound; Governance is a hard pre-filter",
     binding: true,
   });
   proof.push({
     resourceId: "*",
-    claim: `${chosen.regionsActive} region${chosen.regionsActive > 1 ? "s" : ""} · ${chosen.resilience}${chosen.headroom ? " · +headroom" : ""}`,
-    reason:
-      posture.optimize === "minimize-cost"
-        ? `cheapest candidate ($${chosen.cost}/mo) meeting your declared floor`
-        : `strongest candidate that fits the budget ($${chosen.cost}/mo of $${posture.budgetMonthly})`,
-  });
-  proof.push({
-    resourceId: "*",
-    claim: `isolation: ${ISOLATION_FOR[posture.criticality]}`,
-    reason: `Criticality ${posture.criticality} default (authored, not solved — §6)`,
+    claim: `${services.length} service${services.length > 1 ? "s" : ""} owned · $${estMonthlyCost}/mo of $${posture.budgetMonthly}`,
+    reason: "spend attributes to its owning Service → environment (§6 ownership tree)",
   });
   if (posture.compliance.length) {
     proof.push({
@@ -254,83 +331,102 @@ export function plan(posture: Posture, gen: Generation): Plan {
       reason: "Governance hard constraint, enforced at plan time (§2)",
     });
   }
-  for (const r of chosen.resources) {
-    if (r.lifecycle === "job") {
-      proof.push({
-        resourceId: r.id,
-        claim: "batch job (nightly)",
-        reason: "run-to-completion workload (§1) — a finished run is success, not drift",
-      });
-      continue;
-    }
-    if (r.lifecycle === "external") {
-      proof.push({
-        resourceId: r.id,
-        claim: "external SaaS (payments)",
-        reason: "third-party dependency — consumed, observe-only, never provisioned (§1)",
-      });
-      continue;
-    }
-    if (r.lifecycle === "stateful") {
-      proof.push({
-        resourceId: r.id,
-        claim: `stateful broker (${r.spec.nodes}-node quorum)`,
-        reason:
-          "self-run cluster (§1) — health rolls up by quorum; minority of nodes = Unavailable",
-      });
-      continue;
-    }
-    if (r.cell === "app") {
-      proof.push({
-        resourceId: r.id,
-        claim: `${r.spec.replicas}× ${r.spec.size} compute`,
-        reason: `Criticality ${posture.criticality}${chosen.headroom ? " + headroom" : ""} sizing`,
-      });
-    } else if (r.cell === "data") {
-      proof.push({
-        resourceId: r.id,
-        claim: `managed DB (${r.spec.multiAZ === "true" ? "multi-AZ" : "single-AZ"})`,
-        reason:
-          r.spec.multiAZ === "true"
-            ? `Criticality ${posture.criticality} requires multi-AZ HA`
-            : "single-AZ permitted at this Criticality",
-      });
-    } else {
-      proof.push({
-        resourceId: r.id,
-        claim: "load balancer",
-        reason: "edge cell accepts LB/NAT (§3)",
-      });
-    }
-  }
-  if (chosen.resilience === "active-active" && chosen.regionsActive > 1) {
+
+  const allResources: DesiredResource[] = [];
+  for (const { svc } of candsByService) {
+    const c = chosen.get(svc.name)!;
+    allResources.push(...c.resources);
     proof.push({
       resourceId: "*",
-      claim: `${chosen.regionsActive - 1}× cross-region replication`,
-      reason: "active-active synchronizes data across regions (§3 Weave)",
+      claim: `service "${svc.name}" (${svc.criticality}): ${c.regionsActive} region${c.regionsActive > 1 ? "s" : ""} · ${c.resilience}${c.headroom ? " · +headroom" : ""} — $${c.cost}/mo`,
+      reason: `isolation ${ISOLATION_FOR[svc.criticality]}; ${
+        posture.optimize === "minimize-cost"
+          ? "cheapest realization meeting its floor"
+          : "upgraded as far as the shared budget allowed"
+      }`,
     });
+    for (const r of c.resources) appendResourceProof(proof, r, svc, c.headroom);
+    if (c.resilience === "active-active" && c.regionsActive > 1) {
+      proof.push({
+        resourceId: "*",
+        claim: `${svc.name}: ${c.regionsActive - 1}× cross-region replication`,
+        reason: "active-active synchronizes data across regions (§3 Weave)",
+      });
+    }
   }
 
-  // --- Sensitivity: the alternatives the solver weighed. ---
-  for (const cand of candidates) {
-    if (cand === chosen) continue;
-    const verdict =
-      cand.cost > posture.budgetMonthly ? `$${cand.cost}/mo — over budget` : `$${cand.cost}/mo`;
-    sensitivity.push(`${cand.resilience}${cand.headroom ? " +headroom" : ""}: ${verdict}`);
+  // --- Sensitivity: the alternatives the solver weighed, per Service. ---
+  for (const { svc, cands } of candsByService) {
+    const cur = chosen.get(svc.name)!;
+    for (const cand of cands) {
+      if (cand === cur) continue;
+      const verdict =
+        cand.cost > posture.budgetMonthly ? `$${cand.cost}/mo — over budget` : `$${cand.cost}/mo`;
+      sensitivity.push(
+        `${svc.name} · ${cand.resilience}${cand.headroom ? " +headroom" : ""}: ${verdict}`,
+      );
+    }
   }
 
   const manifest: Manifest = {
     generation: gen,
-    resources: Object.fromEntries(chosen.resources.map((r) => [r.id, r])),
+    resources: Object.fromEntries(allResources.map((r) => [r.id, r])),
   };
-  return {
-    generation: gen,
-    manifest,
-    proof,
-    estMonthlyCost: chosen.cost,
-    feasible: true,
-    sensitivity,
-  };
+  return { generation: gen, manifest, proof, estMonthlyCost, feasible: true, sensitivity };
+}
+
+function appendResourceProof(
+  proof: ProofRow[],
+  r: DesiredResource,
+  svc: ServiceSpec,
+  headroom: number,
+): void {
+  if (r.lifecycle === "job") {
+    proof.push({
+      resourceId: r.id,
+      claim: "batch job (nightly)",
+      reason: "run-to-completion workload (§1) — a finished run is success, not drift",
+    });
+    return;
+  }
+  if (r.lifecycle === "external") {
+    proof.push({
+      resourceId: r.id,
+      claim: "external SaaS (payments)",
+      reason: "third-party dependency — consumed, observe-only, never provisioned (§1)",
+    });
+    return;
+  }
+  if (r.lifecycle === "stateful") {
+    proof.push({
+      resourceId: r.id,
+      claim: `stateful broker (${r.spec.nodes}-node quorum)`,
+      reason: "self-run cluster (§1) — health rolls up by quorum; minority of nodes = Unavailable",
+    });
+    return;
+  }
+  if (r.cell === "app") {
+    proof.push({
+      resourceId: r.id,
+      claim: `${r.spec.replicas}× ${r.spec.size} compute`,
+      reason: `Criticality ${svc.criticality}${headroom ? " + headroom" : ""} sizing`,
+    });
+  } else if (r.cell === "data") {
+    proof.push({
+      resourceId: r.id,
+      claim: `managed DB (${r.spec.multiAZ === "true" ? "multi-AZ" : "single-AZ"})`,
+      reason:
+        r.spec.multiAZ === "true"
+          ? `Criticality ${svc.criticality} requires multi-AZ HA`
+          : "single-AZ permitted at this Criticality",
+    });
+  } else {
+    proof.push({
+      resourceId: r.id,
+      claim: "load balancer",
+      reason: "edge cell accepts LB/NAT (§3)",
+    });
+  }
 }
 
 /** Estimated monthly cost of a single resource (the unit the FinOps view tints by). */

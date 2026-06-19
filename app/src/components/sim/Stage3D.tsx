@@ -85,30 +85,36 @@ export default function Stage3D({
     return { frames, nodes };
   }, [resources, regions]);
 
-  // Weave edges: edge→app→data within a region; replication across regions.
+  // Weave edges per Service: edge→app→data within a region; replication across
+  // regions. Wiring per Service keeps the topology legible when the environment
+  // owns more than one (§6) — chains never cross owners.
   const wires = React.useMemo(() => {
     const out: { p1: Pt; p2: Pt; repl?: boolean }[] = [];
-    const rep = (region: string, cell: CellKind) =>
-      nodes.find((n) => n.r.region === region && n.r.cell === cell);
-    for (const region of regions) {
-      const e = rep(region, "edge");
-      const a = rep(region, "app");
-      const d = rep(region, "data");
-      if (e && a) out.push({ p1: { x: e.cx, y: e.cy }, p2: { x: a.cx, y: a.cy } });
-      if (a && d) out.push({ p1: { x: a.cx, y: a.cy }, p2: { x: d.cx, y: d.cy } });
-    }
-    const dataNodes = regions
-      .map((region) => nodes.find((n) => n.r.region === region && n.r.cell === "data"))
-      .filter(Boolean) as { cx: number; cy: number }[];
-    for (let i = 0; i + 1 < dataNodes.length; i++) {
-      out.push({
-        p1: { x: dataNodes[i].cx, y: dataNodes[i].cy },
-        p2: { x: dataNodes[i + 1].cx, y: dataNodes[i + 1].cy },
-        repl: true,
-      });
+    const services = [...new Set(resources.map((r) => r.service))];
+    const rep = (svc: string, region: string, cell: CellKind) =>
+      nodes.find((n) => n.r.service === svc && n.r.region === region && n.r.cell === cell);
+    for (const svc of services) {
+      for (const region of regions) {
+        const e = rep(svc, region, "edge");
+        const a = rep(svc, region, "app");
+        const d = rep(svc, region, "data");
+        if (e && a) out.push({ p1: { x: e.cx, y: e.cy }, p2: { x: a.cx, y: a.cy } });
+        if (a && d) out.push({ p1: { x: a.cx, y: a.cy }, p2: { x: d.cx, y: d.cy } });
+      }
+      const dataNodes = regions.map((region) => rep(svc, region, "data")).filter(Boolean) as {
+        cx: number;
+        cy: number;
+      }[];
+      for (let i = 0; i + 1 < dataNodes.length; i++) {
+        out.push({
+          p1: { x: dataNodes[i].cx, y: dataNodes[i].cy },
+          p2: { x: dataNodes[i + 1].cx, y: dataNodes[i + 1].cy },
+          repl: true,
+        });
+      }
     }
     return out;
-  }, [nodes, regions]);
+  }, [nodes, regions, resources]);
 
   const onPointerDown = (e: React.PointerEvent) => {
     dragging.current = true;
