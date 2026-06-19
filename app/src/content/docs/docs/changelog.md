@@ -6,6 +6,14 @@ description: Recent changes to the Trellis simulator, newest first.
 What's shipped to the live simulator, newest first. The footer shows the exact build
 (date · commit) currently deployed.
 
+## Roles & responsibilities — a day in the life
+
+A new [Roles & responsibilities](/trellis/docs/roles) page puts the human layer next to the model: the
+nine personas — platform owner, security/governance author, division lead, platform operator, service
+teams, break-glass responders, auditor, FinOps, external vendor — each with its mandate, its boundaries
+("does *not*"), and a day in its life, told through six on-brand Mermaid diagrams. The throughline: many
+people author and approve; exactly one loop (plus a sealed break-glass) writes — contained to its division.
+
 ## Mermaid diagrams, themed to brand
 
 Diagrams written in Mermaid now **render inline** across the docs, themed to the Trellis "cuoio" palette

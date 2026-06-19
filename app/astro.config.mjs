@@ -47,6 +47,7 @@ export default defineConfig({
           label: "Orientation",
           items: [
             { label: "Overview", slug: "docs/overview" },
+            { label: "Roles & responsibilities", slug: "docs/roles" },
             { label: "FAQ", slug: "docs/faq" },
             { label: "What's new", slug: "docs/changelog" },
           ],
