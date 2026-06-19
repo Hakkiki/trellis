@@ -933,9 +933,11 @@ options:
   authority re-derives the scope from the signed manifest generation** (it never consumes a scope the
   planner asserts); **the plan artifact is signed and approval binds to the signature** (the human
   approves the exact bytes); and **reproducible plan builds** (a re-run reproduces the same signed
-  artifact). Full **dual-planner parity** (two independent implementations agreeing before mint) is
-  optional later hardening, not a v1 requirement — it roughly doubles build cost for marginal gain over
-  reproducible-build + signing.
+  artifact). Full **dual-planner parity** for the *build* (two independent implementations agreeing before
+  mint) is optional later hardening, not a v1 requirement — it roughly doubles build cost for marginal gain
+  over reproducible-build + signing. **Per-plan parity is separate and not optional: above a
+  computed-blast-radius threshold a second independent planner must reproduce the realized diff
+  (Invariant 17).**
 - **The gate trusts CI; merge = apply-authorization.** Defense-in-depth demands repo controls *and* the
   gate: signed commits, branch protection, required external reviewers, an **attested builder** for the
   plan check, the reconciler verifying a **signature on the generation** (not "it's on main"). Surface the
@@ -1427,7 +1429,7 @@ down to the boundary; share only what is signed, versioned, and pulled.**
 ## 17. Invariants
 
 The non-negotiable rules a builder must preserve. A violation is a defect, not a tradeoff. Invariants
-1–10 fix the model; **11–16 are the inversion-hardened set** — each forecloses a specific way the
+1–10 fix the model; **11–17 are the inversion-hardened set** — each forecloses a specific way the
 platform could cause the very catastrophe it exists to prevent (the inversion stress test, §21).
 
 1. **Determinism.** A plan is a pure function of *(manifest generation + a pinned provider-state snapshot +
@@ -1455,7 +1457,8 @@ platform could cause the very catastrophe it exists to prevent (the inversion st
    is success, not drift); External = observe-only.
 9. **The trusted computing base is independently verified.** The planner, proof, gate, catalog, and
    reconciler must be externally audited and independently verified (reproducible builds; full
-   dual-implementation parity is optional hardening); the audit of all privileged actions is written
+   dual-implementation parity is optional hardening *for the build*, but per-plan parity is **required
+   above a blast-radius threshold** — Invariant 17); the audit of all privileged actions is written
    to an append-only store outside the system, and self-environment changes pass a higher gate than the
    ordinary merge.
 10. **The enforcer is not exempt.** Anything holding standing write is partitioned to the containment
@@ -1499,6 +1502,15 @@ platform could cause the very catastrophe it exists to prevent (the inversion st
     operations), each apply step is **idempotent and individually reversible**, so an interrupted apply
     **resumes or rolls back to a defined state**, never a half-applied one; unavoidably long provider
     operations are **initiate-then-poll under a refreshed lease**, the operation itself idempotent.
+17. **Independent corroboration above a blast-radius threshold.** A plan whose **computed blast radius**
+    crosses a posture-set threshold is never gated on a single derivation: a **second, independently
+    implemented planner** must reproduce the **same realized diff** (the resource × IAM × route delta),
+    and the proof must carry **named real-world checks** — provider-quota feasibility, data residency,
+    dependency-criticality, and a re-validate-against-observed — not internal consistency alone.
+    Divergence **fails loud** and escalates to a human; it never auto-resolves. This applies Invariant 15
+    (the checker outside the blast radius) to the planner itself — it **shrinks, but does not eliminate**,
+    the Posture→Structure compiler bet (two implementations can still share a blind spot, or the blueprint
+    itself can be wrong).
 
 ---
 
@@ -1509,7 +1521,7 @@ The buildable components, their responsibilities, boundaries, and trust relation
 - **Control plane (unprivileged).** Houses the **planner** (compiles Posture → Structure, emits the
   signed plan+proof; rungs 0–2 in v1), the **gate** (binds human approval to the signed plan), and the
   **audit emitter**. Holds *no* write credentials. Authenticates via workload identity. Independently
-  verified / parity-checked (Invariant 9). The platform's own control plane is itself a C0 environment it
+  verified / parity-checked (Invariants 9, 17). The platform's own control plane is itself a C0 environment it
   manages. Keeps **no consensus store of its own** — live State is derived (§4), the only standing
   stateful bit a leader-election lock — and is **partitioned to the containment boundary** (one instance
   per isolation domain; §16, Invariant 10).
@@ -1594,7 +1606,8 @@ A suggested construction order with dependencies.
 4. **Authorization + credential mint + TCB hardening.** The four action classes; the `authorized-by`
    three-way intersection; the independent mint authority (scope re-derived from the signed generation);
    plan signing + approval-to-signature binding; reconciler fleet partitioning + kill-switch; catalog
-   signing; the external append-only audit; reproducible plan builds (dual-planner parity optional, later).
+   signing; the external append-only audit; reproducible plan builds (build-time dual-planner parity
+   optional, later; per-plan parity above the blast-radius threshold is Invariant 17).
 5. **Transition planning.** Two-stage solve (target, then path); migration-pattern catalog; reversible
    gated steps; transition intent pinning; Data Protection (backup/PITR, stateful patterns).
 6. **FinOps / Views / incident.** The Views subsystem; cost allocation + cost-drift loop; alert routing +
@@ -1634,6 +1647,11 @@ Other resolutions:
   signals (the checker outside the blast radius), and **leased applies** (never begin a write you can't
   finish within its credential's lifetime — re-mint, wait, or refuse — with an idempotent/resumable
   backstop). The raw kill-path enumeration is retained off-site in the red-team bundle.
+- **Compiler-bet residual promoted (second pass)** — the inversion's honest residual K22 (the
+  Posture→Structure compiler emitting a subtly-wrong-but-proof-passing Structure) was hardened into
+  **Invariant 17**: independent corroboration (dual-planner parity on the realized diff + named real-world
+  proof checks) is **required above a blast-radius threshold**. It *shrinks* the compiler bet rather than
+  eliminating it — an honest mitigation, not a solved claim.
 
 ---
 

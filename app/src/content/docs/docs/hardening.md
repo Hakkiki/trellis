@@ -12,7 +12,8 @@ always invert."* So we did not ask "how does Trellis win?" We asked the opposite
 > outage, an unrecoverable control plane, an unauthorized change that looks authorized?**
 
 Then we walked every kill-path and made sure the design forecloses it. The genuine gaps this surfaced
-became **new normative invariants** (spec [§17](/trellis/docs/spec), Invariants 11–16). This page is the
+became **new normative invariants** (spec [§17](/trellis/docs/spec), Invariants 11–16, plus a second-pass
+residual hardened into Invariant 17). This page is the
 distilled version; the raw red-team enumeration lives in the off-site design bundle.
 
 ## The promises an attacker would target
@@ -117,10 +118,13 @@ The subtlest one. The gate approved a change; it just happened to be bad.
 
 Inversion hardens; it doesn't make a system invincible. What remains, stated plainly:
 
-- **The compiler is still the bet.** A Posture→Structure compiler can emit a subtly wrong Structure that
-  *passes* its proof — a proof shows internal consistency, not real-world correctness. We ship it demoted
-  (blueprints + validation + bounded tuning), with dual-planner parity available as hardening above a
-  blast-radius threshold (the spec keeps it optional), but this is the genuine research risk, not solved.
+- **The compiler bet is shrunk, not gone.** A Posture→Structure compiler can emit a subtly wrong Structure
+  that *passes* its proof — a proof shows internal consistency, not real-world correctness. **Invariant 17**
+  now requires, above a blast-radius threshold, a **second independent planner to reproduce the same
+  realized diff** plus **named real-world checks** (quota, residency, dependency-criticality,
+  re-validate-against-observed) — the checker outside the blast radius, applied to the planner. That closes
+  the easy failures; the honest remainder is that two implementations can share a blind spot, or the
+  blueprint itself can be wrong. Still the genuine research risk — now **bounded, not solved.**
 - **Social defeat is real.** A proof nobody reads is magic by another name; alarm fatigue defeats any human
   gate. The mitigation is to **ration attention by blast radius** — auto-handle the trivial, escalate only
   what's significant — but discipline, not just design, keeps the gate meaningful.
@@ -128,9 +132,9 @@ Inversion hardens; it doesn't make a system invincible. What remains, stated pla
   back into one. The near-stateless, self-managing footprint ([§12](/trellis/docs/spec)) is what keeps the
   sliced model cheaper than the SPOF it replaces — but it's a pressure to watch, not a law.
 
-## The six invariants this produced
+## The seven invariants this produced
 
-Folded into the normative spec ([§17](/trellis/docs/spec), 11–16):
+Folded into the normative spec ([§17](/trellis/docs/spec), 11–17):
 
 | # | Invariant | Kill-path it shuts |
 |---|---|---|
@@ -140,5 +144,6 @@ Folded into the normative spec ([§17](/trellis/docs/spec), 11–16):
 | 14 | **Separation of duties; the gate floor can't be self-loosened** | A malicious-but-"authorized" change; root eroding the floor |
 | 15 | **The checker sits outside the blast radius** — self-observability, attested signals | Acting on a spoofed or broken telemetry path |
 | 16 | **Bounded by the lease** — never start a write you can't finish; re-mint / wait / refuse; idempotent-resumable backstop | A credential expiring mid-apply, leaving reality half-changed |
+| 17 | **Independent corroboration above a blast-radius threshold** — dual-planner parity on the realized diff + real-world proof checks | A subtly-wrong-but-proof-passing Structure shipping at scale (the compiler bet) |
 
 In one line: **we found where Trellis would die, and built so it can't go there.**

@@ -7,6 +7,15 @@ The simulator deploys continuously from `main`, so entries are grouped by date r
 
 ### Added
 
+- **Invariant 17 — independent corroboration above a blast-radius threshold.** Promoted the inversion's
+  honest *compiler-bet* residual (K22) into a concrete rule: for a plan whose computed blast radius crosses
+  a posture-set threshold, a **second, independently-implemented planner** must reproduce the same realized
+  diff, and the proof must carry **named real-world checks** (provider-quota, residency,
+  dependency-criticality, re-validate-against-observed) — not internal consistency alone; divergence fails
+  loud. This applies Invariant 15 ("the checker outside the blast radius") to the planner itself. It
+  **shrinks, not eliminates**, the Posture→Structure compiler bet — an honest mitigation, not a solved
+  claim. Inversion-hardened set is now **11–17**. Promoted maker/checker.
+
 - **Inversion stress test + six new invariants.** Applied Munger's inversion — *"how would we guarantee
   Trellis causes the exact catastrophe it exists to prevent?"* — enumerated every kill-path, scored each
   Foreclosed / Partial / Gap, and folded the genuine gaps into the normative spec as **Invariants

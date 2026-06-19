@@ -194,7 +194,7 @@ Each kill-path is scored **✓ foreclosed** (already shut), **◑ partial** (mit
 
 | # | Kill-path | Status | Defense |
 |---|---|---|---|
-| K22 | Compiler emits a **subtly wrong Structure that passes proof** (proof = internal consistency, not real-world correctness) | ◑ partial (the bet) | demoted rung (blueprints + validation + bounded tuning); **dual-planner parity available as hardening above a blast-radius threshold** (Inv 9 keeps it optional). Honest residual research risk |
+| K22 | Compiler emits a **subtly wrong Structure that passes proof** (proof = internal consistency, not real-world correctness) | ➕ **Inv 17** (second pass; bounds the bet) | demoted rung (blueprints + validation + bounded tuning) **+ Inv 17**: above a blast-radius threshold, a second independent planner must reproduce the **same realized diff** and the proof must carry **named real-world checks** (quota, residency, dependency-criticality, re-validate-against-observed). Divergence fails loud. *Shrinks, not eliminates* — two impls can share a blind spot, or the blueprint itself is wrong. Honest residual research risk, now bounded |
 
 ## Family 9 — time / transactionality (defeats P4)
 
@@ -208,7 +208,10 @@ Six genuine gaps → six new normative invariants (spec §17, 11–16): **progre
 convergence**, **no-floating-fate / fail-static shared surfaces**, **out-of-band recovery + M-of-N
 custody**, **separation-of-duties on a non-loosenable gate floor**, **self-observability + attested
 signals**, and **leased applies** (never start a write you can't finish within its credential's
-lifetime). The rest were already foreclosed, or are honest residuals (the compiler bet; social defeat;
-economic re-centralization pressure) carried as guidance, not solved claims.
+lifetime). A **second pass** then promoted the compiler-bet residual (K22) to **Invariant 17** —
+independent corroboration (dual-planner parity on the realized diff + real-world proof checks) above a
+blast-radius threshold — bringing the inversion-hardened set to **11–17**. The rest were already
+foreclosed, or remain honest residuals (social defeat of the gate; economic re-centralization pressure)
+carried as guidance, not solved claims.
 The headline: **the inversion confirms the spine and closes the "even an approved mistake can't go
 company-wide" gap — Invariant 11 is the direct answer to the original 100%-blast-radius outage.**
