@@ -13,6 +13,8 @@
   background: radial-gradient(58% 44% at 50% 52%, #2a2017 0%, transparent 72%);
   touch-action: none;
   user-select: none;
+  /* Isolate the scene so orbit/zoom repaints don't ripple into the page. */
+  contain: layout paint;
 }
 .stage-scene.dragging {
   cursor: grabbing;
@@ -36,6 +38,9 @@
   transform-style: preserve-3d;
   transform: rotateX(var(--grx)) rotateZ(var(--grz)) scale(var(--scale));
   transition: transform 0.05s linear;
+  /* Promote to its own GPU layer: orbit/zoom is a composited transform, not a repaint. */
+  will-change: transform;
+  backface-visibility: hidden;
 }
 .stage-region {
   position: absolute;
@@ -94,6 +99,8 @@
   margin: -28px 0 0 -39px;
   transform-style: preserve-3d;
   transform: translateZ(40px) rotateZ(calc(-1 * var(--grz))) rotateX(calc(-1 * var(--grx)));
+  will-change: transform;
+  backface-visibility: hidden;
 }
 /* Overview "group" tile: one per service per region, wider than a node. */
 .stage-node.group {

@@ -5,6 +5,7 @@
 
 import { type DriveStep, driver } from "driver.js";
 import "driver.js/dist/driver.css";
+import "./tour.css";
 
 const STEPS: { sel: string; title: string; description: string }[] = [
   {

@@ -6,6 +6,20 @@ description: Recent changes to the Trellis simulator, newest first.
 What's shipped to the live simulator, newest first. The footer shows the exact build
 (date · commit) currently deployed.
 
+## Polish pass
+
+Share-ready details:
+
+- **Branded tour** — the guided-tour popovers now match the Trellis dark/amber theme instead of the
+  default white box.
+- **Reset** — a control in the guide clears your saved session and starts fresh (handy for a live demo).
+- **Lens-aware overview tiles** — the grouped service tiles tint by the active lens (cost / health /
+  security) and show $/mo in the cost lens, not just the state roll-up.
+- **Smoother 3D** — the stage is GPU-composited (`will-change` + `contain`), so orbit and zoom stay
+  fluid.
+- **Refreshed landing** — current "what's new" pill, and stress cards for cost drift, ownership, and
+  self-upgrade.
+
 ## Topology that scales to many services
 
 The 3D stage used to pack every service into the same edge/app/data cells, so two services already

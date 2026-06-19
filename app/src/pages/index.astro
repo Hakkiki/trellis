@@ -22,10 +22,9 @@ const stress = [
   ["Self-heal", "A failed node is Degraded, then re-provisioned within the approved envelope."],
   ["Fail-safe", "Stale telemetry → Unknown; the loop holds rather than acting blind."],
   ["Break-glass", "A frozen resource suspends reconciliation and owes a ratify-or-revert debt."],
-  [
-    "Transitions",
-    "Change the posture and it rolls out as expand-contract — nodes appear and retire.",
-  ],
+  ["Cost drift", "Billing diverges from plan; a budget-breach pages and, by posture, blocks provisioning."],
+  ["Ownership", "Spend and health roll up to each owning service and on to the environment."],
+  ["Self-upgrade", "The control plane upgrades itself behind a dual-control gate, with re-bootstrap recovery."],
   ["Promotion", "Promote an immutable version dev → staging → prod, re-planned per environment."],
 ];
 
@@ -33,7 +32,7 @@ const surfaces = [
   {
     href: `${base}/simulator`,
     label: "Simulator",
-    body: "Declare a posture, read the proof, approve, then drive a CSS-3D topology — inject drift, fail nodes, break glass, and watch it heal.",
+    body: "Declare a posture, read the proof, approve, then drive a CSS-3D topology — recolor it by cost, health, or security; inject drift and failures; and watch it heal. A built-in guide and tour walk you through.",
     cta: "Open the simulator",
   },
   {
@@ -69,7 +68,7 @@ const surfaces = [
       class="border-border/60 bg-card/40 text-muted-foreground hover:text-foreground mt-7 inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs transition"
     >
       <span class="bg-primary size-1.5 rounded-full"></span>
-      New: stateful clusters &amp; quorum roll-up
+      New: cost &amp; security lenses · multi-service ownership · self-upgrade
       <span class="text-primary">→</span>
     </a>
     <p class="text-primary mt-5 text-sm font-medium tracking-wide uppercase">

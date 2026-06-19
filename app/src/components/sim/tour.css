@@ -1,0 +1,68 @@
+/* Theme driver.js popovers to the Trellis dark/amber palette so the tour reads
+   as part of the product, not a stock white box. Loaded after driver.css so
+   these win. Tokens come from global.css (.dark is on <html>). */
+
+.driver-popover {
+  background: var(--card, #15110d);
+  color: var(--muted-foreground, #cdbfa6);
+  border: 1px solid color-mix(in srgb, var(--primary, #d9a441) 30%, transparent);
+  border-radius: 12px;
+  box-shadow: 0 16px 40px -12px #000c;
+  max-width: 320px;
+}
+
+.driver-popover-title {
+  color: var(--foreground, #f5efe6);
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.driver-popover-description {
+  color: var(--muted-foreground, #b6a890);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.driver-popover-progress-text {
+  color: color-mix(in srgb, var(--muted-foreground, #b6a890) 80%, transparent);
+  font-size: 11px;
+}
+
+/* Hide the arrow — a clean floating card reads better against the 3D scene. */
+.driver-popover-arrow {
+  display: none;
+}
+
+.driver-popover-footer button {
+  text-shadow: none;
+  border-radius: 8px;
+  border: 1px solid var(--border, #ffffff22);
+  background: transparent;
+  color: var(--muted-foreground, #cdbfa6);
+  font-size: 12px;
+  padding: 5px 12px;
+  transition: all 0.15s ease;
+}
+
+.driver-popover-footer button:hover {
+  color: var(--foreground, #fff);
+  border-color: color-mix(in srgb, var(--primary, #d9a441) 60%, transparent);
+}
+
+.driver-popover-next-btn {
+  background: var(--primary, #d9a441) !important;
+  border-color: var(--primary, #d9a441) !important;
+  color: var(--primary-foreground, #1a140d) !important;
+  font-weight: 600;
+}
+
+.driver-popover-next-btn:hover {
+  opacity: 0.9;
+}
+
+.driver-popover-close-btn {
+  color: var(--muted-foreground, #b6a890);
+}
+.driver-popover-close-btn:hover {
+  color: var(--foreground, #fff);
+}

@@ -1,9 +1,11 @@
 import * as React from "react";
 import "./stage.css";
-import type { ResourceView } from "@/sim/engine";
+import type { ResourceView, SecurityTier } from "@/sim/engine";
 import type { CellKind } from "@/sim/model";
 import { rollup, type State, stateColorVar } from "@/sim/state";
-import { type ViewMode, viewColor } from "./views";
+import { costColor, securityColor, type ViewMode, viewColor } from "./views";
+
+const SECURITY_ORDER: SecurityTier[] = ["at-risk", "exposed", "sensitive", "internal"];
 
 const GW = 760;
 const GH = 520;
@@ -13,7 +15,16 @@ const CELL_Y: Record<CellKind, number> = { edge: 0.26, app: 0.54, data: 0.82 };
 const CELL_LABEL: Record<CellKind, string> = { edge: "EDGE", app: "APP", data: "DATA" };
 
 type Pt = { x: number; y: number };
-type Group = { key: string; slug: string; cx: number; cy: number; count: number; state: State };
+type Group = {
+  key: string;
+  slug: string;
+  cx: number;
+  cy: number;
+  count: number;
+  state: State;
+  cost: number;
+  security: SecurityTier;
+};
 
 function nodeLabel(r: ResourceView): string {
   if (r.lifecycle === "job") return "JOB";
@@ -150,11 +161,15 @@ export default function Stage3D({
           cy: f.y + f.h * ((i + 1) / (svcs.length + 1)),
           count: rs.length,
           state: rollup(rs.map((r) => r.state)),
+          cost: rs.reduce((sum, r) => sum + r.monthlyCost, 0),
+          security: SECURITY_ORDER.find((t) => rs.some((r) => r.security === t)) ?? "internal",
         });
       });
     }
     return { frames, nodes: [] as { r: ResourceView; cx: number; cy: number }[], groups };
   }, [resources, regions, activeFocus]);
+
+  const groupMaxCost = Math.max(0, ...groups.map((g) => g.cost));
 
   // Weave edges per Service: edge→app→data within a region; replication across
   // regions. Wiring per Service keeps the topology legible when the environment
@@ -332,11 +347,23 @@ export default function Stage3D({
         })}
 
         {groups.map((g) => {
-          const color = stateColorVar(g.state);
+          const color =
+            view === "cost"
+              ? costColor(g.cost, groupMaxCost)
+              : view === "security"
+                ? securityColor(g.security)
+                : stateColorVar(g.state);
+          const pulsing = (view === "state" || view === "health") && pulse(g.state);
+          const sub =
+            view === "cost"
+              ? `$${g.cost}/mo · open →`
+              : view === "security"
+                ? `${g.security} · open →`
+                : `${g.count} resources · open →`;
           return (
             <div
               key={g.key}
-              className={`stage-node group${pulse(g.state) ? " pulse" : ""}`}
+              className={`stage-node group${pulsing ? " pulse" : ""}`}
               style={{ left: g.cx, top: g.cy, ["--st" as string]: color } as React.CSSProperties}
             >
               <div className="shadow" />
@@ -350,7 +377,7 @@ export default function Stage3D({
               >
                 <div className="accent" />
                 <div className="kind">{names[g.slug] ?? g.slug}</div>
-                <div className="nm">{g.count} resources · open →</div>
+                <div className="nm">{sub}</div>
               </div>
               <div className="led" />
             </div>
