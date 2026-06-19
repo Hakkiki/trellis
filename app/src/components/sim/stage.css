@@ -95,6 +95,23 @@
   transform-style: preserve-3d;
   transform: translateZ(40px) rotateZ(calc(-1 * var(--grz))) rotateX(calc(-1 * var(--grx)));
 }
+/* Overview "group" tile: one per service per region, wider than a node. */
+.stage-node.group {
+  width: 150px;
+  height: 60px;
+  margin: -30px 0 0 -75px;
+}
+.stage-node.group .kind {
+  font-size: 10px;
+  max-width: 138px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.stage-node.group .nm {
+  font-size: 9px;
+  max-width: 140px;
+}
 .stage-node .face {
   position: absolute;
   inset: 0;

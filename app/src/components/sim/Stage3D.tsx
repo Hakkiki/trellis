@@ -2,7 +2,7 @@ import * as React from "react";
 import "./stage.css";
 import type { ResourceView } from "@/sim/engine";
 import type { CellKind } from "@/sim/model";
-import { type State, stateColorVar } from "@/sim/state";
+import { rollup, type State, stateColorVar } from "@/sim/state";
 import { type ViewMode, viewColor } from "./views";
 
 const GW = 760;
@@ -13,6 +13,7 @@ const CELL_Y: Record<CellKind, number> = { edge: 0.26, app: 0.54, data: 0.82 };
 const CELL_LABEL: Record<CellKind, string> = { edge: "EDGE", app: "APP", data: "DATA" };
 
 type Pt = { x: number; y: number };
+type Group = { key: string; slug: string; cx: number; cy: number; count: number; state: State };
 
 function nodeLabel(r: ResourceView): string {
   if (r.lifecycle === "job") return "JOB";
@@ -45,6 +46,9 @@ export default function Stage3D({
   maxCost,
   selected,
   frozenIds,
+  focus,
+  names,
+  onFocus,
   onSelect,
 }: {
   resources: ResourceView[];
@@ -53,6 +57,12 @@ export default function Stage3D({
   maxCost: number;
   selected: string | null;
   frozenIds: Set<string>;
+  // Service focus: "all" shows a grouped overview (one tile per service per
+  // region); a slug drills into that one service's full topology. This keeps the
+  // stage readable no matter how many services the environment owns.
+  focus: string;
+  names: Record<string, string>;
+  onFocus: (slug: string) => void;
   onSelect: (id: string) => void;
 }) {
   // grx/grz orbit the camera; zoom is the user's multiplier on top of `fit`,
@@ -87,9 +97,19 @@ export default function Stage3D({
   }, []);
 
   const regions = React.useMemo(() => [...new Set(resources.map((r) => r.region))], [resources]);
+  const services = React.useMemo(() => [...new Set(resources.map((r) => r.service))], [resources]);
+  // With a single service there's nothing to group, so show its weave directly.
+  const activeFocus =
+    focus !== "all" && services.includes(focus)
+      ? focus
+      : services.length === 1
+        ? services[0]
+        : null;
+  const focused = activeFocus !== null;
 
-  // Lay out region frames and node centers on the ground plane.
-  const { frames, nodes } = React.useMemo(() => {
+  // Lay out region frames, plus either the focused service's nodes or, in the
+  // overview, one group tile per service per region.
+  const { frames, nodes, groups } = React.useMemo(() => {
     const R = Math.max(1, regions.length);
     const rw = (GW - 2 * PAD - (R - 1) * GAP) / R;
     const rh = GH - 2 * PAD;
@@ -100,18 +120,41 @@ export default function Stage3D({
       w: rw,
       h: rh,
     }));
-    const nodes = resources.map((r) => {
-      const fi = regions.indexOf(r.region);
-      const f = frames[fi];
-      const peers = resources.filter((p) => p.region === r.region && p.cell === r.cell);
-      const idx = peers.indexOf(r);
-      const span = 84;
-      const cx = f.x + f.w / 2 + (idx - (peers.length - 1) / 2) * span;
-      const cy = f.y + f.h * CELL_Y[r.cell];
-      return { r, cx, cy };
-    });
-    return { frames, nodes };
-  }, [resources, regions]);
+
+    if (activeFocus) {
+      const shown = resources.filter((r) => r.service === activeFocus);
+      const nodes = shown.map((r) => {
+        const f = frames[regions.indexOf(r.region)];
+        const peers = shown.filter((p) => p.region === r.region && p.cell === r.cell);
+        const idx = peers.indexOf(r);
+        const span = 84;
+        const cx = f.x + f.w / 2 + (idx - (peers.length - 1) / 2) * span;
+        const cy = f.y + f.h * CELL_Y[r.cell];
+        return { r, cx, cy };
+      });
+      return { frames, nodes, groups: [] as Group[] };
+    }
+
+    // Overview: stack one tile per service down the middle of each region frame.
+    const groups: Group[] = [];
+    for (const f of frames) {
+      const svcs = [
+        ...new Set(resources.filter((r) => r.region === f.region).map((r) => r.service)),
+      ];
+      svcs.forEach((slug, i) => {
+        const rs = resources.filter((r) => r.region === f.region && r.service === slug);
+        groups.push({
+          key: `${f.region}/${slug}`,
+          slug,
+          cx: f.x + f.w / 2,
+          cy: f.y + f.h * ((i + 1) / (svcs.length + 1)),
+          count: rs.length,
+          state: rollup(rs.map((r) => r.state)),
+        });
+      });
+    }
+    return { frames, nodes: [] as { r: ResourceView; cx: number; cy: number }[], groups };
+  }, [resources, regions, activeFocus]);
 
   // Weave edges per Service: edge→app→data within a region; replication across
   // regions. Wiring per Service keeps the topology legible when the environment
@@ -287,8 +330,38 @@ export default function Stage3D({
             </div>
           );
         })}
+
+        {groups.map((g) => {
+          const color = stateColorVar(g.state);
+          return (
+            <div
+              key={g.key}
+              className={`stage-node group${pulse(g.state) ? " pulse" : ""}`}
+              style={{ left: g.cx, top: g.cy, ["--st" as string]: color } as React.CSSProperties}
+            >
+              <div className="shadow" />
+              <div className="stem" />
+              <div
+                className="face"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onFocus(g.slug);
+                }}
+              >
+                <div className="accent" />
+                <div className="kind">{names[g.slug] ?? g.slug}</div>
+                <div className="nm">{g.count} resources · open →</div>
+              </div>
+              <div className="led" />
+            </div>
+          );
+        })}
       </div>
-      <div className="stage-hint">drag to orbit · pinch or scroll to zoom</div>
+      <div className="stage-hint">
+        {focused
+          ? "tap a service tile to switch · drag to orbit · pinch or scroll to zoom"
+          : "tap a service to open it · drag to orbit · pinch or scroll to zoom"}
+      </div>
     </div>
   );
 }
