@@ -152,6 +152,32 @@ Two more things the spec is firm about:
   cutover* for high criticality (zero-loss, expensive) or *backup → restore → cutover* for the
   downtime-tolerant tiers — never an unsafe instantaneous redefinition.
 
+### Does Trellis need a database, etcd, or Consul of its own?
+
+No — and that's deliberate. Trellis keeps no consensus store of its own:
+
+- **Desired state** lives in **Git** — a commit SHA *is* the generation. Git is already durable,
+  replicated, and externally hosted, so there's nothing to run a quorum over.
+- **Observed state and audit** live in an **external append-only store** (outside the control plane) — a
+  log, not a coordinated key-value store.
+- **Live State** is **derived** — recomputed as `f(desired, observed, health)`, never stored as ground
+  truth. There is no authoritative state DB to keep consistent.
+
+So there's **no etcd, no Consul, no Raft cluster** in Trellis's brain. This matters because it's what
+makes [slicing the control plane](/trellis/docs/operating-model) cheap: a Trellis instance is
+near-stateless compute — kill it and re-bootstrap from Git + the external seed (meta-DR). If it needed its
+own etcd, every per-division instance would carry a stateful quorum cluster to operate — the exact
+fragile SPOF we're trying to avoid. (Contrast Kubernetes, which *does* need etcd; Trellis pushes
+durability out to Git instead.)
+
+The one real need is **coordination, not storage**: don't let two reconcilers act on the same resource.
+That's leader-election / locking, satisfied with a lightweight primitive (e.g. a DynamoDB conditional-write
+lock, or a single active reconciler per Frame scope) — not a reason to stand up Consul or etcd.
+
+And as *workloads*? A division can absolutely run Consul or etcd for its **own** services — Trellis treats
+them as stateful quorum clusters (the quorum roll-up above). That's the division's choice for their stack,
+not a dependency of the control plane.
+
 ## Security
 
 ### How does security actually work?
