@@ -1,16 +1,20 @@
 ---
-import AppLayout from "@/layouts/AppLayout.astro";
+import ViewSwitcher from "@/components/ViewSwitcher.astro";
 import Promotion from "@/components/sim/Promotion.tsx";
+import AppLayout from "@/layouts/AppLayout.astro";
 ---
 
 <AppLayout title="Trellis — Promotion" description="Advance an immutable, validated version through dev → staging → prod.">
+  <ViewSwitcher active="promotion" />
   <div class="mb-6">
-    <h1 class="text-2xl font-semibold">Promotion pipeline</h1>
+    <h1 class="text-2xl font-semibold">The same loop, across a pipeline</h1>
     <p class="text-muted-foreground mt-1 max-w-3xl text-sm">
-      Cut an <b>immutable, validated version</b> and promote it through dev → staging → prod. Each
-      environment instantiates the <i>same</i> version with its own posture overrides (dev = C3 … prod =
-      C0) and re-plans the path against its own observed state — so what you validated is what shipped.
-      Hand-edit an environment and watch it show as <b>drifted off its version</b>.
+      This is the simulator's loop run across a release pipeline. <b>Cut a version</b> — a frozen,
+      validated snapshot of your structure — then promote it <b>dev → staging → prod</b>. Every stage
+      runs the <i>same</i> version, re-planned for its own size and reality (dev is small and cheap; prod
+      is strict and multi-region), so what you proved in dev is what ships. Hand-edit a stage and it
+      shows as <b>drifted off its version</b>. To work a single environment in depth, switch to
+      <b>Single environment</b> above. (This view starts fresh on each reload.)
     </p>
   </div>
   <Promotion client:only="react" />

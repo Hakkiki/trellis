@@ -71,6 +71,7 @@ import {
   viewColor,
 } from "./views";
 
+const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 const ALL_REGIONS = ["us-east-1", "eu-west-1", "ap-south-1"];
 const CRITS: Criticality[] = ["C0", "C1", "C2", "C3"];
 const ALL_SERVICES: { kind: Kind; label: string }[] = [
@@ -696,6 +697,14 @@ function Guide({ onTour }: { onTour: () => void }) {
                 The cloud here is simulated, but the dynamics are real: applies take time, nodes
                 fail, telemetry goes stale, and bills drift. Everything you do persists in your
                 browser — reload and it's still here.
+              </p>
+              <p>
+                This page is <b>one environment, up close</b>. To watch a validated version travel
+                dev → staging → prod, open the{" "}
+                <a href={`${BASE}/promotion`} className="text-primary underline underline-offset-2">
+                  Release pipeline
+                </a>{" "}
+                — it's the same loop, zoomed out.
               </p>
             </AccordionContent>
           </AccordionItem>
