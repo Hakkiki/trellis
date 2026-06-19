@@ -333,16 +333,19 @@ export function plan(posture: Posture, gen: Generation): Plan {
   };
 }
 
+/** Estimated monthly cost of a single resource (the unit the FinOps view tints by). */
+export function resourceCost(r: DesiredResource): number {
+  if (r.lifecycle === "external") return 0; // consumed, not provisioned
+  if (r.lifecycle === "job") return JOB_COST;
+  if (r.lifecycle === "stateful") return Number(r.spec.nodes ?? "1") * STATEFUL_NODE_COST;
+  if (r.cell === "app") return COMPUTE_COST[r.spec.size] * Number(r.spec.replicas ?? "1");
+  if (r.cell === "data") return DB_COST[r.spec.size] * (r.spec.multiAZ === "true" ? 2 : 1);
+  return LB_COST;
+}
+
 /** Estimated monthly cost of an arbitrary manifest (for the FinOps view). */
 export function manifestCost(m: Manifest): number {
   let cost = 0;
-  for (const r of Object.values(m.resources)) {
-    if (r.lifecycle === "external") continue; // consumed, not provisioned
-    if (r.lifecycle === "job") cost += JOB_COST;
-    else if (r.lifecycle === "stateful") cost += Number(r.spec.nodes ?? "1") * STATEFUL_NODE_COST;
-    else if (r.cell === "app") cost += COMPUTE_COST[r.spec.size] * Number(r.spec.replicas ?? "1");
-    else if (r.cell === "data") cost += DB_COST[r.spec.size] * (r.spec.multiAZ === "true" ? 2 : 1);
-    else cost += LB_COST;
-  }
+  for (const r of Object.values(m.resources)) cost += resourceCost(r);
   return cost;
 }

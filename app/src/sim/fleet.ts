@@ -7,7 +7,7 @@
 
 import type { AuditClass, AuditEntry, ResourceView } from "./engine";
 import type { Criticality, Manifest, Posture, Resilience } from "./model";
-import { manifestCost, plan as runPlanner } from "./planner";
+import { manifestCost, resourceCost, plan as runPlanner } from "./planner";
 import { Reconciler, type Status } from "./reconcile";
 import { SimCloud } from "./sim";
 
@@ -249,6 +249,7 @@ export class Fleet {
             size: r.spec.size,
             replicas: Number(r.spec.replicas ?? "1"),
             state: stById.get(r.id) ?? "Unknown",
+            monthlyCost: resourceCost(r),
           }))
         : [];
       const source = idx > 0 ? this.envs[ORDER[idx - 1]] : null;
