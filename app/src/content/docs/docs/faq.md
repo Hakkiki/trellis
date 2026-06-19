@@ -237,6 +237,21 @@ The mechanics that make it real:
 - **Audit lives outside the control plane.** A compromised control plane can't be trusted to log its own
   changes honestly, so every privileged action is written to an external, append-only store.
 
+### How does Trellis get installed, and what does it need to run?
+
+The first install is a one-time, **externally-rooted bootstrap ceremony** — because the platform can't
+provision its own initial authority (that's circular). The seed is the AWS management-account root + a
+human IdP, used *once*: stand up the audit store, discover read-only, plan + prove what it would create,
+a human approves the minimal scoped write that lays down the org + delegated-admin identity, then the
+root **seals itself**.
+
+After that the standing footprint is deliberately small: **workload identity** (instance role / OIDC, no
+long-lived keys), a **delegated-administrator** position that's *unprivileged for writes*, and
+**STS-minted, plan-scoped, ephemeral** credentials for the actual changes. It runs on near-stateless
+compute plus Git (desired state), the external WORM audit, a tiny lock table, and a secrets store. Full
+detail — the ceremony, the privilege model, the resource list, per-division bootstrap, and meta-DR — is on
+the [Bootstrap & footprint](/trellis/docs/bootstrap) page.
+
 ### Where does the audit log live, and what's the storage?
 
 The spec fixes the *properties*; the product is mapped through the provider contract. Required properties:

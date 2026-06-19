@@ -41,6 +41,7 @@ export default defineConfig({
           label: "Concepts",
           items: [
             { label: "Operating model", slug: "docs/operating-model" },
+            { label: "Bootstrap & footprint", slug: "docs/bootstrap" },
             { label: "Posture & Criticality", slug: "docs/posture" },
             { label: "Structure & State", slug: "docs/state" },
             { label: "The reconcile loop", slug: "docs/reconcile" },
