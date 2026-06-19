@@ -353,8 +353,11 @@ scale, and capability.
 continuously. It is the *only* holder of standing write credentials, bounded to its managed
 resources and the change kinds the posture permits.
 
-**gate** — the single human approval point: a human approves a plan (its exact signed bytes) before
-apply. Prior approval never carries forward to a different plan.
+**gate** — the human approval point before apply: a human approves a plan (its exact signed bytes), at
+a **rigor that scales with blast radius** (Invariant 18) — high-blast-radius plans require per-plan
+approval and an independent second; a reversible, in-catalog change below a posture-set floor may run
+under a standing, human-authored auto-merge policy. Prior approval never carries forward to a different
+plan.
 
 **View** — a read-only projection/aggregation of State + Substance + cost + audit along the Frame
 tree, filtered for an audience (cost, security, health, compliance, incident, exec). Derived, never
@@ -791,7 +794,7 @@ Every action is exactly one of four **classes**, and the class *is* the authorit
 
 | Class | Mutates | Who | Gate | Why / When |
 |---|---|---|---|---|
-| **Author** | *desired state* (the manifest) | humans only | **always** — plan + proof + approval | intent/policy/budget change; on-demand |
+| **Author** | *desired state* (the manifest) | humans only | **always** — plan + proof + approval (per-plan, or a standing auto-merge policy below the blast-radius floor — Inv 18) | intent/policy/budget change; on-demand |
 | **Converge** | *reality* toward desired state | the platform / reconciler | pre-authorized — human approved the **envelope**, not each act | drift, health, schedule, load; continuous / event |
 | **Observe** | nothing | anyone in scope | none (read-only) | telemetry; continuous / on-demand |
 | **Break-glass** | reality, *outside* the gate | elevated human | emergency only — time-boxed, dual-control, max-logged | outage / incident; rare |
@@ -956,7 +959,7 @@ options:
   gate: signed commits, branch protection, required external reviewers, an **attested builder** for the
   plan check, the reconciler verifying a **signature on the generation** (not "it's on main"). Surface the
   **realized resource diff** (IAM/SG/route delta), not just the manifest diff; **scale gate rigor to
-  computed blast radius**.
+  computed blast radius** (Invariant 18).
 - **The reconciler holds the only standing god-write and is steerable by attacker-induced drift**
   (out-of-band fixes read as drift and get stomped). **Therefore:** partition it into a fleet by Frame
   scale + capability; bound change-kinds at the **credential** layer (not a planner rule); **sign
@@ -1012,7 +1015,8 @@ compete.
 solve → PLAN (+ proof) → human approves → apply → reconcile → (drift / manifest change) → re-solve
 ```
 
-- The **human-approves-the-plan** step is the platform's one gate. Prior approval never carries forward.
+- The **human-approves-the-plan** step is the platform's one gate — at a **rigor that scales with blast
+  radius** (Invariant 18). Prior approval never carries forward.
 - **Self-healing** is the reconciler enforcing "live cloud equals desired Structure" *continuously*
   instead of once. Every remediation is explained: "replacing instance i-abc — failed health; Resilience
   requires availability ≥ 99.95%."
@@ -1197,10 +1201,10 @@ gate — §7.)
 | **Generation** (drift-vs-progress provenance) | a commit SHA |
 | **Author** action — the only way to change desired state | a commit / PR |
 | **The plan is a proof** | the planner runs in CI on the PR, posts the plan+proof as the check |
-| **The one human gate** (approve) | PR review + **merge** |
+| **The human gate** (approve), rigor-scaled (Inv 18) | PR review + **merge**; below the blast-radius floor, a standing human-authored auto-merge policy |
 | Reconciler converges to desired | reconciler **pulls** the merged manifest |
 
-*Propose (PR) → planner posts plan+proof → human reviews → merge = approve → reconciler applies.* Two
+*Propose (PR) → planner posts plan+proof → human reviews → merge = approve → reconciler applies.* Below a posture-set blast-radius floor the "human reviews" step is a standing, human-authored auto-merge policy evaluated fresh per plan (Invariant 18); above it, per-plan review, with an independent second at high blast radius. Two
 caveats: the reconciler **pulls** (not CI-push), and **secrets never live in Git** — the manifest
 *references* a secret (in the secrets-store battery, Governance-controlled); the value is never committed.
 
@@ -1443,7 +1447,7 @@ down to the boundary; share only what is signed, versioned, and pulled.**
 ## 17. Invariants
 
 The non-negotiable rules a builder must preserve. A violation is a defect, not a tradeoff. Invariants
-1–10 fix the model; **11–17 are the inversion-hardened set** — each forecloses a specific way the
+1–10 fix the model; **11–19 are the inversion-hardened set** — each forecloses a specific way the
 platform could cause the very catastrophe it exists to prevent (the inversion stress test, §21).
 
 1. **Determinism.** A plan is a pure function of *(manifest generation + a pinned provider-state snapshot +
@@ -1525,6 +1529,25 @@ platform could cause the very catastrophe it exists to prevent (the inversion st
     (the checker outside the blast radius) to the planner itself — it **shrinks, but does not eliminate**,
     the Posture→Structure compiler bet (two implementations can still share a blind spot, or the blueprint
     itself can be wrong).
+18. **Gate rigor scales to blast radius; the proof must be legible.** Human attention is a rationed
+    resource, spent where blast radius warrants — never uniformly, which is how alarm fatigue and
+    rubber-stamping defeat any gate. Gate rigor is a **function of the plan's computed blast radius**:
+    below a posture-set floor a change that is reversible, in-catalog, and low-Criticality may run under a
+    **standing, human-authored auto-merge policy** (a governed rule evaluated fresh per plan — still
+    authored, proof-carrying, audited, and bounded by Invariants 11–12 — not a prior approval carried
+    forward); above the ceilings rigor **escalates** — an independent second approver (Invariant 14),
+    dual-control, phase gates (§10). And a **proof must be readable at its tier** — a one-line headline
+    with honest drill-down; a proof no human can read **fails the gate**, because an unreadable proof is
+    magic by another name. This forecloses the *structural* path to social defeat by design, not
+    exhortation.
+19. **The control plane is cheap by construction, and its cost is a first-class signal.** Slicing only
+    survives if running many control planes costs about the same as running one — so each per-division
+    instance is **near-stateless and scale-to-zero when idle**, holds **no standing consensus store**
+    (§12), and surfaces its **own cost as an observed FinOps signal** (a cost View, §13), governed like
+    any other. This forecloses the economic pull to **re-centralize** — collapsing the sliced control
+    planes back into one god-write SPOF to save money — by keeping the sliced model cheaper than the SPOF
+    it replaces and making the temptation **visible, not silent**. Cost pressure is a watched signal,
+    never an excuse to rebuild the single point of failure.
 
 ---
 
@@ -1560,7 +1583,7 @@ The buildable components, their responsibilities, boundaries, and trust relation
   change is a highest-rigor (admin + security dual-control) gated Author action that re-plans dependents.
 - **Manifest repos + CI gate.** The planner runs in CI on each PR and posts the plan+proof (including the
   realized resource diff — IAM/SG/route delta) as the check; merge = approval; the reconciler pulls. Gate
-  rigor scales to computed blast radius.
+  rigor scales to computed blast radius (Invariant 18).
 - **Views subsystem.** Read-only projections/aggregations along the Frame tree (cost, security, health,
   compliance, incident, exec). Derived, never authoritative; powers FinOps, incident, and compliance
   surfaces.
@@ -1666,6 +1689,11 @@ Other resolutions:
   **Invariant 17**: independent corroboration (dual-planner parity on the realized diff + named real-world
   proof checks) is **required above a blast-radius threshold**. It *shrinks* the compiler bet rather than
   eliminating it — an honest mitigation, not a solved claim.
+- **Social-defeat and economic residuals promoted (third pass)** — the inversion's last two honest
+  residuals were hardened: gate **social defeat** (alarm fatigue / rubber-stamping / unreadable proofs)
+  into **Invariant 18** (rigor scales to blast radius; the proof must be legible), and **economic
+  re-centralization** into **Invariant 19** (the control plane is cheap by construction and its cost is a
+  first-class signal). Both foreclose the failure by design while naming the discipline that remains.
 
 ---
 
