@@ -4,11 +4,11 @@
 // provider, and the Reconciler, and records an audit trail (the §7 duality:
 // every action emits a record of who/why).
 
-import type { CellKind, Lifecycle, Manifest, Plan, Posture, ResourceID } from "./model";
+import type { CellKind, Lifecycle, Manifest, Plan, Posture, Resilience, ResourceID } from "./model";
 import { manifestCost, plan as runPlanner } from "./planner";
 import { Reconciler, type Status } from "./reconcile";
 import { SimCloud } from "./sim";
-import type { State } from "./state";
+import { rollup, type State } from "./state";
 
 export type AuditClass = "Author" | "Converge" | "Observe" | "Break-glass" | "Gate";
 
@@ -58,6 +58,9 @@ export interface EngineSnapshot {
   appliedGen: number;
   changeFreeze: boolean;
   blastTripped: boolean;
+  regionRollups: { region: string; state: State }[];
+  envRollup: State;
+  envNote: string;
 }
 
 export const DEFAULT_POSTURE: Posture = {
@@ -289,6 +292,19 @@ export class Engine {
     const incidents: Incident[] = resources
       .filter((r) => r.state === "Stalled")
       .map((r) => ({ id: r.id, region: r.region, service: r.service, cell: r.cell }));
+
+    // Frame roll-up (§4): a region's state is the worst-of the resources it
+    // contains; we manage Service + Stateful workloads (Jobs/External excluded).
+    const managed = resources.filter(
+      (r) => r.lifecycle === "service" || r.lifecycle === "stateful",
+    );
+    const regionOrder = [...new Set(managed.map((r) => r.region))];
+    const regionRollups = regionOrder.map((region) => ({
+      region,
+      state: rollup(managed.filter((r) => r.region === region).map((r) => r.state)),
+    }));
+    const envRollup = rollup(regionRollups.map((r) => r.state));
+    const envNote = environmentNote(this.posture.resilience, regionRollups);
     return {
       tMs: this.cloud.now(),
       phase,
@@ -304,6 +320,9 @@ export class Engine {
       appliedGen: this.appliedGen,
       changeFreeze: this.rec.isChangeFreeze(),
       blastTripped: this.rec.blastTripped(),
+      regionRollups,
+      envRollup,
+      envNote,
     };
   }
 
@@ -322,6 +341,28 @@ export class Engine {
 function isSettled(r: ResourceView): boolean {
   if (r.lifecycle === "job") return r.state !== "Failed";
   return r.state === "Converged";
+}
+
+/** Resilience parameterizes how the environment reads a degraded region (§4):
+ *  active-active keeps serving; active-passive fails over; single is user-visible. */
+function environmentNote(
+  resilience: Resilience,
+  regions: { region: string; state: State }[],
+): string {
+  if (!regions.length) return "";
+  const healthy = regions.filter((r) => r.state === "Converged").length;
+  const total = regions.length;
+  if (healthy === total) return "all regions converged";
+  const down = total - healthy;
+  if (resilience === "active-active") {
+    return healthy > 0
+      ? `${down}/${total} region${down > 1 ? "s" : ""} impacted — serving from ${healthy} healthy (active-active)`
+      : "all regions impacted — outage";
+  }
+  if (resilience === "active-passive") {
+    return "primary impacted — failover to standby (active-passive)";
+  }
+  return "single-region — impact is user-visible";
 }
 
 function transitionNote(

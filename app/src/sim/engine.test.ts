@@ -4,7 +4,7 @@ import type { DesiredResource, Manifest, Observation, Posture } from "./model";
 import { plan } from "./planner";
 import { allConverged, Reconciler, type Status } from "./reconcile";
 import { SimCloud } from "./sim";
-import { derive } from "./state";
+import { derive, rollup } from "./state";
 
 function dr(id: string, gen: number, spec: Record<string, string>): DesiredResource {
   return {
@@ -287,6 +287,40 @@ describe("reconciler safety (§9)", () => {
     e.acknowledgeBlast();
     for (let i = 0; i < 25 && !e.snapshot().converged; i++) e.tick();
     expect(e.snapshot().converged).toBe(true);
+  });
+});
+
+describe("frame roll-up (§4)", () => {
+  it("a Frame's state is the worst-of its children", () => {
+    expect(rollup([])).toBe("Unknown");
+    expect(rollup(["Converged", "Converged"])).toBe("Converged");
+    expect(rollup(["Converged", "Degraded"])).toBe("Degraded");
+    expect(rollup(["Drifted", "Degraded", "Converging"])).toBe("Degraded");
+    expect(rollup(["Degraded", "Stalled"])).toBe("Stalled");
+    expect(rollup(["Converged", "Unavailable"])).toBe("Unavailable");
+  });
+
+  it("the snapshot rolls a degraded region up and reads the environment by resilience", () => {
+    const e = new Engine(DEFAULT_POSTURE); // active-active, two regions
+    e.declare(DEFAULT_POSTURE);
+    e.approve();
+    for (let i = 0; i < 30 && !e.snapshot().converged; i++) e.tick();
+
+    const conv = e.snapshot();
+    expect(conv.envRollup).toBe("Converged");
+    expect(conv.envNote).toMatch(/all regions converged/);
+    expect(conv.regionRollups.length).toBeGreaterThan(1);
+
+    // Take one region down: its roll-up degrades, the environment notes it is
+    // still serving from the healthy region (active-active).
+    e.regionOutage("us-east-1");
+    e.acknowledgeBlast();
+    e.tick();
+    const out = e.snapshot();
+    const hit = out.regionRollups.find((r) => r.region === "us-east-1")!;
+    expect(hit.state).not.toBe("Converged");
+    expect(out.envRollup).not.toBe("Converged");
+    expect(out.envNote).toMatch(/serving from \d+ healthy/);
   });
 });
 

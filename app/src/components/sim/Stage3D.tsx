@@ -39,11 +39,13 @@ function pulse(state: State) {
 
 export default function Stage3D({
   resources,
+  regionState,
   selected,
   frozenIds,
   onSelect,
 }: {
   resources: ResourceView[];
+  regionState: Record<string, State>;
   selected: string | null;
   frozenIds: Set<string>;
   onSelect: (id: string) => void;
@@ -138,15 +140,30 @@ export default function Stage3D({
     >
       <div className="stage-lattice" />
       <div className="stage-ground">
-        {frames.map((f) => (
-          <div
-            key={f.region}
-            className="stage-region"
-            style={{ left: f.x, top: f.y, width: f.w, height: f.h }}
-          >
-            <span className="rlabel">◇ {f.region}</span>
-          </div>
-        ))}
+        {frames.map((f) => {
+          const rs = regionState[f.region] ?? "Unknown";
+          const rc = stateColorVar(rs);
+          return (
+            <div
+              key={f.region}
+              className="stage-region"
+              style={
+                {
+                  left: f.x,
+                  top: f.y,
+                  width: f.w,
+                  height: f.h,
+                  ["--rc" as string]: rc,
+                } as React.CSSProperties
+              }
+            >
+              <span className="rlabel">
+                <i className="rdot" style={{ background: rc }} />
+                {f.region} · {rs}
+              </span>
+            </div>
+          );
+        })}
 
         {wires.map((w, i) => {
           const dx = w.p2.x - w.p1.x;
