@@ -27,6 +27,11 @@ The simulator deploys continuously from `main`, so entries are grouped by date r
   per-division environments contain it without making teams operate their own cloud (platform curates the
   catalog + governance; divisions declare a Posture; upgrades canary per-environment with meta-DR).
   Linked from the docs sidebar and the landing "Explore" cards.
+- **FAQ — "Do we have to run our own Git?"**: Git is a *role* (versioned manifest store + merge-as-gate),
+  not a product mandate — managed (GitHub/GitLab) or AWS CodeCommit (note: closed to new customers since
+  mid-2024) or self-hosted; the store is Trellis's own and per-division (not shared Git infra, and
+  distinct from GitLab-as-a-workload); and it's a *soft* dependency — Git down pauses changes, not running
+  infra.
 - **FAQ — "Does Trellis need a database, etcd, or Consul?"**: a new entry making the design choice
   explicit — no consensus store of its own (desired state is Git, audit is an external append-only log,
   live state is derived), which is what keeps each per-division control-plane instance near-stateless and

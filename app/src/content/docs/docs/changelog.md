@@ -47,7 +47,10 @@ and why, who it's for and *not* for, what fails and why (and the mitigations), h
 connectivity heals, how security works, who manages database replication, how it relates to GitOps /
 Kubernetes / S3 / Terraform, where the platform/application line sits, what integrations exist, how
 third-party "batteries" are included, and an honest take on what's real vs simulated and what's deferred.
-It also answers a sharp architecture question: **Trellis needs no etcd or Consul of its own** — desired
+It also answers **"do we have to run our own Git?"** — no: Git is a *role* (versioned manifest store +
+merge-as-gate), filled by managed GitHub/GitLab or AWS CodeCommit (closed to new customers since 2024) or
+self-hosted; the store is Trellis's own and per-division (not shared Git infra), and it's a soft
+dependency — Git down pauses changes, not running infra. And: **Trellis needs no etcd or Consul of its own** — desired
 state is Git, audit is an external append-only log, and live state is derived, so each control-plane
 instance is near-stateless and re-bootstrappable. And a follow-on: **where the live console gets "down"
 or "in transition"** — derived on the fly from Git (desired) + live telemetry (observed), with the

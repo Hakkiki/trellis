@@ -60,7 +60,7 @@ Deliberately small, because state lives in Git + the external audit + is otherwi
 | Resource | What for | Notes |
 |---|---|---|
 | **Compute** | run the planner / gate / reconciler loop | modest, near-stateless — serverless (Lambda + EventBridge/Step Functions) or a small ECS/EKS service |
-| **Git** (external SCM) | desired state | a commit SHA is the generation |
+| **Git** (external SCM) | desired state | a commit SHA is the generation; a *role*, not a product — managed (GitHub/GitLab/CodeCommit) or self-hosted, Trellis-owned and per-division. See the [FAQ](/trellis/docs/faq) |
 | **External WORM audit store** | the immutable action log | CloudTrail → Object-Locked S3 in a separate log-archive account |
 | **STS** | mint plan-scoped ephemeral credentials | the actuator's authority |
 | **A small lock table** (e.g. DynamoDB) | reconciler leader-election | the only stateful bit, and it's trivial |
