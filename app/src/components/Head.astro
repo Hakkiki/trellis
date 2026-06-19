@@ -1,0 +1,12 @@
+---
+// Starlight <Head> override: keep the default head, then boot the themed
+// Mermaid runtime so ```mermaid diagrams render on-brand (and re-theme on toggle).
+import Default from "@astrojs/starlight/components/Head.astro";
+---
+
+<Default><slot /></Default>
+
+<script>
+  import { initMermaid } from "../lib/mermaid-runtime";
+  initMermaid();
+</script>

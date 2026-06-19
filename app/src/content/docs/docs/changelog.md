@@ -6,6 +6,13 @@ description: Recent changes to the Trellis simulator, newest first.
 What's shipped to the live simulator, newest first. The footer shows the exact build
 (date · commit) currently deployed.
 
+## Mermaid diagrams, themed to brand
+
+Diagrams written in Mermaid now **render inline** across the docs, themed to the Trellis "cuoio" palette
+(warm dark + gold) with light/dark variants that re-theme the moment you toggle. The spec's eight diagrams
+go from grey code blocks to on-brand visuals — and it's the foundation for diagram-rich pages (roles and
+day-in-the-life next).
+
 ## Closing the last residuals — Invariants 18 & 19
 
 The final two honest residuals from the inversion are now invariants. **Invariant 18** rations attention by

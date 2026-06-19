@@ -7,6 +7,12 @@ The simulator deploys continuously from `main`, so entries are grouped by date r
 
 ### Added
 
+- **Mermaid diagrams now render inline, themed to brand.** A small remark plugin turns ` ```mermaid `
+  fences into live diagrams (bypassing the code-block styler), and a curated client runtime applies the
+  Trellis "cuoio" palette — warm dark + gold, with **light/dark variants that re-theme live** on toggle —
+  lazy-loaded only on pages that have a diagram. Instantly upgrades the spec's 8 diagrams from grey code
+  blocks to on-brand visuals; the foundation for diagram-rich pages going forward.
+
 - **Invariants 18 & 19 — the last two inversion residuals hardened.** (18) **Gate rigor scales to blast
   radius; the proof must be legible** — attention is rationed: trivial, reversible, in-catalog changes run
   under a standing human-authored auto-merge policy, high-blast-radius changes escalate (independent
