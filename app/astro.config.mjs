@@ -33,6 +33,7 @@ export default defineConfig({
             { label: "Posture & Criticality", slug: "docs/posture" },
             { label: "Structure & State", slug: "docs/state" },
             { label: "The reconcile loop", slug: "docs/reconcile" },
+            { label: "Promotion", slug: "docs/promotion" },
           ],
         },
         {
