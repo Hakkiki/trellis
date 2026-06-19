@@ -80,6 +80,10 @@ the divisions:
 That's the whole thesis: **centralized governance, decentralized blast radius, and self-service that
 doesn't become self-operate.**
 
+For the *how* — where to put each division's boundary (org / account / VPC / namespace), why synchronous
+coupling is the healthy kind, and why each division runs its own Trellis rather than one central one —
+see the [operating model](/trellis/docs/operating-model).
+
 ## What honestly stays shared
 
 Not everything can — or should — be split, and pretending otherwise is its own risk:

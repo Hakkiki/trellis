@@ -7,6 +7,11 @@ The simulator deploys continuously from `main`, so entries are grouped by date r
 
 ### Added
 
+- **Operating-model page**: the "how" companion to the use case — choosing a division's isolation grain
+  (the org / account / VPC / namespace ladder, and why a namespace fails the blast-radius test),
+  synchronous-only coupling as the healthy kind, and the key move: **slice the control plane too** (each
+  division runs its own Trellis; only a signed, versioned, pulled catalog + SCP guardrails + external
+  audit stay shared). Linked from Concepts and the use-case page.
 - **Use-case page ("Why Trellis")**: a genericized worked example — how a single shared service becomes a
   company-wide single point of failure (a careful active-active upgrade with 100% blast radius), and how
   per-division environments contain it without making teams operate their own cloud (platform curates the
