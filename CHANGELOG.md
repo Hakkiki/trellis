@@ -7,6 +7,14 @@ The simulator deploys continuously from `main`, so entries are grouped by date r
 
 ### Added
 
+- **Roles & responsibilities — a day in the life.** A new page mapping the nine personas (Platform Owner,
+  Security/Governance author, Division/Product lead, Platform Operator, Service/Eng teams, Break-glass
+  responders, Auditor, FinOps, External vendor) to the model: each one's mandate, what it owns, what it
+  must *not* touch, and a day in its life — with six themed Mermaid diagrams (the responsibility map, the
+  day-in-the-life of a change, catalog publish→promote, canaried self-upgrade, break-glass, the ship
+  flow). The throughline: many people author and approve; exactly one loop (plus a sealed break-glass)
+  writes, contained to its division.
+
 - **Mermaid diagrams now render inline, themed to brand.** A small remark plugin turns ` ```mermaid `
   fences into live diagrams (bypassing the code-block styler), and a curated client runtime applies the
   Trellis "cuoio" palette — warm dark + gold, with **light/dark variants that re-theme live** on toggle —
