@@ -178,6 +178,35 @@ And as *workloads*? A division can absolutely run Consul or etcd for its **own**
 them as stateful quorum clusters (the quorum roll-up above). That's the division's choice for their stack,
 not a dependency of the control plane.
 
+### Where does the live console get "down" or "in transition" from?
+
+Not from a stored status field — there isn't one. The console is a read-only **View**, and **State is
+derived, never stored as ground truth**: `State = f(desired, observed, health)`, recomputed every loop
+pass. So what you see comes from three places depending on the signal:
+
+| What the console shows | Where it comes from | Computed or stored? |
+|---|---|---|
+| **"down"** (Degraded / Unavailable) | the **Observe plane** — live provider telemetry, health checks, quorum reports — run through `derive()` | **computed** (observed input read fresh, never trusted from a store) |
+| **"in transition"** (Converging) | **provenance** — the desired generation (a Git commit SHA) vs the observed applied generation | **computed** |
+| **"drifted"** | observed spec ≠ desired at the *same* generation | **computed** |
+| **"stale → Unknown"** | the observation is older than the freshness budget (fail-safe) | **computed** |
+| **the timeline** — what changed, when, who authorized it | the **external append-only audit log** | **stored** |
+| **roll-ups** (region / env / owner) | worst-of the derived child states, up the Frame tree | **computed** |
+
+The **incident surface** is the last two stitched together: the blast-radius rollup of
+Degraded/Stalled/Frozen (derived) joined to the time-correlated audit log (stored) — actions and
+observability are duals.
+
+Why derive instead of store? Because a stored "status: healthy" field happily lies long after the thing
+died. A derived state can't: if telemetry goes stale, the derived state is **Unknown** (fail-safe), and
+that's what the console shows — it degrades honestly instead of staying green. "Live" is therefore only as
+fresh as the last observation; the reconciler loop sets the cadence, and Trellis renders the projection
+through your existing observability tooling rather than rebuilding a streaming dashboard.
+
+In this simulator it's literally `engine.snapshot()` recomputed each tick — every resource's state is
+derived from the simulated cloud's observed state plus the manifest, and the audit list is the stored
+trail. Same shape as the real thing: **derived live state + a durable audit trail.**
+
 ## Security
 
 ### How does security actually work?

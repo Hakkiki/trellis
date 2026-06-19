@@ -25,6 +25,10 @@ The simulator deploys continuously from `main`, so entries are grouped by date r
   explicit — no consensus store of its own (desired state is Git, audit is an external append-only log,
   live state is derived), which is what keeps each per-division control-plane instance near-stateless and
   re-bootstrappable; the only real need is a lightweight lock for reconciler leader-election, not Consul/etcd.
+- **FAQ — "Where does the live console get 'down' / 'in transition' from?"**: a signal→source table —
+  live status is *derived* (`f(desired, observed, health)`) from Git + fresh telemetry, never read from a
+  stored status field; the timeline comes from the external append-only audit; stale telemetry → Unknown
+  (degrades honestly instead of lying green).
 - **FAQ**: a thorough, spec-grounded docs page that answers the hard questions in plain English — what
   problem Trellis solves and why; who it's for and explicitly not for; what fails and why (the TCB
   hazards and their mitigations); cross-region connectivity and healing; the security model; who manages
