@@ -7,7 +7,6 @@ What's shipped to the live simulator, newest first. The footer shows the exact b
 (date · commit) currently deployed.
 
 ## Trellis and Kubernetes
-
 The [operating model](/trellis/docs/operating-model#trellis-and-kubernetes-where-the-line-is) now spells
 out where Trellis ends and Kubernetes begins. Because k8s is itself a reconciler, the rule is: Trellis
 manages the **cluster** (version, nodes, add-ons) and the in-cluster GitOps loop owns the **workloads** —
@@ -39,6 +38,9 @@ and why, who it's for and *not* for, what fails and why (and the mitigations), h
 connectivity heals, how security works, who manages database replication, how it relates to GitOps /
 Kubernetes / S3 / Terraform, where the platform/application line sits, what integrations exist, how
 third-party "batteries" are included, and an honest take on what's real vs simulated and what's deferred.
+It also answers a sharp architecture question: **Trellis needs no etcd or Consul of its own** — desired
+state is Git, audit is an external append-only log, and live state is derived, so each control-plane
+instance is near-stateless and re-bootstrappable.
 
 ## Reduced-motion support
 

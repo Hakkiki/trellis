@@ -21,6 +21,10 @@ The simulator deploys continuously from `main`, so entries are grouped by date r
   per-division environments contain it without making teams operate their own cloud (platform curates the
   catalog + governance; divisions declare a Posture; upgrades canary per-environment with meta-DR).
   Linked from the docs sidebar and the landing "Explore" cards.
+- **FAQ — "Does Trellis need a database, etcd, or Consul?"**: a new entry making the design choice
+  explicit — no consensus store of its own (desired state is Git, audit is an external append-only log,
+  live state is derived), which is what keeps each per-division control-plane instance near-stateless and
+  re-bootstrappable; the only real need is a lightweight lock for reconciler leader-election, not Consul/etcd.
 - **FAQ**: a thorough, spec-grounded docs page that answers the hard questions in plain English — what
   problem Trellis solves and why; who it's for and explicitly not for; what fails and why (the TCB
   hazards and their mitigations); cross-region connectivity and healing; the security model; who manages
