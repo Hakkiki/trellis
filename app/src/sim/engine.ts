@@ -10,6 +10,7 @@ import { SimCloud } from "./sim";
 import type { State } from "./state";
 import {
   type CellKind,
+  type Lifecycle,
   type Manifest,
   type Plan,
   type Posture,
@@ -33,6 +34,7 @@ export interface ResourceView {
   region: string;
   cell: CellKind;
   kind: string;
+  lifecycle: Lifecycle;
   size: string;
   replicas: number;
   state: State;
@@ -107,6 +109,10 @@ export class Engine {
     if (!this.plan || !this.plan.feasible) return false;
     this.manifest = this.plan.manifest;
     this.appliedGen = this.plan.generation;
+    // External dependencies are discovered, not provisioned (observe-only, §1).
+    for (const r of Object.values(this.manifest.resources)) {
+      if (r.lifecycle === "external") this.cloud.seedExternal(r);
+    }
     this.log("Gate", "approver", "approve+merge", `gen ${this.appliedGen}`, "human approved the signed plan");
     this.log("Author", "mint", "mint-credential", `${Object.keys(this.manifest.resources).length} resources`, "ephemeral credential scoped to the approved diff");
     return true;
@@ -122,6 +128,9 @@ export class Engine {
 
   private recordTransitions() {
     for (const s of this.statuses) {
+      // Jobs cycle through phases by design; don't spam the audit with them.
+      const lc = this.manifest?.resources[s.id]?.lifecycle;
+      if (lc && lc !== "service") continue;
       const prev = this.prevState.get(s.id);
       if (prev !== s.state) {
         this.prevState.set(s.id, s.state);
@@ -194,6 +203,7 @@ export class Engine {
           region: r.region,
           cell: r.cell,
           kind: r.kind,
+          lifecycle: r.lifecycle,
           size: r.spec.size,
           replicas: Number(r.spec.replicas ?? "1"),
           state: stById.get(r.id) ?? "Unknown",
@@ -215,7 +225,7 @@ export class Engine {
       costNow,
       budget: this.posture.budgetMonthly,
       overBudget: costNow > this.posture.budgetMonthly,
-      converged: resources.length > 0 && resources.every((r) => r.state === "Converged"),
+      converged: resources.length > 0 && resources.every(isSettled),
       appliedGen: this.appliedGen,
     };
   }
@@ -228,6 +238,13 @@ export class Engine {
   private log(cls: AuditClass, actor: string, verb: string, target: string, reason: string) {
     this.audit.push({ tMs: this.cloud.now(), cls, actor, verb, target, reason });
   }
+}
+
+/** A workload is "settled" (good steady-state) per its lifecycle: services and
+ *  externals when Converged; jobs whenever they aren't Failed (they cycle). */
+function isSettled(r: ResourceView): boolean {
+  if (r.lifecycle === "job") return r.state !== "Failed";
+  return r.state === "Converged";
 }
 
 function transitionNote(prev: State, next: State, reason: string): { verb: string; reason: string } | null {

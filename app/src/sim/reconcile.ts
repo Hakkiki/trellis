@@ -1,6 +1,6 @@
 // The reconcile loop (spec §9): observe → derive State → converge gaps within
 // the approved envelope. Converge actions ONLY — it never mutates desired state
-// (that is the Author class). Mirrors the Go reference (../../../reconcile).
+// (that is the Author class).
 
 import type { Manifest, ResourceID, Health } from "./model";
 import type { Provider } from "./provider";
@@ -71,6 +71,42 @@ export class Reconciler {
       const o =
         byId.get(id) ??
         { id, exists: false, spec: {}, health: "Unknown" as Health, appliedGeneration: 0, observedAtMs: 0 };
+
+      // External: observe-only — the reconciler never converges it (§1).
+      if (d.lifecycle === "external") {
+        const st = derive(d, o, "Settled", nowMs, this.stalenessBudgetMs);
+        out.push({
+          id,
+          state: st,
+          health: o.health,
+          action: "none",
+          reason: st === "Degraded" ? "external dependency degraded — observe-only, cannot remediate" : "external SaaS — observed only",
+        });
+        continue;
+      }
+
+      // Job: run-to-completion. Launch it once; then hold — reaching succeeded
+      // is success, not drift, and the sim re-runs it on schedule.
+      if (d.lifecycle === "job") {
+        const st = derive(d, o, "Settled", nowMs, this.stalenessBudgetMs);
+        const sj: Status = { id, state: st, health: o.health, action: "none", reason: "" };
+        if (!o.exists) {
+          this.p.apply(d);
+          sj.action = "apply";
+          sj.reason = "launching job";
+        } else if (st === "Succeeded") {
+          sj.reason = "completed — success, not drift";
+        } else if (st === "Running") {
+          sj.reason = "run in progress";
+        } else if (st === "Failed") {
+          sj.reason = "run failed — will retry on schedule";
+        } else {
+          sj.reason = "scheduled — pending";
+        }
+        out.push(sj);
+        continue;
+      }
+
       const control: Control = this.frozen.has(id)
         ? "Frozen"
         : this.stalled.has(id)

@@ -1,12 +1,14 @@
 // An in-memory simulated cloud whose *dynamics are real*: apply has latency,
-// nodes fail, telemetry goes stale, and out-of-band changes drift. Mirrors the
-// Go reference (../../../provider/sim). Synchronous — the UI drives tick().
+// nodes fail, telemetry goes stale, and out-of-band changes drift. It implements
+// the provider port (spec §15). Synchronous — the UI drives tick().
 
 import {
   cloneSpec,
   specEqual,
   type DesiredResource,
   type Health,
+  type JobPhase,
+  type Lifecycle,
   type Observation,
   type ResourceID,
   type Spec,
@@ -18,6 +20,7 @@ const TICK_MS = 1000;
 interface SimResource {
   kind: string;
   region: string;
+  lifecycle: Lifecycle;
   observed: Spec;
   target: Spec;
   appliedGen: number;
@@ -27,7 +30,15 @@ interface SimResource {
   stale: boolean;
   broken: boolean; // root-cause failure that self-heal cannot fix
   observedAtMs: number;
+  // Job lifecycle
+  phase?: JobPhase;
+  jobTimer: number; // ticks remaining in the current phase
 }
+
+// Job phase durations (in ticks).
+const JOB_START = 1; // pending → running
+const JOB_RUN = 3; // running → succeeded
+const JOB_COOLDOWN = 4; // succeeded → pending again (cron)
 
 export class SimCloud implements Provider {
   private applyLatency: number;
@@ -51,7 +62,9 @@ export class SimCloud implements Provider {
   tick() {
     this.nowMs += TICK_MS;
     for (const r of this.res.values()) {
-      if (r.convergeIn > 0) {
+      if (r.lifecycle === "job") {
+        this.advanceJob(r);
+      } else if (r.convergeIn > 0) {
         r.convergeIn--;
         if (r.convergeIn === 0) {
           r.observed = cloneSpec(r.target);
@@ -65,12 +78,37 @@ export class SimCloud implements Provider {
     }
   }
 
+  // A Job runs to completion, then re-runs on schedule (cron). Reaching
+  // succeeded is success — not drift — so the reconciler holds, it does not
+  // "repair" a finished job back to running.
+  private advanceJob(r: SimResource) {
+    if (!r.phase) return;
+    if (r.jobTimer > 0) r.jobTimer--;
+    if (r.jobTimer > 0) return;
+    switch (r.phase) {
+      case "pending":
+        r.phase = "running";
+        r.jobTimer = JOB_RUN;
+        break;
+      case "running":
+        r.phase = r.broken ? "failed" : "succeeded";
+        r.jobTimer = JOB_COOLDOWN;
+        break;
+      case "succeeded":
+      case "failed":
+        r.phase = "pending"; // next scheduled run
+        r.jobTimer = JOB_START;
+        break;
+    }
+  }
+
   apply(d: DesiredResource): void {
     let r = this.res.get(d.id);
     if (!r) {
       r = {
         kind: d.kind,
         region: d.region,
+        lifecycle: d.lifecycle,
         observed: {},
         target: {},
         appliedGen: 0,
@@ -80,8 +118,21 @@ export class SimCloud implements Provider {
         stale: false,
         broken: false,
         observedAtMs: this.nowMs,
+        jobTimer: 0,
       };
       this.res.set(d.id, r);
+    }
+    // Launching a Job (run-to-completion). If it isn't already in flight, start
+    // a run; the sim then advances it through its phases on tick().
+    if (d.lifecycle === "job") {
+      if (!r.phase || r.phase === "succeeded" || r.phase === "failed") {
+        r.phase = "pending";
+        r.jobTimer = JOB_START;
+      }
+      r.exists = true;
+      r.observed = cloneSpec(d.spec);
+      r.appliedGen = d.generation;
+      return;
     }
     const converged =
       r.exists && specEqual(r.observed, d.spec) && r.appliedGen === d.generation;
@@ -111,6 +162,27 @@ export class SimCloud implements Provider {
     this.res.delete(id);
   }
 
+  /** Register an External (third-party SaaS) as discovered — it exists and is
+   *  healthy but is never provisioned or reconciled (observe-only, §1). */
+  seedExternal(d: DesiredResource) {
+    if (this.res.has(d.id)) return;
+    this.res.set(d.id, {
+      kind: d.kind,
+      region: d.region,
+      lifecycle: "external",
+      observed: cloneSpec(d.spec),
+      target: cloneSpec(d.spec),
+      appliedGen: d.generation,
+      health: "Healthy",
+      convergeIn: 0,
+      exists: true,
+      stale: false,
+      broken: false,
+      observedAtMs: this.nowMs,
+      jobTimer: 0,
+    });
+  }
+
   observe(id: ResourceID): Observation {
     const r = this.res.get(id);
     if (!r) return { id, exists: false, spec: {}, health: "Unknown", appliedGeneration: 0, observedAtMs: 0 };
@@ -131,6 +203,7 @@ export class SimCloud implements Provider {
       health: r.exists ? r.health : "Unknown",
       appliedGeneration: r.appliedGen,
       observedAtMs: r.observedAtMs,
+      phase: r.lifecycle === "job" ? r.phase : undefined,
     };
   }
 

@@ -67,6 +67,12 @@ export interface FleetSnapshot {
 
 const ORDER: EnvId[] = ["dev", "staging", "prod"];
 
+/** A workload is settled per its lifecycle (jobs cycle; services/externals converge). */
+function settled(state: string, lifecycle: string): boolean {
+  if (lifecycle === "job") return state !== "Failed";
+  return state === "Converged";
+}
+
 export class Fleet {
   private base: BaseArtifact = { intent: "payments-api", compliance: ["pci-dss", "soc2"] };
   private latestVersion = 0;
@@ -130,7 +136,10 @@ export class Fleet {
       return;
     }
     // Stamp the promoted version onto every resource (the validated artifact).
-    for (const r of Object.values(p.manifest.resources)) r.spec.release = `v${version}`;
+    for (const r of Object.values(p.manifest.resources)) {
+      r.spec.release = `v${version}`;
+      if (r.lifecycle === "external") env.cloud.seedExternal(r); // observe-only
+    }
     env.manifest = p.manifest;
     env.deployedVersion = version;
     env.wasConverged = false;
@@ -141,7 +150,9 @@ export class Fleet {
       const env = this.envs[id];
       if (!env.manifest) continue;
       env.statuses = env.rec.step(env.manifest, env.cloud.now());
-      const conv = env.statuses.length > 0 && env.statuses.every((s) => s.state === "Converged");
+      const conv =
+        env.statuses.length > 0 &&
+        env.statuses.every((s) => settled(s.state, env.manifest!.resources[s.id]?.lifecycle ?? "service"));
       if (conv && !env.wasConverged) {
         env.wasConverged = true;
         this.log("Converge", "reconciler", "converged", id, `v${env.deployedVersion} live and healthy`);
@@ -181,6 +192,7 @@ export class Fleet {
             region: r.region,
             cell: r.cell,
             kind: r.kind,
+            lifecycle: r.lifecycle,
             size: r.spec.size,
             replicas: Number(r.spec.replicas ?? "1"),
             state: stById.get(r.id) ?? "Unknown",
@@ -194,7 +206,7 @@ export class Fleet {
         criticality: env.def.criticality,
         deployedVersion: env.deployedVersion,
         resources,
-        converged: resources.length > 0 && resources.every((r) => r.state === "Converged"),
+        converged: resources.length > 0 && resources.every((r) => settled(r.state, r.lifecycle)),
         drifted: resources.some((r) => r.state === "Drifted"),
         costNow: env.manifest ? manifestCost(env.manifest) : 0,
         budget: env.def.budget,

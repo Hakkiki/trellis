@@ -7,7 +7,7 @@ import type { DesiredResource, Manifest, Observation, Posture } from "./model";
 import { DEFAULT_POSTURE, Engine } from "./engine";
 
 function dr(id: string, gen: number, spec: Record<string, string>): DesiredResource {
-  return { id, kind: "compute", spec, generation: gen, service: "s", region: "us-east-1", cell: "app" };
+  return { id, kind: "compute", spec, generation: gen, lifecycle: "service", service: "s", region: "us-east-1", cell: "app" };
 }
 function obs(over: Partial<Observation>): Observation {
   return { id: "x", exists: true, spec: {}, health: "Healthy", appliedGeneration: 1, observedAtMs: 1000, ...over };
@@ -45,7 +45,7 @@ function manifest(gen: number): Manifest {
     generation: gen,
     resources: {
       web: dr("web", gen, { size: "small", replicas: "2" }),
-      db: { id: "db", kind: "managed-relational-db", spec: { size: "medium" }, generation: gen, service: "s", region: "us-east-1", cell: "data" },
+      db: { id: "db", kind: "managed-relational-db", spec: { size: "medium" }, generation: gen, lifecycle: "service", service: "s", region: "us-east-1", cell: "data" },
     },
   };
 }
@@ -148,6 +148,47 @@ describe("objective program", () => {
     const p = plan({ ...DEFAULT_POSTURE, governanceServices: ["load-balancer", "compute"] }, 1);
     expect(p.feasible).toBe(false);
     expect(p.failure).toMatch(/Governance denied/);
+  });
+});
+
+describe("workload archetypes", () => {
+  it("the plan includes a Job and an External alongside the Service", () => {
+    const e = new Engine(DEFAULT_POSTURE);
+    e.declare(DEFAULT_POSTURE);
+    e.approve();
+    for (let i = 0; i < 30 && !e.snapshot().converged; i++) e.tick();
+    const rs = e.snapshot().resources;
+    expect(rs.some((r) => r.lifecycle === "job")).toBe(true);
+    expect(rs.some((r) => r.lifecycle === "external")).toBe(true);
+    expect(rs.some((r) => r.lifecycle === "service")).toBe(true);
+  });
+
+  it("a Job runs to completion (Pending → Running → Succeeded), not held as drift", () => {
+    const e = new Engine(DEFAULT_POSTURE);
+    e.declare(DEFAULT_POSTURE);
+    e.approve();
+    const seen = new Set<string>();
+    for (let i = 0; i < 40; i++) {
+      e.tick();
+      const job = e.snapshot().resources.find((r) => r.lifecycle === "job");
+      if (job) seen.add(job.state);
+    }
+    expect(seen.has("Running")).toBe(true);
+    expect(seen.has("Succeeded")).toBe(true);
+    // It never drifts and the system still reports converged with a cycling job.
+    expect(e.snapshot().converged).toBe(true);
+  });
+
+  it("an External is observe-only: it degrades but the reconciler never remediates it", () => {
+    const e = new Engine(DEFAULT_POSTURE);
+    e.declare(DEFAULT_POSTURE);
+    e.approve();
+    for (let i = 0; i < 20 && !e.snapshot().converged; i++) e.tick();
+    const ext = e.snapshot().resources.find((r) => r.lifecycle === "external")!;
+    e.failNode(ext.id);
+    for (let i = 0; i < 15; i++) e.tick();
+    const after = e.snapshot().resources.find((r) => r.id === ext.id)!;
+    expect(after.state).toBe("Degraded"); // stays degraded — never self-healed
   });
 });
 

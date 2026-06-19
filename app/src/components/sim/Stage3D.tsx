@@ -13,8 +13,20 @@ const CELL_LABEL: Record<CellKind, string> = { edge: "EDGE", app: "APP", data: "
 
 type Pt = { x: number; y: number };
 
+function nodeLabel(r: ResourceView): string {
+  if (r.lifecycle === "job") return "JOB";
+  if (r.lifecycle === "external") return "SAAS";
+  return CELL_LABEL[r.cell];
+}
+
+function nodeSub(r: ResourceView): string {
+  if (r.lifecycle === "job") return "nightly";
+  if (r.lifecycle === "external") return "observe-only";
+  return `${r.size}${r.cell === "app" ? ` ·${r.replicas}×` : ""}`;
+}
+
 function pulse(state: State) {
-  return state === "Converging" || state === "Degraded" || state === "Drifted";
+  return state === "Converging" || state === "Degraded" || state === "Drifted" || state === "Running";
 }
 
 export default function Stage3D({
@@ -163,8 +175,8 @@ export default function Stage3D({
                 }}
               >
                 <div className="accent" />
-                <div className="kind">{CELL_LABEL[r.cell]}</div>
-                <div className="nm">{r.size}{r.cell === "app" ? ` ·${r.replicas}×` : ""}</div>
+                <div className="kind">{nodeLabel(r)}</div>
+                <div className="nm">{nodeSub(r)}</div>
               </div>
               <div className="led" />
               {isFrozen && <div className="badge3d">🔒</div>}

@@ -25,6 +25,7 @@ const COMPUTE_COST: Record<string, number> = { small: 120, medium: 300, large: 7
 const DB_COST: Record<string, number> = { small: 150, medium: 400, large: 900 };
 const LB_COST = 25;
 const REPL_LINK_COST = 200;
+const JOB_COST = 80;
 
 const SIZE_FOR: Record<Criticality, string> = { C0: "large", C1: "medium", C2: "medium", C3: "small" };
 const REPLICAS_FOR: Record<Criticality, number> = { C0: 3, C1: 2, C2: 2, C3: 1 };
@@ -83,13 +84,38 @@ function buildCandidate(posture: Posture, resilience: Resilience, headroom: numb
       } else {
         cost += LB_COST;
       }
-      resources.push({ id, kind, spec, generation: gen, service: svc, region, cell });
+      resources.push({ id, kind, spec, generation: gen, lifecycle: "service", service: svc, region, cell });
     }
   });
 
   if (resilience === "active-active" && activeRegions.length > 1) {
     cost += (activeRegions.length - 1) * REPL_LINK_COST;
   }
+
+  // Every service carries two non-service workloads (§1): a nightly batch Job
+  // and an External SaaS dependency it consumes. Placed in the primary region.
+  const r0 = activeRegions[0];
+  resources.push({
+    id: `${svc}-batch-${r0}`,
+    kind: "batch-job",
+    spec: { region: r0, schedule: "nightly" },
+    generation: gen,
+    lifecycle: "job",
+    service: svc,
+    region: r0,
+    cell: "app",
+  });
+  resources.push({
+    id: `${svc}-ext-payments`,
+    kind: "external-saas",
+    spec: { region: r0, vendor: "payments-gateway" },
+    generation: gen,
+    lifecycle: "external",
+    service: svc,
+    region: r0,
+    cell: "edge",
+  });
+  cost += JOB_COST; // external is consumed, not provisioned — no cost
 
   const levelRank = RES_LEVELS.indexOf(resilience);
   const score = levelRank * 1000 + activeRegions.length * 100 + headroom * 10 + (multiAZ ? 5 : 0);
@@ -186,6 +212,14 @@ export function plan(posture: Posture, gen: Generation): Plan {
     proof.push({ resourceId: "*", claim: `compliance: ${posture.compliance.join(", ")}`, reason: "Governance hard constraint, enforced at plan time (§2)" });
   }
   for (const r of chosen.resources) {
+    if (r.lifecycle === "job") {
+      proof.push({ resourceId: r.id, claim: "batch job (nightly)", reason: "run-to-completion workload (§1) — a finished run is success, not drift" });
+      continue;
+    }
+    if (r.lifecycle === "external") {
+      proof.push({ resourceId: r.id, claim: "external SaaS (payments)", reason: "third-party dependency — consumed, observe-only, never provisioned (§1)" });
+      continue;
+    }
     if (r.cell === "app") {
       proof.push({ resourceId: r.id, claim: `${r.spec.replicas}× ${r.spec.size} compute`, reason: `Criticality ${posture.criticality}${chosen.headroom ? " + headroom" : ""} sizing` });
     } else if (r.cell === "data") {
@@ -213,7 +247,9 @@ export function plan(posture: Posture, gen: Generation): Plan {
 export function manifestCost(m: Manifest): number {
   let cost = 0;
   for (const r of Object.values(m.resources)) {
-    if (r.cell === "app") cost += COMPUTE_COST[r.spec.size] * Number(r.spec.replicas ?? "1");
+    if (r.lifecycle === "external") continue; // consumed, not provisioned
+    if (r.lifecycle === "job") cost += JOB_COST;
+    else if (r.cell === "app") cost += COMPUTE_COST[r.spec.size] * Number(r.spec.replicas ?? "1");
     else if (r.cell === "data") cost += DB_COST[r.spec.size] * (r.spec.multiAZ === "true" ? 2 : 1);
     else cost += LB_COST;
   }

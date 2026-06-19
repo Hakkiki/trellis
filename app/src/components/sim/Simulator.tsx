@@ -4,6 +4,8 @@ import {
   AlertTriangle,
   Boxes,
   CircleSlash,
+  Clock,
+  Cloud,
   Database,
   Eye,
   Network,
@@ -40,10 +42,18 @@ const ALL_SERVICES: { kind: Kind; label: string }[] = [
   { kind: "managed-relational-db", label: "managed DB" },
 ];
 
-function cellIcon(cell: CellKind) {
-  if (cell === "edge") return Network;
-  if (cell === "data") return Database;
+function resourceIcon(r: ResourceView) {
+  if (r.lifecycle === "job") return Clock;
+  if (r.lifecycle === "external") return Cloud;
+  if (r.cell === "edge") return Network;
+  if (r.cell === "data") return Database;
   return Server;
+}
+
+function resourceSub(r: ResourceView) {
+  if (r.lifecycle === "job") return "batch-job · nightly";
+  if (r.lifecycle === "external") return "external SaaS · observe-only";
+  return `${r.kind} · ${r.size}${r.cell === "app" ? ` · ${r.replicas}×` : ""}`;
 }
 
 function fmtClock(ms: number) {
@@ -492,9 +502,9 @@ function Topology({
 }
 
 function ResourceCard({ r, selected, onSelect }: { r: ResourceView; selected: boolean; onSelect: () => void }) {
-  const Icon = cellIcon(r.cell);
+  const Icon = resourceIcon(r);
   const color = stateColorVar(r.state);
-  const pulsing = r.state === "Converging" || r.state === "Degraded" || r.state === "Drifted";
+  const pulsing = r.state === "Converging" || r.state === "Degraded" || r.state === "Drifted" || r.state === "Running";
   return (
     <button
       onClick={onSelect}
@@ -507,10 +517,7 @@ function ResourceCard({ r, selected, onSelect }: { r: ResourceView; selected: bo
       <Icon className="size-4 shrink-0" style={{ color }} />
       <div className="min-w-0 flex-1">
         <div className="truncate text-xs font-medium">{r.id}</div>
-        <div className="text-muted-foreground text-[10px]">
-          {r.kind} · {r.size}
-          {r.cell === "app" ? ` · ${r.replicas}×` : ""}
-        </div>
+        <div className="text-muted-foreground text-[10px]">{resourceSub(r)}</div>
       </div>
       <span
         className={cn("size-2.5 shrink-0 rounded-full", pulsing && "animate-pulse")}

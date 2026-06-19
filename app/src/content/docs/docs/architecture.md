@@ -1,54 +1,50 @@
 ---
 title: Architecture
-description: The provider-port seam, the engine, and how the simulator becomes the real thing.
+description: The provider-port seam, the engine, and how the simulator is organized.
 ---
+
+The **source of truth is the specification** (see [Full spec](/trellis/docs/spec/)) — a living document
+that co-evolves with this simulator. The simulator implements the spec; building it is partly how the
+spec gets refined.
 
 ## The one idea: the provider port
 
-The whole codebase hinges on a single seam. The control loop — state model, reconciler, planner — is
-written **once, provider-neutral**, and talks only to a `Provider` interface.
+The whole engine hinges on a single seam. The control loop — state model, reconciler, planner — talks
+only to a `Provider` interface.
 
 ```
-   CONTROL LOOP  (write once)
+   CONTROL LOOP  (provider-neutral)
    posture → planner → structure
    state = f(desired, observed, health)
    reconciler (converge toward desired)
-            │  provider.Provider  (the port)
+            │  Provider  (the port)
             │  apply / delete / observe / observeAll
       ┌─────┴─────┐
-   SimCloud      AwsProvider
-   (today)        (later)
+   SimCloud      (a real cloud, later)
+   (today)
 ```
 
-Going from demo to production is **"add a provider," not "rewrite the core."** This is the spec's
-provider strategy (§15) used as the primary architectural lever from day one.
+Going from demo to production is **"add a provider," not "rewrite the core"** — the spec's provider
+strategy (§15) used as the primary architectural lever. A non-negotiable corollary: the
+Frame/Cell/Resource grammar is an **ontology, not an engine** — concrete controllers for the fixed cloud
+levels, never a generic recursive interpreter.
 
-## Two implementations of the loop
+## The engine (`app/src/sim/`)
 
-| Implementation | Language | Where it runs | Purpose |
-|---|---|---|---|
-| **Reference spine** | Go | CLI / tests | the canonical semantics, with tests proving them |
-| **Simulator engine** | TypeScript | the browser (this site) | the full-blown interactive showcase |
-
-The TypeScript engine is a *faithful mirror* of the Go reference, so the showcase and the canonical
-implementation cannot silently diverge. Both encode the same `state = f(desired, observed, health)`,
-the same provenance-based drift detection, and the same reconcile rules.
-
-## The simulator engine (this site)
-
-- `sim/model.ts` — provider-neutral domain types (desired/observed projections, manifest, generations).
-- `sim/state.ts` — the State model: a pure function, never stored.
-- `sim/provider.ts` — the capability-contract port.
-- `sim/sim.ts` — the in-memory cloud with **real dynamics** (apply latency, node failure, drift, stale telemetry).
-- `sim/planner.ts` — a rung-0/1 planner: Posture → blueprint → plan that *is a proof*.
-- `sim/reconcile.ts` — the converge-toward-desired loop; **Converge actions only**, never Author.
-- `sim/engine.ts` — orchestrates the whole loop and the audit trail.
-- `sim/store.ts` — **IndexedDB** persistence: the spec's desired-state store and observed-state history,
-  realized in the browser so a session survives a reload.
+- `model.ts` — domain types: desired/observed projections, manifest, generations, workload lifecycle.
+- `state.ts` — the State model: `state = f(desired, observed, health)`, pure and recomputable.
+- `provider.ts` — the capability-contract port.
+- `sim.ts` — the in-memory cloud with **real dynamics** (apply latency, failure, drift, stale telemetry).
+- `planner.ts` — Posture → blueprint → a plan that *is a proof*; solves the objective program; Governance
+  is a hard pre-filter.
+- `reconcile.ts` — the converge-toward-desired loop; **Converge actions only**, never Author.
+- `engine.ts` — orchestrates the loop and the audit trail; incidents.
+- `fleet.ts` — the promotion pipeline (dev → staging → prod).
+- `store.ts` — **IndexedDB** persistence (the spec's desired-state store + observed-state history).
 
 ## Why GitHub Pages works
 
-The simulator is a static site (Astro + Starlight + shadcn). The simulation runs entirely client-side
-in TypeScript, with IndexedDB for state — **no backend to deploy.** The production control plane is a
-separate target (the same model, driving a real provider, running in a customer account); only the
-public simulator lives on Pages.
+The engine runs **entirely client-side in TypeScript**, with IndexedDB for state — no backend to deploy.
+The Astro build produces a static site that a GitHub Actions workflow publishes to Pages. A production
+control plane would be a separate target (the same model driving a real provider in a customer account),
+not on Pages.
