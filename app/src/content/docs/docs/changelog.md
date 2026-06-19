@@ -6,6 +6,21 @@ description: Recent changes to the Trellis simulator, newest first.
 What's shipped to the live simulator, newest first. The footer shows the exact build
 (date · commit) currently deployed.
 
+## Diagrams you can open, zoom, and read as journeys
+
+Every Mermaid diagram now carries a small toolbar: **open it full-screen** (great in landscape on a
+phone) and **view/copy its source**. The full-screen view supports pan and zoom everywhere — pinch and
+drag on touch, wheel-zoom and click-drag on desktop, double-tap to reset. The
+[Roles](/trellis/docs/roles) page also gains three **user-journey** diagrams (the service engineer's,
+the operator's, and the break-glass responder's day) as an easier-to-read companion to the sequence
+diagrams.
+
+We also red-teamed the diagrams against the spec: the responsibility map had drawn the second
+write-path into a division's cloud as an external-vendor "break-glass," which contradicts the model
+(break-glass is the responder's, and dual-controlled). It now correctly shows the two write paths as the
+**reconciler** and the **break-glass responders**, with vendors routed through the loop as ephemeral,
+scoped credentials. (And a CI gate now parses every diagram, so a broken one can't ship again.)
+
 ## Roles & responsibilities — a day in the life
 
 A new [Roles & responsibilities](/trellis/docs/roles) page puts the human layer next to the model: the

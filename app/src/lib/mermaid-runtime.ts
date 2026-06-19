@@ -8,6 +8,8 @@
  * `classDef` (converged/converging/degraded/drifted/stalled) in any diagram.
  */
 
+import { enhanceDiagram } from "./diagram-viewer";
+
 type ThemeVars = Record<string, string>;
 
 // Match the site body font (no web font is loaded; stay on the system stack).
@@ -138,6 +140,10 @@ async function render(force = false): Promise<void> {
 
     const pending = nodes.filter((n) => !n.dataset.processed);
     await mermaid.run({ nodes: pending });
+
+    // Wrap each rendered diagram with the toolbar (fullscreen + view-source).
+    // Idempotent: re-theming re-renders the SVG but keeps the existing toolbar.
+    for (const el of nodes) enhanceDiagram(el);
   } catch (err) {
     console.error("[mermaid] render failed", err);
   } finally {

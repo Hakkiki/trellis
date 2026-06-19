@@ -7,6 +7,32 @@ The simulator deploys continuously from `main`, so entries are grouped by date r
 
 ### Added
 
+- **Interactive diagram viewer.** Every rendered Mermaid diagram now has an on-brand toolbar: open it in
+  a full-screen overlay (ideal in landscape on mobile) and view/copy its source. The overlay supports
+  pan + zoom through one Pointer-Events path — drag-to-pan and pinch-to-zoom on touch, wheel-to-zoom and
+  click-drag-pan on desktop, double-tap/click to reset. Pan/zoom maths is pure and unit-tested
+  (`diagram-viewer.ts`, `diagram-viewer.test.ts`).
+- **User-journey diagrams.** Three Mermaid `journey` diagrams on the Roles page give an easier-to-read
+  "day in the life" view alongside the sequence diagrams — for the service engineer, the platform
+  operator, and the break-glass responder.
+
+### Changed
+
+- **Roles page diagram accuracy (red-team fix).** The responsibility map wrongly drew the second
+  write-arrow into a division's cloud as an *External vendor* "break-glass" path — contradicting the spec
+  (break-glass is the responder's, dual-controlled — §7/Inv 14) and the page's own vendor section. The
+  map now shows the two write paths as the **reconciler** and the **break-glass responders** (added as a
+  node), with the vendor routed through the loop as an ephemeral, scoped credential. The service-team
+  flow also now shows the planner/plan-proof step before the gate.
+
+### Fixed
+
+- **Broken Mermaid diagrams on the Roles page.** They threw `Syntax error in text` in production: a
+  `classDef` used `fill:rgba(...)` (Mermaid's classDef parser rejects the `(`) and a sequence message
+  contained a `;` (a statement separator). Converted tints to 8-digit hex and removed the `;`. Added
+  `scripts/validate-mermaid.mjs` (real Mermaid parse under jsdom) wired into `npm run check`, so CI and
+  the pre-push hook now fail on any unparseable diagram.
+
 - **Roles & responsibilities — a day in the life.** A new page mapping the nine personas (Platform Owner,
   Security/Governance author, Division/Product lead, Platform Operator, Service/Eng teams, Break-glass
   responders, Auditor, FinOps, External vendor) to the model: each one's mandate, what it owns, what it
