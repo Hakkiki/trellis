@@ -5,7 +5,7 @@
 // every action emits a record of who/why).
 
 import type { CellKind, Lifecycle, Manifest, Plan, Posture, Resilience, ResourceID } from "./model";
-import { manifestCost, plan as runPlanner } from "./planner";
+import { manifestCost, resourceCost, plan as runPlanner } from "./planner";
 import { Reconciler, type Status } from "./reconcile";
 import { SimCloud } from "./sim";
 import { rollup, type State } from "./state";
@@ -31,6 +31,7 @@ export interface ResourceView {
   size: string;
   replicas: number;
   state: State;
+  monthlyCost: number; // estimated $/mo — tints the cost view
   detail?: string; // e.g. quorum "2/3 nodes" for stateful clusters
 }
 
@@ -284,6 +285,7 @@ export class Engine {
           size: r.spec.size,
           replicas: Number(r.spec.replicas ?? "1"),
           state: byId.get(r.id)?.state ?? "Unknown",
+          monthlyCost: resourceCost(r),
           detail: byId.get(r.id)?.detail,
         }))
       : [];

@@ -34,6 +34,14 @@ import type { CellKind, Criticality, Kind, Posture, Resilience } from "@/sim/mod
 import { ALL_STATES, type State, stateColorVar } from "@/sim/state";
 import { loadSession, saveSession } from "@/sim/store";
 import Stage3D from "./Stage3D";
+import {
+  costColor,
+  HEALTH_BUCKETS,
+  healthColor,
+  VIEW_LABELS,
+  type ViewMode,
+  viewColor,
+} from "./views";
 
 const ALL_REGIONS = ["us-east-1", "eu-west-1", "ap-south-1"];
 const CRITS: Criticality[] = ["C0", "C1", "C2", "C3"];
@@ -71,6 +79,7 @@ export default function Simulator() {
   const [selected, setSelected] = React.useState<string | null>(null);
   const [form, setForm] = React.useState<Posture>(DEFAULT_POSTURE);
   const [layout, setLayout] = React.useState<"stage" | "grid">("stage");
+  const [view, setView] = React.useState<ViewMode>("state");
 
   const refresh = React.useCallback(() => {
     if (engineRef.current) setSnap(engineRef.current.snapshot());
@@ -346,6 +355,27 @@ export default function Simulator() {
               </button>
             </div>
           )}
+          {phase === "applied" && (
+            <div
+              className="flex gap-1"
+              title="recolor the topology by lens — a read-only View (§13)"
+            >
+              {(Object.keys(VIEW_LABELS) as ViewMode[]).map((v) => (
+                <button
+                  key={v}
+                  onClick={() => setView(v)}
+                  className={cn(
+                    "rounded-md border px-2 py-1 text-xs capitalize",
+                    view === v
+                      ? "border-primary text-foreground"
+                      : "border-input text-muted-foreground",
+                  )}
+                >
+                  {VIEW_LABELS[v]}
+                </button>
+              ))}
+            </div>
+          )}
           <div className="flex gap-1">
             {(["stage", "grid"] as const).map((v) => (
               <button
@@ -386,6 +416,7 @@ export default function Simulator() {
             selected={sel?.id ?? null}
             onSelect={setSelected}
             layout={layout}
+            view={view}
             frozenIds={frozenIds}
             budget={snap!.budget}
             costNow={snap!.costNow}
@@ -583,6 +614,7 @@ function Topology({
   selected,
   onSelect,
   layout,
+  view,
   frozenIds,
   budget,
   costNow,
@@ -593,12 +625,14 @@ function Topology({
   selected: string | null;
   onSelect: (id: string) => void;
   layout: "stage" | "grid";
+  view: ViewMode;
   frozenIds: Set<string>;
   budget: number;
   costNow: number;
 }) {
   const regions = [...new Set(resources.map((r) => r.region))];
   const order: CellKind[] = ["edge", "app", "data"];
+  const maxCost = Math.max(0, ...resources.map((r) => r.monthlyCost));
   return (
     <Card>
       <CardContent className="space-y-4 pt-6">
@@ -624,6 +658,8 @@ function Topology({
           <Stage3D
             resources={resources}
             regionState={regionState}
+            view={view}
+            maxCost={maxCost}
             selected={selected}
             frozenIds={frozenIds}
             onSelect={onSelect}
@@ -660,6 +696,8 @@ function Topology({
                           <ResourceCard
                             key={r.id}
                             r={r}
+                            view={view}
+                            maxCost={maxCost}
                             selected={r.id === selected}
                             onSelect={() => onSelect(r.id)}
                           />
@@ -676,7 +714,7 @@ function Topology({
             <span className="text-foreground font-medium">Environment:</span> {envNote}
           </p>
         )}
-        <Legend />
+        <Legend view={view} maxCost={maxCost} />
       </CardContent>
     </Card>
   );
@@ -684,21 +722,26 @@ function Topology({
 
 function ResourceCard({
   r,
+  view,
+  maxCost,
   selected,
   onSelect,
 }: {
   r: ResourceView;
+  view: ViewMode;
+  maxCost: number;
   selected: boolean;
   onSelect: () => void;
 }) {
   const Icon = resourceIcon(r);
-  const color = stateColorVar(r.state);
-  const pulsing =
+  const color = viewColor(r, view, maxCost);
+  const unsettled =
     r.state === "Converging" ||
     r.state === "Degraded" ||
     r.state === "Drifted" ||
     r.state === "Running" ||
     r.state === "Unavailable";
+  const pulsing = view !== "cost" && unsettled;
   return (
     <button
       onClick={onSelect}
@@ -713,6 +756,11 @@ function ResourceCard({
         <div className="truncate text-xs font-medium">{r.id}</div>
         <div className="text-muted-foreground text-[10px]">{resourceSub(r)}</div>
       </div>
+      {view === "cost" && (
+        <span className="text-muted-foreground shrink-0 text-[10px] tabular-nums">
+          ${r.monthlyCost}
+        </span>
+      )}
       <span
         className={cn("size-2.5 shrink-0 rounded-full", pulsing && "animate-pulse")}
         style={{ background: color, boxShadow: `0 0 8px ${color}` }}
@@ -721,7 +769,33 @@ function ResourceCard({
   );
 }
 
-function Legend() {
+function Legend({ view, maxCost }: { view: ViewMode; maxCost: number }) {
+  if (view === "cost") {
+    return (
+      <div className="text-muted-foreground flex items-center gap-2 text-[10px]">
+        <span>$0</span>
+        <span
+          className="h-2 flex-1 rounded-full"
+          style={{
+            background: `linear-gradient(90deg, ${costColor(0, 1)}, ${costColor(0.5, 1)}, ${costColor(1, 1)})`,
+          }}
+        />
+        <span>${maxCost}/mo</span>
+      </div>
+    );
+  }
+  if (view === "health") {
+    return (
+      <div className="text-muted-foreground flex flex-wrap gap-x-4 gap-y-1 text-[10px]">
+        {HEALTH_BUCKETS.map(({ bucket, label }) => (
+          <span key={bucket} className="flex items-center gap-1.5">
+            <span className="size-2 rounded-full" style={{ background: healthColor(bucket) }} />
+            {label}
+          </span>
+        ))}
+      </div>
+    );
+  }
   return (
     <div className="text-muted-foreground flex flex-wrap gap-x-4 gap-y-1 text-[10px]">
       {ALL_STATES.map((s) => (

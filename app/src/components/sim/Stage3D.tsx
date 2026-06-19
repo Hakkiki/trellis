@@ -3,6 +3,7 @@ import "./stage.css";
 import type { ResourceView } from "@/sim/engine";
 import type { CellKind } from "@/sim/model";
 import { type State, stateColorVar } from "@/sim/state";
+import { type ViewMode, viewColor } from "./views";
 
 const GW = 760;
 const GH = 520;
@@ -40,12 +41,16 @@ function pulse(state: State) {
 export default function Stage3D({
   resources,
   regionState,
+  view,
+  maxCost,
   selected,
   frozenIds,
   onSelect,
 }: {
   resources: ResourceView[];
   regionState: Record<string, State>;
+  view: ViewMode;
+  maxCost: number;
   selected: string | null;
   frozenIds: Set<string>;
   onSelect: (id: string) => void;
@@ -180,12 +185,13 @@ export default function Stage3D({
         })}
 
         {nodes.map(({ r, cx, cy }) => {
-          const color = stateColorVar(r.state);
+          const color = viewColor(r, view, maxCost);
           const isFrozen = frozenIds.has(r.id);
+          const pulsing = view !== "cost" && pulse(r.state);
           return (
             <div
               key={r.id}
-              className={`stage-node${pulse(r.state) ? " pulse" : ""}${selected === r.id ? " selected" : ""}`}
+              className={`stage-node${pulsing ? " pulse" : ""}${selected === r.id ? " selected" : ""}`}
               style={{ left: cx, top: cy, ["--st" as string]: color } as React.CSSProperties}
             >
               <div className="shadow" />

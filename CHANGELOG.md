@@ -7,6 +7,10 @@ The simulator deploys continuously from `main`, so entries are grouped by date r
 
 ### Added
 
+- **Topology Views (§13)**: a `state · cost · health` lens toggle that recolors the same Structure —
+  State reads the lifecycle, Cost is a $/mo heatmap (cheap→costly, anchored to the fleet max, with
+  per-card $ labels), Health collapses the lifecycle into healthy / degraded / at-risk / unknown. The
+  legend follows the lens. Projections, derived — never authoritative.
 - **Frame roll-up state (§4)**: a region's state is the worst-of the Service + Stateful workloads it
   contains, and the environment rolls up from its regions — read by Resilience (active-active keeps
   serving from the healthy region; active-passive fails over; single is user-visible). Region frames on

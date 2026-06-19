@@ -6,6 +6,19 @@ description: Recent changes to the Trellis simulator, newest first.
 What's shipped to the live simulator, newest first. The footer shows the exact build
 (date · commit) currently deployed.
 
+## Topology Views
+
+The topology now has a **`state · cost · health`** lens toggle (spec §13) — the same Structure, recolored
+by the question you're asking. A **View** is a read-only projection, never authoritative:
+
+- **State** — the lifecycle state (the default).
+- **Cost** — a $/mo heatmap from cheap (cool) to costly (warm), anchored to the most expensive resource,
+  with per-resource dollar labels in the grid. The FinOps lens.
+- **Health** — collapses the lifecycle into **healthy / degraded / at-risk / unknown** for an at-a-glance
+  SLO read.
+
+The legend follows the active lens, on both the 3D stage and the grid.
+
 ## Frame roll-up state
 
 A **Frame** (a region, and the whole environment) now shows a state rolled up from its children —
