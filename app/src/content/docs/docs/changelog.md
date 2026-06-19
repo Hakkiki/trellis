@@ -6,6 +6,19 @@ description: Recent changes to the Trellis simulator, newest first.
 What's shipped to the live simulator, newest first. The footer shows the exact build
 (date · commit) currently deployed.
 
+## Cost as a live signal
+
+Cost was a planner input; now it's a **first-class loop signal** (spec §13). The simulated cloud bills
+you, and the bill can diverge from the plan:
+
+- **Cost drift** — a **Cost spike** event makes a resource bill **3× its planned cost** (a usage spike /
+  price change / leak). It's observed like any drift; the budget bar overlays **billed over planned**,
+  and the cost-drifted resource is flagged.
+- **Budget-breach** — when billed spend exceeds budget, on-call is paged. By **posture** (`alert` vs
+  `block`), a breach either just alerts or **blocks further provisioning** (Approve is held) until the
+  cost is reconciled. The **Owners** tab attributes billed-vs-planned to each Service.
+- **Reconcile** — clear the spike (right-size / fix the leak) and the breach clears, unblocking the gate.
+
 ## Multi-service & ownership
 
 An environment now owns **more than one Service** (spec §6), each with its own **Criticality** — a C0

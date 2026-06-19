@@ -250,6 +250,8 @@ export class Fleet {
             replicas: Number(r.spec.replicas ?? "1"),
             state: stById.get(r.id) ?? "Unknown",
             monthlyCost: resourceCost(r),
+            billedCost: resourceCost(r),
+            costDrifted: false,
           }))
         : [];
       const source = idx > 0 ? this.envs[ORDER[idx - 1]] : null;

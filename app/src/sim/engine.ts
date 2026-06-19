@@ -5,6 +5,7 @@
 // every action emits a record of who/why).
 
 import {
+  type BudgetPolicy,
   type CellKind,
   type Criticality,
   type Lifecycle,
@@ -41,7 +42,9 @@ export interface ResourceView {
   size: string;
   replicas: number;
   state: State;
-  monthlyCost: number; // estimated $/mo — tints the cost view
+  monthlyCost: number; // planned $/mo — tints the cost view
+  billedCost: number; // observed $/mo (billed vs planned, §13)
+  costDrifted: boolean; // billed > planned — cost drift
   detail?: string; // e.g. quorum "2/3 nodes" for stateful clusters
 }
 
@@ -62,9 +65,13 @@ export interface EngineSnapshot {
   resources: ResourceView[];
   audit: AuditEntry[];
   incidents: Incident[];
-  costNow: number;
+  costNow: number; // planned spend
+  billedNow: number; // observed/billed spend (§13)
   budget: number;
-  overBudget: boolean;
+  overBudget: boolean; // planned over budget
+  budgetBreach: boolean; // billed over budget — a live FinOps signal
+  canProvision: boolean; // false when breached under a block policy
+  budgetPolicy: BudgetPolicy;
   converged: boolean;
   appliedGen: number;
   changeFreeze: boolean;
@@ -82,7 +89,8 @@ export interface ServiceRollup {
   slug: string;
   criticality: Criticality;
   state: State;
-  monthlyCost: number;
+  monthlyCost: number; // planned spend attributed to this owner
+  billedCost: number; // observed/billed spend attributed to this owner (§13)
 }
 
 export const DEFAULT_POSTURE: Posture = {
@@ -100,6 +108,7 @@ export const DEFAULT_POSTURE: Posture = {
     { name: "payments-api", criticality: "C0" },
     { name: "internal-dashboard", criticality: "C3" },
   ],
+  budgetPolicy: "alert",
 };
 
 export class Engine {
@@ -143,9 +152,37 @@ export class Engine {
     return this.plan;
   }
 
+  /** Billed (observed) spend across the live fleet — the FinOps signal (§13). */
+  private billedNow(): number {
+    if (!this.manifest) return 0;
+    return Object.values(this.manifest.resources).reduce(
+      (sum, r) => sum + resourceCost(r) * this.cloud.billedFactor(r.id),
+      0,
+    );
+  }
+
+  /** True when billed spend exceeds budget under a block policy — the gate holds. */
+  private provisioningBlocked(): boolean {
+    return (
+      (this.posture.budgetPolicy ?? "alert") === "block" &&
+      this.billedNow() > this.posture.budgetMonthly
+    );
+  }
+
   /** The gate: approve the current plan = merge. Mints a scoped credential. */
   approve(): boolean {
     if (!this.plan?.feasible) return false;
+    // Budget-breach blocks further provisioning when posture says so (§13).
+    if (this.provisioningBlocked()) {
+      this.log(
+        "Gate",
+        "finops",
+        "provisioning-blocked",
+        `gen ${this.plan.generation}`,
+        "budget-breach under a block policy — resolve cost drift before provisioning",
+      );
+      return false;
+    }
     this.manifest = this.plan.manifest;
     this.appliedGen = this.plan.generation;
     // External dependencies are discovered, not provisioned (observe-only, §1).
@@ -204,6 +241,19 @@ export class Engine {
   failNode(id: ResourceID) {
     this.cloud.failNode(id);
     this.log("Observe", "fault", "node-failure", id, "underlying node died");
+  }
+
+  /** Cost drift (§13): the cloud starts billing a resource above plan (usage
+   *  spike / price change / leak). Observed like any drift; may breach budget. */
+  costSpike(id: ResourceID) {
+    this.cloud.costSpike(id, 3);
+    this.log("Observe", "fault", "cost-drift", id, "billed ≫ planned (3×) — usage spike / leak");
+  }
+
+  /** A human reconciles the cost (right-size / clear the leak); the breach clears. */
+  resolveCost(id: ResourceID) {
+    this.cloud.repairCost(id);
+    this.log("Author", "finops", "cost-reconciled", id, "billed back to plan");
   }
 
   /** A root-cause failure self-heal can't fix → the breaker trips to Stalled. */
@@ -313,10 +363,16 @@ export class Engine {
           replicas: Number(r.spec.replicas ?? "1"),
           state: byId.get(r.id)?.state ?? "Unknown",
           monthlyCost: resourceCost(r),
+          billedCost: Math.round(resourceCost(r) * this.cloud.billedFactor(r.id)),
+          costDrifted: this.cloud.billedFactor(r.id) > 1,
           detail: byId.get(r.id)?.detail,
         }))
       : [];
     const costNow = this.manifest ? manifestCost(this.manifest) : 0;
+    const billedNow = resources.reduce((sum, r) => sum + r.billedCost, 0);
+    const budget = this.posture.budgetMonthly;
+    const budgetPolicy: BudgetPolicy = this.posture.budgetPolicy ?? "alert";
+    const budgetBreach = billedNow > budget;
     const phase: Phase = this.manifest ? "applied" : this.plan ? "planned" : "empty";
     const incidents: Incident[] = resources
       .filter((r) => r.state === "Stalled")
@@ -346,6 +402,7 @@ export class Engine {
         criticality: s.criticality,
         state: rollup(ownManaged.map((r) => r.state)),
         monthlyCost: own.reduce((sum, r) => sum + r.monthlyCost, 0),
+        billedCost: own.reduce((sum, r) => sum + r.billedCost, 0),
       };
     });
     return {
@@ -357,8 +414,12 @@ export class Engine {
       audit: this.audit.slice(-80),
       incidents,
       costNow,
-      budget: this.posture.budgetMonthly,
-      overBudget: costNow > this.posture.budgetMonthly,
+      billedNow,
+      budget,
+      overBudget: costNow > budget,
+      budgetBreach,
+      canProvision: !(budgetBreach && budgetPolicy === "block"),
+      budgetPolicy,
       converged: resources.length > 0 && resources.every(isSettled),
       appliedGen: this.appliedGen,
       changeFreeze: this.rec.isChangeFreeze(),

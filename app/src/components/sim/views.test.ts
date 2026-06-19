@@ -14,6 +14,8 @@ function rv(over: Partial<ResourceView>): ResourceView {
     replicas: 1,
     state: "Converged",
     monthlyCost: 0,
+    billedCost: 0,
+    costDrifted: false,
     ...over,
   };
 }

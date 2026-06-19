@@ -7,6 +7,11 @@ The simulator deploys continuously from `main`, so entries are grouped by date r
 
 ### Added
 
+- **Cost as a live signal (§13)**: cost is now an *observed* signal, not just a planner input. A **Cost
+  spike** injects billed-vs-planned **cost drift** (billed ≫ planned); when billed spend exceeds budget
+  it's a **budget-breach** that pages on-call and — by posture (`alert` vs `block`) — **blocks further
+  provisioning** until reconciled. The budget bar overlays billed over planned, the Owners tab shows
+  per-owner billed-vs-planned, and a breach banner offers a one-click reconcile.
 - **Multi-service & ownership (§6)**: an environment now owns **several Services**, each with its own
   Criticality (e.g. a C0 `payments-api` beside a C3 `internal-dashboard`), sharing one budget. The
   planner solves the **shared-budget objective across Services** — floor each, then greedily upgrade by

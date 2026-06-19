@@ -6,6 +6,7 @@ import {
   Clock,
   Cloud,
   Database,
+  DollarSign,
   Eye,
   Layers,
   Network,
@@ -32,6 +33,7 @@ import {
   type ServiceRollup,
 } from "@/sim/engine";
 import {
+  type BudgetPolicy,
   type CellKind,
   type Criticality,
   type Kind,
@@ -244,6 +246,16 @@ export default function Simulator() {
               className="w-full accent-[var(--primary)]"
             />
           </Field>
+          <Field label="On budget-breach">
+            <Select
+              value={form.budgetPolicy ?? "alert"}
+              onChange={(v) => setForm({ ...form, budgetPolicy: v as BudgetPolicy })}
+              options={[
+                ["alert", "alert only"],
+                ["block", "block provisioning"],
+              ]}
+            />
+          </Field>
           <Field label="Optimize">
             <Select
               value={form.optimize}
@@ -291,6 +303,7 @@ export default function Simulator() {
               onClick={onApprove}
               disabled={
                 !plan?.feasible ||
+                snap?.canProvision === false ||
                 (phase === "applied" && (plan?.generation ?? 0) <= (snap?.appliedGen ?? 0))
               }
               className="w-full"
@@ -299,6 +312,12 @@ export default function Simulator() {
                 ? "Approve transition"
                 : "Approve & apply"}
             </Button>
+            {snap?.canProvision === false && (
+              <p className="text-destructive text-[11px]">
+                Provisioning blocked — budget breached under a block policy (§13). Reconcile the
+                cost drift to continue.
+              </p>
+            )}
           </div>
         </CardContent>
       </Card>
@@ -418,6 +437,7 @@ export default function Simulator() {
             frozenIds={frozenIds}
             budget={snap!.budget}
             costNow={snap!.costNow}
+            billedNow={snap!.billedNow}
           />
         )}
 
@@ -456,6 +476,14 @@ export default function Simulator() {
                 label="Hard failure"
                 hint={sel?.id}
                 onClick={() => sel && act((e) => e.hardFailure(sel.id))}
+              />
+              <EventButton
+                icon={sel?.costDrifted ? Wrench : DollarSign}
+                label={sel?.costDrifted ? "Reconcile cost" : "Cost spike"}
+                hint={sel?.id}
+                onClick={() =>
+                  sel && act((e) => (sel.costDrifted ? e.resolveCost(sel.id) : e.costSpike(sel.id)))
+                }
               />
               <EventButton
                 icon={
@@ -513,6 +541,38 @@ export default function Simulator() {
               <Button size="sm" variant="outline" onClick={() => act((e) => e.acknowledgeBlast())}>
                 Proceed once
               </Button>
+            </CardContent>
+          </Card>
+        )}
+
+        {phase === "applied" && snap?.budgetBreach && (
+          <Card className="border-destructive">
+            <CardContent className="flex items-center gap-3 pt-6 text-sm">
+              <DollarSign className="text-destructive size-5 shrink-0" />
+              <div className="flex-1">
+                <div className="text-destructive font-semibold">
+                  Budget breach — billed ${snap.billedNow} / ${snap.budget}/mo
+                </div>
+                <p className="text-muted-foreground">
+                  Cost drift (billed ≫ planned) pushed spend over budget (§13).{" "}
+                  {snap.budgetPolicy === "block"
+                    ? "Policy: block — further provisioning is held until reconciled."
+                    : "Policy: alert — provisioning continues; on-call is paged."}{" "}
+                  Reconcile the cost-drifted resource to clear it.
+                </p>
+              </div>
+              {(() => {
+                const drifted = resources.find((r) => r.costDrifted);
+                return drifted ? (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => act((e) => e.resolveCost(drifted.id))}
+                  >
+                    Reconcile cost
+                  </Button>
+                ) : null;
+              })()}
             </CardContent>
           </Card>
         )}
@@ -652,7 +712,9 @@ function OwnersPanel({
 }) {
   if (!rollups.length)
     return <p className="text-muted-foreground text-xs">Approve a plan to see ownership.</p>;
-  const total = rollups.reduce((sum, r) => sum + r.monthlyCost, 0);
+  const planned = rollups.reduce((sum, r) => sum + r.monthlyCost, 0);
+  const billed = rollups.reduce((sum, r) => sum + r.billedCost, 0);
+  const breach = billed > budget;
   return (
     <div className="space-y-3 text-xs">
       <div className="border-border/60 flex items-center justify-between border-b pb-2">
@@ -666,16 +728,18 @@ function OwnersPanel({
           />
           environment · {envRollup}
         </span>
-        <span className={total > budget ? "text-destructive" : "text-muted-foreground"}>
-          ${total} / ${budget}/mo
+        <span className={breach ? "text-destructive" : "text-muted-foreground"}>
+          ${billed} / ${budget}/mo{billed !== planned ? ` (plan $${planned})` : ""}
         </span>
       </div>
       <p className="text-muted-foreground">
-        State and spend attribute to each owning Service (§6) — the read-side of the ownership tree.
+        State and spend attribute to each owning Service (§6). Billed-vs-planned is a live signal —
+        a breach pages on-call and, by posture, blocks provisioning (§13).
       </p>
       {rollups.map((r) => {
         const color = stateColorVar(r.state);
-        const share = budget > 0 ? Math.round((r.monthlyCost / budget) * 100) : 0;
+        const drifted = r.billedCost > r.monthlyCost;
+        const share = budget > 0 ? Math.round((r.billedCost / budget) * 100) : 0;
         return (
           <button
             key={r.slug}
@@ -699,14 +763,17 @@ function OwnersPanel({
             </div>
             <div className="text-muted-foreground flex items-center justify-between text-[10px]">
               <span>{r.state}</span>
-              <span className="tabular-nums">
-                ${r.monthlyCost}/mo · {share}% of budget
+              <span className={cn("tabular-nums", drifted && "text-destructive")}>
+                ${r.billedCost}/mo{drifted ? ` (plan $${r.monthlyCost})` : ""} · {share}%
               </span>
             </div>
             <div className="bg-secondary h-1.5 w-full overflow-hidden rounded-full">
               <div
                 className="h-full rounded-full"
-                style={{ width: `${Math.min(100, share)}%`, background: color }}
+                style={{
+                  width: `${Math.min(100, share)}%`,
+                  background: drifted ? "var(--destructive)" : color,
+                }}
               />
             </div>
           </button>
@@ -769,6 +836,7 @@ function Topology({
   frozenIds,
   budget,
   costNow,
+  billedNow,
 }: {
   resources: ResourceView[];
   regionState: Record<string, State>;
@@ -780,24 +848,38 @@ function Topology({
   frozenIds: Set<string>;
   budget: number;
   costNow: number;
+  billedNow: number;
 }) {
   const regions = [...new Set(resources.map((r) => r.region))];
   const order: CellKind[] = ["edge", "app", "data"];
   const maxCost = Math.max(0, ...resources.map((r) => r.monthlyCost));
+  const billedBreach = billedNow > budget;
   return (
     <Card>
       <CardContent className="space-y-4 pt-6">
         <div>
           <div className="text-muted-foreground mb-1 flex justify-between text-xs">
-            <span>cost vs budget</span>
-            <span className={costNow > budget ? "text-destructive" : ""}>
-              ${costNow} / ${budget} /mo
+            <span>{billedNow !== costNow ? "billed vs budget" : "cost vs budget"}</span>
+            <span
+              className={
+                billedBreach ? "text-destructive" : costNow > budget ? "text-destructive" : ""
+              }
+            >
+              ${billedNow} / ${budget} /mo{billedNow !== costNow ? ` (plan $${costNow})` : ""}
             </span>
           </div>
-          <div className="bg-secondary h-2 w-full overflow-hidden rounded-full">
+          {/* Billed spend (red base) with planned layered on top — the gap beyond
+              planned is the cost-drift overage (§13). */}
+          <div className="bg-secondary relative h-2 w-full overflow-hidden rounded-full">
+            {billedNow > costNow && (
+              <div
+                className="bg-destructive absolute inset-y-0 left-0 rounded-full"
+                style={{ width: `${Math.min(100, (billedNow / budget) * 100)}%` }}
+              />
+            )}
             <div
               className={cn(
-                "h-full rounded-full",
+                "absolute inset-y-0 left-0 rounded-full",
                 costNow > budget ? "bg-destructive" : "bg-primary",
               )}
               style={{ width: `${Math.min(100, (costNow / budget) * 100)}%` }}

@@ -337,6 +337,67 @@ describe("multi-service ownership (§6)", () => {
   });
 });
 
+describe("cost as a live signal (§13)", () => {
+  function converged(posture: Posture) {
+    const e = new Engine(posture);
+    e.declare(posture);
+    e.approve();
+    for (let i = 0; i < 30 && !e.snapshot().converged; i++) e.tick();
+    return e;
+  }
+
+  it("cost drift shows billed above planned and attributes to the owner", () => {
+    const e = converged(DEFAULT_POSTURE);
+    const before = e.snapshot();
+    expect(before.billedNow).toBe(before.costNow); // no drift yet
+    const payApp = before.resources.find((r) => r.service === "payments-api" && r.cell === "app")!;
+
+    e.costSpike(payApp.id);
+    const after = e.snapshot();
+    const r = after.resources.find((x) => x.id === payApp.id)!;
+    expect(r.costDrifted).toBe(true);
+    expect(r.billedCost).toBeGreaterThan(r.monthlyCost);
+    expect(after.billedNow).toBeGreaterThan(after.costNow);
+    // the overage lands on payments-api, not its peer
+    const pay = after.serviceRollups.find((s) => s.service === "payments-api")!;
+    const dash = after.serviceRollups.find((s) => s.service === "internal-dashboard")!;
+    expect(pay.billedCost).toBeGreaterThan(pay.monthlyCost);
+    expect(dash.billedCost).toBe(dash.monthlyCost);
+  });
+
+  it("a block policy holds provisioning on breach until the cost is reconciled", () => {
+    // A tight budget so a single 3× spike breaches it.
+    const posture: Posture = { ...DEFAULT_POSTURE, budgetPolicy: "block" };
+    const e = converged(posture);
+    const big = e
+      .snapshot()
+      .resources.filter((r) => r.lifecycle === "service")
+      .reduce((a, b) => (b.monthlyCost > a.monthlyCost ? b : a));
+
+    e.costSpike(big.id);
+    expect(e.snapshot().budgetBreach).toBe(true);
+    expect(e.snapshot().canProvision).toBe(false);
+    // Re-planning + approving is blocked while breached under a block policy.
+    e.declare({ ...posture, budgetMonthly: posture.budgetMonthly + 1 });
+    expect(e.approve()).toBe(false);
+
+    e.resolveCost(big.id);
+    expect(e.snapshot().budgetBreach).toBe(false);
+    expect(e.snapshot().canProvision).toBe(true);
+  });
+
+  it("an alert policy never blocks provisioning, even on breach", () => {
+    const e = converged({ ...DEFAULT_POSTURE, budgetPolicy: "alert" });
+    const big = e
+      .snapshot()
+      .resources.filter((r) => r.lifecycle === "service")
+      .reduce((a, b) => (b.monthlyCost > a.monthlyCost ? b : a));
+    e.costSpike(big.id);
+    expect(e.snapshot().budgetBreach).toBe(true);
+    expect(e.snapshot().canProvision).toBe(true);
+  });
+});
+
 describe("frame roll-up (§4)", () => {
   it("a Frame's state is the worst-of its children", () => {
     expect(rollup([])).toBe("Unknown");
