@@ -47,8 +47,8 @@ flowchart TB
   CP -->|append-only record| AUD
   CP -->|cost signal| FIN
 
-  classDef read fill:rgba(127,176,105,0.16),stroke:#6fae6a;
-  classDef cloud fill:rgba(200,160,64,0.14),stroke:#c8a040;
+  classDef read fill:#7fb06929,stroke:#6fae6a;
+  classDef cloud fill:#c8a04024,stroke:#c8a040;
   class CLOUD cloud;
 ```
 
@@ -104,7 +104,7 @@ flowchart LR
   CAT -.->|pinned, pulled| D1["Division A<br/>promotes on its schedule"]
   CAT -.->|pinned, pulled| D2["Division B<br/>still on vN-1"]
   CAT -.->|pinned, pulled| D3["Division C<br/>canarying vN"]
-  classDef rail fill:rgba(200,160,64,0.14),stroke:#c8a040;
+  classDef rail fill:#c8a04024,stroke:#c8a040;
   class CAT rail;
 ```
 
@@ -183,7 +183,7 @@ flowchart LR
   POST -->|PR| GATE{"gate<br/>rigor by blast radius"}
   GATE -->|merge| REC["Reconciler converges"]
   REC --> SVC["Running service"]:::good
-  classDef good fill:rgba(127,176,105,0.16),stroke:#6fae6a;
+  classDef good fill:#7fb06929,stroke:#6fae6a;
 ```
 
 ### Break-glass responders
@@ -210,7 +210,7 @@ sequenceDiagram
   BG-->>R1: ephemeral credential (expires soon)
   R1->>Cloud: minimal fix
   BG-->>BG: credential expires → access seals
-  R1->>Audit: full record; divergence reconciled back
+  R1->>Audit: full record — divergence reconciled back
 ```
 
 ---
