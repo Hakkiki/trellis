@@ -178,6 +178,32 @@ And as *workloads*? A division can absolutely run Consul or etcd for its **own**
 them as stateful quorum clusters (the quorum roll-up above). That's the division's choice for their stack,
 not a dependency of the control plane.
 
+### Do we have to run our own Git?
+
+No. **Git is a role, not a product mandate.** Trellis needs *a desired-state store with Git's properties*
+— versioned history (a commit SHA *is* the generation), branch protection + required review (so **merge =
+the gate**), durability, and an API/webhooks so the planner can post the plan-as-proof as a PR check. Any
+host that offers those fills the role.
+
+- **Managed Git you don't operate** — GitHub, GitLab SaaS, Bitbucket Cloud, authenticated via **OIDC**
+  (no long-lived keys). Usually the easiest path; HA is someone else's problem.
+- **AWS-native:** **CodeCommit** is the cleanest conceptual fit — IAM-native, in-account, no third party.
+  But note AWS **closed CodeCommit to new customers in mid-2024**; if you already have it, use it,
+  otherwise reach for managed GitHub/GitLab or a small self-hosted Git in-account.
+- **Self-hosted** — only if you have a reason (air-gap, residency). Then don't make one central server a
+  company-wide SPOF — slice it per division, or use managed.
+
+Two things worth pinning down:
+
+- **This store is Trellis's own, and per-division — not shared Git infrastructure.** It holds the
+  *manifests* the control plane reconciles, sliced per Trellis instance like everything else. Don't
+  confuse it with **GitLab-as-a-workload** (the source-control product Trellis *provisions for a
+  division's app code*). Same family of tool, completely different role.
+- **It's a soft dependency.** If the manifest Git is down you can't *merge new changes*, but running infra
+  keeps reconciling against last-applied state — your services don't fall over. Contrast Kubernetes +
+  etcd, where etcd down means the cluster brain is down. So "which Git" is a lower-stakes decision than it
+  feels, and it's what makes meta-DR work (re-bootstrap from the manifest repo).
+
 ### Where does the live console get "down" or "in transition" from?
 
 Not from a stored status field — there isn't one. The console is a read-only **View**, and **State is
