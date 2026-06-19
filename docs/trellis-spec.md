@@ -1420,7 +1420,9 @@ down to the boundary; share only what is signed, versioned, and pulled.**
 
 ## 17. Invariants
 
-The non-negotiable rules a builder must preserve. A violation is a defect, not a tradeoff.
+The non-negotiable rules a builder must preserve. A violation is a defect, not a tradeoff. Invariants
+1–10 fix the model; **11–15 are the inversion-hardened set** — each forecloses a specific way the
+platform could cause the very catastrophe it exists to prevent (the inversion stress test, §21).
 
 1. **Determinism.** A plan is a pure function of *(manifest generation + a pinned provider-state snapshot +
    a pinned pricing version)*. Same pinned inputs → same plan. Determinism is scoped to the snapshot, not
@@ -1455,6 +1457,34 @@ The non-negotiable rules a builder must preserve. A violation is a defect, not a
     standing-write holder), which runs one instance per isolation domain on its own upgrade cadence (§16). The only cross-domain shared surfaces are signed-and-pulled
     (the catalog), the org root / Governance floor, and the external audit; none may be a standing
     god-write service.
+11. **Convergence is progressive and reversible — never a fleet-wide write.** The reconciler rolls any
+    change across its managed set **incrementally** (canary → waves), **health-gated**, with **automatic
+    rollback to the last known-good generation** on regression and a **blast-radius breaker** that halts
+    the wave. An *approved* change is still not permitted to reach an entire blast radius simultaneously —
+    a mistake that passes the gate must not become a company-wide outage.
+12. **No floating fate; shared surfaces are fail-static.** Every cross-boundary or pinned reference
+    resolves to an **immutable, signed version** — never a floating tag (`latest`) — and pins are
+    **transitive** (a pinned artifact pins its own dependencies). A consumer of any shared surface
+    (catalog, Governance floor, audit) keeps operating from **last-known-good when the source is
+    unreachable**; shared surfaces are pull-and-cache, **never a synchronous-fate dependency**, and no
+    shared service sits on a division's critical write path.
+13. **Recovery is out-of-band.** Every recovery dependency — the external seed, a known-good prior
+    generation, the kill-switch, and the audit — must be **reachable and operable with the control plane
+    (and the system under recovery) fully down**; recovery never transits the failed system. Root and
+    signing authority are **M-of-N** (no single human, no single key); the kill-switch cannot be disabled
+    by the system it stops.
+14. **Separation of duties; the gate floor cannot be self-loosened.** The **approver is never the
+    author**; above a blast-radius threshold the second approver is **outside the owning team**. The
+    merge-gate's protection posture (signed commits, branch protection, attested builder) is a
+    **governed, non-loosenable floor**, not a per-repo option — and **loosening the org Governance floor
+    is itself a reflexive, highest-gate, dual-controlled, externally-audited change** (§16), never a
+    single root action.
+15. **The checker sits outside the blast radius.** Trellis **observes itself** — planner, gate,
+    reconciler, and the observe path — on an **independent channel**, so a broken or lying telemetry path
+    is itself visible. Observed signals are **authenticated**; unauthenticated or anomalous telemetry is
+    treated as **Unknown, never trusted** (Invariant 7), and a destructive converge requires
+    **corroborating** signals, not one source. **No component is the sole verifier of its own
+    correctness.**
 
 ---
 
@@ -1583,6 +1613,12 @@ Other resolutions:
   plane to the containment boundary), §6 (slice Kubernetes at the cluster, not the namespace), and
   §12 / §18 (the control plane keeps no consensus store of its own). Promotions from applied decisions to
   normative spec.
+- **Inversion stress test** — applying Munger's inversion ("how would we *guarantee* the catastrophe?")
+  surfaced five real gaps, folded in as **Invariants 11–15**: progressive/reversible convergence (no
+  fleet-wide write), no-floating-fate / fail-static shared surfaces, out-of-band recovery with M-of-N
+  custody, separation-of-duties on a non-loosenable gate floor, and self-observability with attested
+  signals (the checker outside the blast radius). The raw kill-path enumeration is retained off-site in
+  the red-team bundle.
 
 ---
 

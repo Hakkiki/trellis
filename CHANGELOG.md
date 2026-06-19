@@ -7,6 +7,16 @@ The simulator deploys continuously from `main`, so entries are grouped by date r
 
 ### Added
 
+- **Inversion stress test + five new invariants.** Applied Munger's inversion — *"how would we guarantee
+  Trellis causes the exact catastrophe it exists to prevent?"* — enumerated every kill-path, scored each
+  Foreclosed / Partial / Gap, and folded the five genuine gaps into the normative spec as **Invariants
+  11–15**: (11) **progressive/reversible convergence** — the reconciler never does a fleet-wide write, so
+  even an *approved* bad change can't go company-wide; (12) **no floating fate / fail-static shared
+  surfaces** — immutable signed transitive pins, run from cache when the source is down; (13)
+  **out-of-band recovery** with M-of-N root/signing custody; (14) **separation of duties** on a
+  non-loosenable gate floor; (15) **self-observability + attested signals** (the checker sits outside the
+  blast radius). New public page *"Inversion stress test"* (Architecture & decisions); the raw kill-path
+  enumeration (K1–K23) lives in the off-site red-team bundle. Promoted maker/checker.
 - **Spec promotions** — three decisions that had been living as applied-decision pages are now folded
   into the **normative specification** (canonical `docs/trellis-spec.md` and the site mirror, kept
   byte-identical): (1) **control-plane partitioning** — the enforcer is not exempt; anything with
