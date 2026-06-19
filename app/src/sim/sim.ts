@@ -29,6 +29,7 @@ interface SimResource {
   exists: boolean;
   stale: boolean;
   broken: boolean; // root-cause failure that self-heal cannot fix
+  costFactor: number; // billed ÷ planned — 1 normally; >1 is cost drift (§13)
   observedAtMs: number;
   // Job lifecycle
   phase?: JobPhase;
@@ -122,6 +123,7 @@ export class SimCloud implements Provider {
         exists: false,
         stale: false,
         broken: false,
+        costFactor: 1,
         observedAtMs: this.nowMs,
         jobTimer: 0,
         nodesTotal: d.lifecycle === "stateful" ? Number(d.spec.nodes ?? "3") : 1,
@@ -180,6 +182,7 @@ export class SimCloud implements Provider {
       exists: true,
       stale: false,
       broken: false,
+      costFactor: 1,
       observedAtMs: this.nowMs,
       jobTimer: 0,
       nodesTotal: 1,
@@ -275,6 +278,24 @@ export class SimCloud implements Provider {
   injectDrift(id: ResourceID, mutate: (s: Spec) => void) {
     const r = this.res.get(id);
     if (r?.exists) mutate(r.observed);
+  }
+
+  /** Billed-vs-planned cost drift (§13): the cloud starts billing this resource
+   *  at `factor`× its planned cost (a usage spike / price change / leak). */
+  costSpike(id: ResourceID, factor: number) {
+    const r = this.res.get(id);
+    if (r) r.costFactor = factor;
+  }
+
+  /** A human reconciles the cost (right-sizes / clears the leak). */
+  repairCost(id: ResourceID) {
+    const r = this.res.get(id);
+    if (r) r.costFactor = 1;
+  }
+
+  /** The billed-vs-planned multiplier the FinOps loop observes for a resource. */
+  billedFactor(id: ResourceID): number {
+    return this.res.get(id)?.costFactor ?? 1;
   }
 
   setStale(id: ResourceID, stale: boolean) {

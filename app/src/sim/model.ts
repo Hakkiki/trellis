@@ -62,6 +62,8 @@ export interface Observation {
 export type Criticality = "C0" | "C1" | "C2" | "C3";
 export type Resilience = "active-active" | "active-passive" | "single";
 export type Optimize = "minimize-cost" | "maximize-resilience";
+/** What a budget-breach does (§13): alert only, or block further provisioning. */
+export type BudgetPolicy = "alert" | "block";
 
 /** A Service the environment owns (spec §6): a function tag + its own
  *  Criticality, which drives sizing/replication independently of its peers. */
@@ -83,6 +85,8 @@ export interface Posture {
   /** The Services this environment owns (§6). When absent (legacy session), a
    *  single Service is synthesized from intent + criticality. */
   services?: ServiceSpec[];
+  /** What a budget-breach does (§13). Defaults to "alert" when absent (legacy). */
+  budgetPolicy?: BudgetPolicy;
 }
 
 /** The effective Service list: explicit `services`, or a single Service
