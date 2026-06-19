@@ -6,6 +6,15 @@ description: Recent changes to the Trellis simulator, newest first.
 What's shipped to the live simulator, newest first. The footer shows the exact build
 (date · commit) currently deployed.
 
+## Operating model
+
+A new [operating-model page](/trellis/docs/operating-model) covers the *how* of per-division platforms:
+where to put the boundary (the org / account / VPC / namespace grain ladder, and why a namespace is the
+wrong grain when the goal is blast-radius containment), why synchronous-only coupling between divisions is
+the healthy kind, and the key move — **slice the control plane too**, so each division runs its own
+Trellis and only a signed, versioned, pulled catalog (plus SCP guardrails and the external audit) stays
+shared.
+
 ## Why Trellis — a use case
 
 A new [use-case page](/trellis/docs/use-case) tells the motivating story plainly: a single shared service
