@@ -1,7 +1,8 @@
 // @ts-check
-import { defineConfig } from "astro/config";
-import starlight from "@astrojs/starlight";
+
 import react from "@astrojs/react";
+import starlight from "@astrojs/starlight";
+import { defineConfig } from "astro/config";
 
 // GitHub Pages: served from https://hakkiki.github.io/trellis
 const SITE = "https://hakkiki.github.io";

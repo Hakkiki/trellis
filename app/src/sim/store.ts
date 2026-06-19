@@ -4,7 +4,7 @@
 // posture and the audit trail survive a reload, so the simulator behaves like a
 // real, stateful control plane rather than a toy that resets on refresh.
 
-import { openDB, type IDBPDatabase } from "idb";
+import { type IDBPDatabase, openDB } from "idb";
 import type { AuditEntry } from "./engine";
 import type { Posture } from "./model";
 

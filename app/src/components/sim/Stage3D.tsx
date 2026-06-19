@@ -1,8 +1,8 @@
 import * as React from "react";
 import "./stage.css";
-import type { CellKind } from "@/sim/model";
-import { stateColorVar, type State } from "@/sim/state";
 import type { ResourceView } from "@/sim/engine";
+import type { CellKind } from "@/sim/model";
+import { type State, stateColorVar } from "@/sim/state";
 
 const GW = 760;
 const GH = 520;
@@ -13,8 +13,22 @@ const CELL_LABEL: Record<CellKind, string> = { edge: "EDGE", app: "APP", data: "
 
 type Pt = { x: number; y: number };
 
+function nodeLabel(r: ResourceView): string {
+  if (r.lifecycle === "job") return "JOB";
+  if (r.lifecycle === "external") return "SAAS";
+  return CELL_LABEL[r.cell];
+}
+
+function nodeSub(r: ResourceView): string {
+  if (r.lifecycle === "job") return "nightly";
+  if (r.lifecycle === "external") return "observe-only";
+  return `${r.size}${r.cell === "app" ? ` ·${r.replicas}×` : ""}`;
+}
+
 function pulse(state: State) {
-  return state === "Converging" || state === "Degraded" || state === "Drifted";
+  return (
+    state === "Converging" || state === "Degraded" || state === "Drifted" || state === "Running"
+  );
 }
 
 export default function Stage3D({
@@ -34,7 +48,7 @@ export default function Stage3D({
   const regions = React.useMemo(() => [...new Set(resources.map((r) => r.region))], [resources]);
 
   // Lay out region frames and node centers on the ground plane.
-  const { frames, nodes, centers } = React.useMemo(() => {
+  const { frames, nodes } = React.useMemo(() => {
     const R = Math.max(1, regions.length);
     const rw = (GW - 2 * PAD - (R - 1) * GAP) / R;
     const rh = GH - 2 * PAD;
@@ -45,7 +59,6 @@ export default function Stage3D({
       w: rw,
       h: rh,
     }));
-    const centers = new Map<string, Pt>();
     const nodes = resources.map((r) => {
       const fi = regions.indexOf(r.region);
       const f = frames[fi];
@@ -54,10 +67,9 @@ export default function Stage3D({
       const span = 84;
       const cx = f.x + f.w / 2 + (idx - (peers.length - 1) / 2) * span;
       const cy = f.y + f.h * CELL_Y[r.cell];
-      centers.set(r.id, { x: cx, y: cy });
       return { r, cx, cy };
     });
-    return { frames, nodes, centers };
+    return { frames, nodes };
   }, [resources, regions]);
 
   // Weave edges: edge→app→data within a region; replication across regions.
@@ -83,7 +95,7 @@ export default function Stage3D({
       });
     }
     return out;
-  }, [nodes, regions, centers]);
+  }, [nodes, regions]);
 
   const onPointerDown = (e: React.PointerEvent) => {
     dragging.current = true;
@@ -163,8 +175,8 @@ export default function Stage3D({
                 }}
               >
                 <div className="accent" />
-                <div className="kind">{CELL_LABEL[r.cell]}</div>
-                <div className="nm">{r.size}{r.cell === "app" ? ` ·${r.replicas}×` : ""}</div>
+                <div className="kind">{nodeLabel(r)}</div>
+                <div className="nm">{nodeSub(r)}</div>
               </div>
               <div className="led" />
               {isFrozen && <div className="badge3d">🔒</div>}

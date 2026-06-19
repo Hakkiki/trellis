@@ -1,7 +1,7 @@
-// Core domain types for the Trellis simulator. A faithful TypeScript mirror of
-// the Go reference spine (../../../model), so the showcase and the reference
-// cannot silently diverge. Provider-neutral by design (spec §15): kinds name
-// what a resource is *for*, never a provider resource type.
+// Core domain types for the Trellis simulator. The source of truth is the
+// specification in docs/ (a living document, still being refined); these types
+// implement it. Provider-neutral by design (spec §15): kinds name what a
+// resource is *for*, never a provider resource type.
 
 export type Generation = number;
 export type Kind = string;
@@ -13,12 +13,24 @@ export type Health = "Healthy" | "Degraded" | "Unknown";
 /** A trust/placement cell inside a Frame (spec §3, §6). */
 export type CellKind = "edge" | "app" | "data";
 
+/**
+ * The lifecycle class of a workload (spec §1):
+ * - service  — long-running, reconcile-and-hold (desired = "N healthy replicas").
+ * - job      — finite, run-to-completion (a finished job is success, not drift).
+ * - external — third-party SaaS Trellis consumes but never provisions; observe-only.
+ */
+export type Lifecycle = "service" | "job" | "external";
+
+/** The terminal progression of a Job (spec §4). */
+export type JobPhase = "pending" | "running" | "succeeded" | "failed";
+
 /** The authored projection of a resource (spec §4): spec + the generation that authored it. */
 export interface DesiredResource {
   id: ResourceID;
   kind: Kind;
   spec: Spec;
   generation: Generation;
+  lifecycle: Lifecycle;
   // Showcase placement metadata (the Topology this resource occupies).
   service: string; // function tag — the owning Service (§6)
   region: string;
@@ -39,6 +51,7 @@ export interface Observation {
   health: Health;
   appliedGeneration: Generation;
   observedAtMs: number;
+  phase?: JobPhase; // for Job workloads
 }
 
 // ---- Posture (what a human declares, spec §2) -----------------------------

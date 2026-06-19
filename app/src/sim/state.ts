@@ -1,6 +1,5 @@
 // The Trellis State model (spec §4): state = f(desired, observed, health).
-// A pure, recomputable function — never stored as ground truth. Mirrors the Go
-// reference (../../../state).
+// A pure, recomputable function — never stored as ground truth.
 
 import { type DesiredResource, type Observation, specEqual } from "./model";
 
@@ -13,7 +12,12 @@ export type State =
   | "Drifted"
   | "Degraded"
   | "Stalled"
-  | "Frozen";
+  | "Frozen"
+  // Job lifecycle (terminal progression, §4)
+  | "Pending"
+  | "Running"
+  | "Succeeded"
+  | "Failed";
 
 export const ALL_STATES: State[] = [
   "Converged",
@@ -29,20 +33,49 @@ export const ALL_STATES: State[] = [
 export function stateColorVar(s: State): string {
   switch (s) {
     case "Converged":
+    case "Succeeded":
       return "var(--state-converged)";
     case "Converging":
+    case "Running":
       return "var(--state-converging)";
     case "Degraded":
       return "var(--state-degraded)";
     case "Drifted":
       return "var(--state-drifted)";
     case "Stalled":
+    case "Failed":
       return "var(--state-stalled)";
     case "Frozen":
       return "var(--state-frozen)";
+    case "Pending":
+      return "var(--state-unknown)";
     default:
       return "var(--state-unknown)";
   }
+}
+
+/** A Job's State is its terminal progression; completion is success, not drift. */
+function deriveJob(o: Observation): State {
+  if (!o.exists || !o.phase) return "Pending";
+  switch (o.phase) {
+    case "pending":
+      return "Pending";
+    case "running":
+      return "Running";
+    case "succeeded":
+      return "Succeeded";
+    case "failed":
+      return "Failed";
+  }
+}
+
+/** An External workload is observe-only: its State reflects the observed health,
+ *  and the reconciler never converges it. */
+function deriveExternal(o: Observation): State {
+  if (!o.exists) return "Unknown";
+  if (o.health === "Degraded") return "Degraded";
+  if (o.health === "Healthy") return "Converged";
+  return "Unknown";
 }
 
 function classifySync(
@@ -52,11 +85,7 @@ function classifySync(
   stalenessBudgetMs: number,
 ): Sync {
   if (!o.exists) return "Progressing"; // authored creation in flight
-  if (
-    stalenessBudgetMs > 0 &&
-    o.observedAtMs > 0 &&
-    nowMs - o.observedAtMs > stalenessBudgetMs
-  ) {
+  if (stalenessBudgetMs > 0 && o.observedAtMs > 0 && nowMs - o.observedAtMs > stalenessBudgetMs) {
     return "Unknown";
   }
   if (specEqual(o.spec, d.spec)) return "InSync";
@@ -77,6 +106,10 @@ export function derive(
   nowMs: number,
   stalenessBudgetMs: number,
 ): State {
+  // Jobs and External workloads have different lifecycles (§1, §4).
+  if (d.lifecycle === "job") return deriveJob(o);
+  if (d.lifecycle === "external") return deriveExternal(o);
+
   if (control === "Frozen") return "Frozen";
 
   const sync = classifySync(d, o, nowMs, stalenessBudgetMs);

@@ -1,5 +1,5 @@
-import * as React from "react";
 import { Menu } from "lucide-react";
+import * as React from "react";
 import { Button } from "@/components/ui/button";
 import {
   Sheet,
@@ -40,7 +40,7 @@ function isActive(href: string, path: string | null) {
   if (path === null) return false;
   const h = href.replace(/\/$/, "");
   if (h === BASE) return path === BASE || path === `${BASE}`;
-  return path === h || path.startsWith(h + "/");
+  return path === h || path.startsWith(`${h}/`);
 }
 
 export default function SiteNav() {

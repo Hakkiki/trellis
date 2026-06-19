@@ -35,6 +35,23 @@ timestamped for freshness) are two **projections** — not states themselves.
 | **Frozen** | reconciliation suspended (break-glass) — debt outstanding |
 | **Unknown** | observation stale/missing — *cannot assert* (fail-safe) |
 
+## Workload lifecycle classes
+
+Not everything is a reconcile-and-hold Service. A workload's **lifecycle class** changes how the loop
+treats it (spec §1):
+
+- **Service** — long-running, *reconcile-and-hold* (the states above). A failed node self-heals; an
+  unauthored change is drift.
+- **Job** — finite, *run-to-completion*: **Pending → Running → Succeeded / Failed**, then it re-runs on
+  schedule. **Reaching Succeeded is success, not drift** — the reconciler does not "repair" a finished
+  job back to running. (The closed reconcile loop mis-models batch work unless this is explicit.)
+- **External** — a third-party SaaS Trellis *consumes but never provisions*. It is **observe-only**: a
+  node in the dependency graph whose State is observed, never converged. If it degrades, Trellis surfaces
+  it but cannot remediate it.
+
+The [simulator](/trellis/simulator/) plans a Service together with a nightly **Job** and an **External**
+payments dependency, so you can watch all three behave differently under the same loop.
+
 ### Two non-obvious rules
 
 - **Progressing vs Drifted is decided by provenance, not gap size.** Desired state is versioned by

@@ -7,52 +7,40 @@ traceable to an explainable plan.
 
 > **Posture → planner → Structure → reconcile loop; manifest-driven; no magic.**
 
-The complete design is in [`docs/`](docs/) — start with [`docs/trellis-spec.md`](docs/trellis-spec.md).
-This repository is the build that grows from it.
+## Source of truth
 
-## Two things live here
+The **specification and docs in [`docs/`](docs/) are the source of truth** — start with
+[`docs/trellis-spec.md`](docs/trellis-spec.md). It is a **living document**: it has not necessarily
+reached final form, and it co-evolves with the simulator as we figure things out. When the simulator and
+the spec disagree, the spec wins — and when the simulator teaches us something, the spec gets updated.
 
-| Path | What | Stack |
-|---|---|---|
-| [`app/`](app/) | The **full-blown simulator + docs site** (deploys to GitHub Pages). Declare a posture, approve a plan, watch the reconciler heal — all client-side, IndexedDB-backed. | Astro · Starlight · shadcn/ui · Tailwind v4 · TypeScript |
-| [`model/`, `state/`, `provider/`, `reconcile/`](model/) | The **Go reference spine** — the canonical reconcile semantics with tests proving them. | Go |
+## The simulator ([`app/`](app/))
 
-The TypeScript engine in `app/src/sim/` is a **faithful mirror** of the Go reference, so the showcase
-and the canonical implementation cannot silently diverge. Run `cd app && npm install && npm run dev` for
-the simulator, or `go test ./...` for the reference.
+A full-blown, **client-side simulator + documentation site** that deploys to GitHub Pages — no backend.
+Declare a posture, read the plan's proof, approve it, then watch the reconcile loop converge and
+self-heal as you inject drift, failures, outages, and break-glass.
 
-## The strategy: one core, simulated first, then real
+- **Live:** https://hakkiki.github.io/trellis/
+- **Stack:** Astro · Starlight (docs) · shadcn/ui · Tailwind v4 · TypeScript · IndexedDB
+- **Run it:** `cd app && npm install && npm run dev` · **Test:** `npm run test` · **Build:** `npm run build`
 
-The whole codebase is organized around a single seam — the **provider port**
-([`provider/provider.go`](provider/provider.go)). The control loop (state model, reconciler, and
-later the planner and gate) is written **once, provider-neutral**, and talks only to that port.
+The cloud is *simulated* but the **dynamics are real** (apply latency, node failure, out-of-band drift,
+stale telemetry). The engine is organized around a single seam — the **provider port**
+([`app/src/sim/provider.ts`](app/src/sim/provider.ts), spec §15): the control loop talks only to a
+`Provider`, so the same loop that drives the in-memory `SimCloud` today could later drive a real cloud.
 
-- The **simulator** is a `Provider` backed by an in-memory fake cloud
-  ([`provider/sim`](provider/sim)) whose *dynamics are real* — apply latency, failures, drift, stale
-  telemetry.
-- The **real platform** is the *same* loop driving a future `aws` provider against a real cloud.
+## What the simulator covers today
 
-That is what "a simulator that can turn into the real thing" means concretely: you don't rewrite the
-core to go from demo to production — you implement one more provider behind the port. See
-[`ARCHITECTURE.md`](ARCHITECTURE.md), including how the browser UI and GitHub Pages fit.
+- **Posture → plan that is a proof** — a deterministic planner that solves the objective program
+  (minimize-cost / maximize-resilience within budget), with Governance as a hard pre-filter and loud
+  failure on the binding constraint.
+- **The gate** — approve = mint a scoped credential (audited).
+- **The reconcile loop** — `state = f(desired, observed, health)`, provenance-based drift, self-heal,
+  fail-safe on Unknown, break-glass freeze/ratify, and a circuit breaker that trips to Stalled with an
+  incident surface.
+- **Workload archetypes** — Service (reconcile-and-hold), Job (run-to-completion), External (observe-only).
+- **Transitions** — re-plan/re-approve rolls out as expand-contract.
+- **Promotion** — an immutable version advancing dev → staging → prod, re-planned per environment.
+- **A CSS-3D topology**, FinOps view, audit trail, and click-through proof.
 
-## What's built so far — the reconcile spine (spec §20, step 1)
-
-```
-go test ./...      # state derivation, drift detection, self-heal, fail-safe, break-glass
-go run ./cmd/trellisctl   # watch the loop converge, correct drift, and self-heal in the terminal
-```
-
-| Package | Role |
-|---|---|
-| [`model`](model) | core domain types — desired/observed projections, manifest, generations |
-| [`state`](state) | the State model: `state = f(desired, observed, health)`, derived, never stored (§4) |
-| [`provider`](provider) | the capability-contract port (§15) — the sim↔real seam |
-| [`provider/sim`](provider/sim) | the simulated cloud with real dynamics |
-| [`reconcile`](reconcile) | the continuous converge-toward-desired loop (§9); Converge only, never Author |
-| [`cmd/trellisctl`](cmd/trellisctl) | terminal driver for the spine |
-
-Invariants honored already: determinism (pure derivation), *desired state changes only through Author*
-(the reconciler never invents desired state), provenance-based drift detection, fail-safe on Unknown,
-and break-glass freeze. See [`ARCHITECTURE.md`](ARCHITECTURE.md) for the full roadmap against the
-spec's §20 build sequence.
+See [`ARCHITECTURE.md`](ARCHITECTURE.md) for how it's organized and what's still missing.

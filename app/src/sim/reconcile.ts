@@ -1,10 +1,10 @@
 // The reconcile loop (spec §9): observe → derive State → converge gaps within
 // the approved envelope. Converge actions ONLY — it never mutates desired state
-// (that is the Author class). Mirrors the Go reference (../../../reconcile).
+// (that is the Author class).
 
-import type { Manifest, ResourceID, Health } from "./model";
+import type { Health, Manifest, ResourceID } from "./model";
 import type { Provider } from "./provider";
-import { derive, type Control, type State } from "./state";
+import { type Control, derive, type State } from "./state";
 
 export type DriftPolicy = "enforce" | "warn" | "ignore";
 export type Action = "none" | "apply" | "delete" | "hold" | "warn";
@@ -68,9 +68,53 @@ export class Reconciler {
     const out: Status[] = [];
 
     for (const [id, d] of Object.entries(m.resources)) {
-      const o =
-        byId.get(id) ??
-        { id, exists: false, spec: {}, health: "Unknown" as Health, appliedGeneration: 0, observedAtMs: 0 };
+      const o = byId.get(id) ?? {
+        id,
+        exists: false,
+        spec: {},
+        health: "Unknown" as Health,
+        appliedGeneration: 0,
+        observedAtMs: 0,
+      };
+
+      // External: observe-only — the reconciler never converges it (§1).
+      if (d.lifecycle === "external") {
+        const st = derive(d, o, "Settled", nowMs, this.stalenessBudgetMs);
+        out.push({
+          id,
+          state: st,
+          health: o.health,
+          action: "none",
+          reason:
+            st === "Degraded"
+              ? "external dependency degraded — observe-only, cannot remediate"
+              : "external SaaS — observed only",
+        });
+        continue;
+      }
+
+      // Job: run-to-completion. Launch it once; then hold — reaching succeeded
+      // is success, not drift, and the sim re-runs it on schedule.
+      if (d.lifecycle === "job") {
+        const st = derive(d, o, "Settled", nowMs, this.stalenessBudgetMs);
+        const sj: Status = { id, state: st, health: o.health, action: "none", reason: "" };
+        if (!o.exists) {
+          this.p.apply(d);
+          sj.action = "apply";
+          sj.reason = "launching job";
+        } else if (st === "Succeeded") {
+          sj.reason = "completed — success, not drift";
+        } else if (st === "Running") {
+          sj.reason = "run in progress";
+        } else if (st === "Failed") {
+          sj.reason = "run failed — will retry on schedule";
+        } else {
+          sj.reason = "scheduled — pending";
+        }
+        out.push(sj);
+        continue;
+      }
+
       const control: Control = this.frozen.has(id)
         ? "Frozen"
         : this.stalled.has(id)
@@ -142,7 +186,13 @@ export class Reconciler {
       for (const o of obs) {
         if (m.resources[o.id] || !o.exists || this.frozen.has(o.id)) continue;
         this.p.delete(o.id);
-        out.push({ id: o.id, state: "Drifted", health: o.health, action: "delete", reason: "not in desired state — retiring" });
+        out.push({
+          id: o.id,
+          state: "Drifted",
+          health: o.health,
+          action: "delete",
+          reason: "not in desired state — retiring",
+        });
       }
     }
 

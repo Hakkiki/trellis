@@ -61,11 +61,7 @@
   transform-origin: 0 50%;
   border-radius: 2px;
   opacity: 0.5;
-  background: repeating-linear-gradient(
-    90deg,
-    var(--wc, #4fa8da) 0 7px,
-    transparent 7px 15px
-  );
+  background: repeating-linear-gradient(90deg, var(--wc, #4fa8da) 0 7px, transparent 7px 15px);
   background-size: 15px 100%;
   animation: stage-flow 1.3s linear infinite;
 }
@@ -86,8 +82,7 @@
   height: 56px;
   margin: -28px 0 0 -39px;
   transform-style: preserve-3d;
-  transform: translateZ(40px) rotateZ(calc(-1 * var(--grz)))
-    rotateX(calc(-1 * var(--grx)));
+  transform: translateZ(40px) rotateZ(calc(-1 * var(--grz))) rotateX(calc(-1 * var(--grx)));
 }
 .stage-node .face {
   position: absolute;
