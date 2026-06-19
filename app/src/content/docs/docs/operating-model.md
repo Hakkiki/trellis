@@ -53,6 +53,46 @@ the wrong grain when the goal is **blast-radius containment.**
   Never for something you split *because* of blast radius.
 - **Namespace**: not for this goal.
 
+## Trellis and Kubernetes: where the line is
+
+Kubernetes is the trickiest thing to "slice and manage," for one reason: **Kubernetes is itself a
+reconciler.** It has the same closed loop Trellis has — declared state in etcd, controllers driving
+reality to match, its own RBAC and god-write. So this is *a reconciler managing a reconciler*, and whether
+it works comes down entirely to **where you draw the line between the two loops.**
+
+Draw it like this:
+
+- **Trellis owns the cluster *as a resource*** — its existence, version, node groups, networking,
+  pod-identity (IRSA), and the platform add-ons (CNI, CSI, DNS, autoscaler, the GitOps agent). This is
+  infrastructure authority.
+- **Kubernetes owns what runs *inside*** — Deployments, pods, autoscaling, services. That's workload
+  runtime behavior, which Trellis deliberately leaves alone.
+
+Get that boundary right and it's clean: two loops, layered, each authoritative in its own domain. Get it
+wrong and you hit the classic failure of every "manage k8s from outside" tool — **two reconcilers
+fighting over the same object**, each undoing the other. The rule that prevents it: *Trellis stops at the
+cluster API and platform add-ons; in-cluster GitOps (Argo/Flux) owns workloads; they never overlap.*
+
+**Slice at the cluster, not the namespace.** A cluster's control plane, etcd, and upgrade are a shared
+fate for *everything in it* — so a namespace-per-division shares the cluster's loop and upgrade, which is
+the original single point of failure again. A **cluster-per-division** contains it. (On a managed service
+like EKS, AWS runs the control plane and etcd for you — so you don't operate quorum yourself, a real win.)
+
+The two honest costs:
+
+- **Cluster sprawl is the real tension.** N clusters means N node baselines, N add-on stacks, N upgrade
+  cadences — exactly the pressure that tempts teams back toward namespaces. Decide it by **Criticality**:
+  cluster-per-division where blast radius matters; smaller divisions *may* share a cluster with namespace
+  + network-policy isolation, **accepting the weaker guarantee on purpose.**
+- **Upgrades are where "infra only" blurs.** Kubernetes removes APIs every minor version, so a cluster
+  upgrade can break *workloads*, not just infrastructure. A safe canaried upgrade has to include a
+  deprecated-API check — which pokes into workload territory. It's the one genuinely messy seam; budget
+  for compat-gating in the upgrade transition. (And keep data *off* the cluster — managed databases, not
+  databases-on-k8s — so cluster churn never threatens state.)
+
+In one line: **Trellis manages the cluster; Kubernetes manages what's in it.** Slice at the cluster,
+govern the version and add-ons, and let the in-cluster loop own the workloads.
+
 ## Synchronous-only coupling is the healthy kind
 
 If divisions talk to each other only **synchronously** — request/response, no shared database, no shared

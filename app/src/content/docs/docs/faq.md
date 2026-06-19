@@ -211,7 +211,10 @@ pipeline that ships their code.
   apart.
 - **Kubernetes — a different layer.** Trellis provisions infrastructure; it isn't a workload scheduler. A
   cluster (or what runs on it) is something Trellis can stand up and govern, not something it replaces. Your
-  pods schedule on capacity Trellis maintains.
+  pods schedule on capacity Trellis maintains. Because Kubernetes is *itself* a reconciler, the boundary
+  matters: Trellis manages the cluster (version, nodes, add-ons); the in-cluster loop owns the workloads —
+  see [Trellis and Kubernetes](/trellis/docs/operating-model#trellis-and-kubernetes-where-the-line-is) for
+  where the line is and why you slice at the cluster, not the namespace.
 - **S3 — a capability, not a special case.** Object storage is one realization of the **Storage** bucket;
   on AWS that's S3, chosen by the planner from the catalog.
 - **Terraform — a possible actuator.** Trellis is provider-neutral at the vocabulary/Structure level and
