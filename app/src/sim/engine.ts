@@ -56,6 +56,8 @@ export interface EngineSnapshot {
   overBudget: boolean;
   converged: boolean;
   appliedGen: number;
+  changeFreeze: boolean;
+  blastTripped: boolean;
 }
 
 export const DEFAULT_POSTURE: Posture = {
@@ -71,7 +73,11 @@ export const DEFAULT_POSTURE: Posture = {
 
 export class Engine {
   private cloud = new SimCloud({ applyLatency: 2 });
-  private rec = new Reconciler(this.cloud, { driftPolicy: "enforce", stalenessBudgetMs: 5000 });
+  private rec = new Reconciler(this.cloud, {
+    driftPolicy: "enforce",
+    stalenessBudgetMs: 5000,
+    blastRadiusPct: 0.4,
+  });
   private gen = 0;
   private appliedGen = 0;
   private posture: Posture;
@@ -236,6 +242,30 @@ export class Engine {
     return this.rec.isFrozen(id);
   }
 
+  /** Temporal governance (§9): toggle a change-freeze / maintenance window. */
+  setChangeFreeze(on: boolean) {
+    this.rec.setChangeFreeze(on);
+    this.log(
+      "Author",
+      "operator",
+      on ? "change-freeze-on" : "change-freeze-off",
+      "environment",
+      on ? "non-emergency Converge actions held" : "freeze lifted; held changes resume",
+    );
+  }
+
+  /** Acknowledge the blast-radius breaker so the next pass proceeds (§9). */
+  acknowledgeBlast() {
+    this.rec.acknowledgeBlast();
+    this.log(
+      "Author",
+      "operator",
+      "ack-blast-radius",
+      "environment",
+      "blast-radius breaker overridden for one pass",
+    );
+  }
+
   // ---- Snapshot for the UI --------------------------------------------------
 
   snapshot(): EngineSnapshot {
@@ -272,6 +302,8 @@ export class Engine {
       overBudget: costNow > this.posture.budgetMonthly,
       converged: resources.length > 0 && resources.every(isSettled),
       appliedGen: this.appliedGen,
+      changeFreeze: this.rec.isChangeFreeze(),
+      blastTripped: this.rec.blastTripped(),
     };
   }
 

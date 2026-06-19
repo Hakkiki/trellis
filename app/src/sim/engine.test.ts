@@ -254,6 +254,42 @@ describe("circuit breaker + incidents", () => {
   });
 });
 
+describe("reconciler safety (§9)", () => {
+  it("change-freeze holds non-emergency changes until lifted", () => {
+    const e = new Engine(DEFAULT_POSTURE);
+    e.declare(DEFAULT_POSTURE);
+    e.approve();
+    for (let i = 0; i < 30 && !e.snapshot().converged; i++) e.tick();
+    const app = e.snapshot().resources.find((r) => r.lifecycle === "service" && r.cell === "app")!;
+
+    e.setChangeFreeze(true);
+    e.injectDrift(app.id);
+    for (let i = 0; i < 8; i++) e.tick();
+    // Drift detected but held, not corrected.
+    expect(e.snapshot().resources.find((r) => r.id === app.id)!.state).toBe("Drifted");
+    expect(e.snapshot().changeFreeze).toBe(true);
+
+    e.setChangeFreeze(false);
+    for (let i = 0; i < 20 && !e.snapshot().converged; i++) e.tick();
+    expect(e.snapshot().converged).toBe(true);
+  });
+
+  it("blast-radius breaker halts a mass remediation until acknowledged", () => {
+    const e = new Engine(DEFAULT_POSTURE);
+    e.declare(DEFAULT_POSTURE);
+    e.approve();
+    for (let i = 0; i < 30 && !e.snapshot().converged; i++) e.tick();
+
+    e.regionOutage("us-east-1");
+    e.tick();
+    expect(e.snapshot().blastTripped).toBe(true);
+
+    e.acknowledgeBlast();
+    for (let i = 0; i < 25 && !e.snapshot().converged; i++) e.tick();
+    expect(e.snapshot().converged).toBe(true);
+  });
+});
+
 describe("stateful clusters (quorum)", () => {
   const broker: DesiredResource = {
     id: "b",

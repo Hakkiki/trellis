@@ -261,6 +261,8 @@ export class SimCloud implements Provider {
   regionOutage(region: string): ResourceID[] {
     const hit: ResourceID[] = [];
     for (const [id, r] of this.res) {
+      // External SaaS is outside our failure domain; jobs are ephemeral.
+      if (r.lifecycle === "external" || r.lifecycle === "job") continue;
       if (r.region === region && r.exists) {
         r.health = "Degraded";
         if (r.lifecycle === "stateful") r.nodesDown = r.nodesTotal;

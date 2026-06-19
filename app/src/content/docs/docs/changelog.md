@@ -6,6 +6,16 @@ description: Recent changes to the Trellis simulator, newest first.
 What's shipped to the live simulator, newest first. The footer shows the exact build
 (date · commit) currently deployed.
 
+## Reconciler safety
+
+The reconciler now governs *when and how hard* it acts (spec §9):
+
+- **Change-freeze / maintenance window** — toggle a freeze and non-emergency Converge actions are held;
+  drift is recorded but not corrected. Break-glass still overrides per-resource.
+- **Blast-radius breaker** — if a single pass would remediate a large share of the fleet (e.g. a region
+  outage), it **halts and pages** instead of mass-stomping; an operator clicks **Proceed** to continue.
+- (Plus the existing flap breaker: a self-heal that never sticks trips to Stalled.)
+
 ## Stateful clusters
 
 The last **workload archetype**: a self-run **stateful broker** (a quorum cluster, distinct from the
