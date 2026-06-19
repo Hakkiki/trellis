@@ -31,6 +31,7 @@ export interface ResourceView {
   size: string;
   replicas: number;
   state: State;
+  detail?: string; // e.g. quorum "2/3 nodes" for stateful clusters
 }
 
 export type Phase = "empty" | "planned" | "applied";
@@ -238,7 +239,7 @@ export class Engine {
   // ---- Snapshot for the UI --------------------------------------------------
 
   snapshot(): EngineSnapshot {
-    const stById = new Map(this.statuses.map((s) => [s.id, s.state]));
+    const byId = new Map(this.statuses.map((s) => [s.id, s]));
     const resources: ResourceView[] = this.manifest
       ? Object.values(this.manifest.resources).map((r) => ({
           id: r.id,
@@ -249,7 +250,8 @@ export class Engine {
           lifecycle: r.lifecycle,
           size: r.spec.size,
           replicas: Number(r.spec.replicas ?? "1"),
-          state: stById.get(r.id) ?? "Unknown",
+          state: byId.get(r.id)?.state ?? "Unknown",
+          detail: byId.get(r.id)?.detail,
         }))
       : [];
     const costNow = this.manifest ? manifestCost(this.manifest) : 0;
@@ -297,6 +299,7 @@ function transitionNote(
 ): { verb: string; reason: string } | null {
   if (next === "Converged") return { verb: "converged", reason: "matches spec and healthy" };
   if (next === "Degraded") return { verb: "degraded", reason: "health check failed" };
+  if (next === "Unavailable") return { verb: "quorum-lost", reason: "minority of nodes serving" };
   if (next === "Drifted") return { verb: "drift-detected", reason: "unauthored divergence" };
   if (next === "Converging")
     return {

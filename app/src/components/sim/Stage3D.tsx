@@ -16,18 +16,24 @@ type Pt = { x: number; y: number };
 function nodeLabel(r: ResourceView): string {
   if (r.lifecycle === "job") return "JOB";
   if (r.lifecycle === "external") return "SAAS";
+  if (r.lifecycle === "stateful") return "BROKER";
   return CELL_LABEL[r.cell];
 }
 
 function nodeSub(r: ResourceView): string {
   if (r.lifecycle === "job") return "nightly";
   if (r.lifecycle === "external") return "observe-only";
+  if (r.lifecycle === "stateful") return r.detail ?? "quorum";
   return `${r.size}${r.cell === "app" ? ` ·${r.replicas}×` : ""}`;
 }
 
 function pulse(state: State) {
   return (
-    state === "Converging" || state === "Degraded" || state === "Drifted" || state === "Running"
+    state === "Converging" ||
+    state === "Degraded" ||
+    state === "Drifted" ||
+    state === "Running" ||
+    state === "Unavailable"
   );
 }
 

@@ -26,6 +26,7 @@ const DB_COST: Record<string, number> = { small: 150, medium: 400, large: 900 };
 const LB_COST = 25;
 const REPL_LINK_COST = 200;
 const JOB_COST = 80;
+const STATEFUL_NODE_COST = 90;
 
 const SIZE_FOR: Record<Criticality, string> = {
   C0: "large",
@@ -116,9 +117,11 @@ function buildCandidate(
     cost += (activeRegions.length - 1) * REPL_LINK_COST;
   }
 
-  // Every service carries two non-service workloads (§1): a nightly batch Job
-  // and an External SaaS dependency it consumes. Placed in the primary region.
+  // Every service carries three non-service workloads (§1), placed in the
+  // primary region: a nightly batch Job, an External SaaS dependency, and a
+  // self-run stateful broker (a quorum cluster).
   const r0 = activeRegions[0];
+  const brokerNodes = c === "C0" || c === "C1" ? 3 : 1;
   resources.push({
     id: `${svc}-batch-${r0}`,
     kind: "batch-job",
@@ -139,7 +142,17 @@ function buildCandidate(
     region: r0,
     cell: "edge",
   });
-  cost += JOB_COST; // external is consumed, not provisioned — no cost
+  resources.push({
+    id: `${svc}-events-${r0}`,
+    kind: "stream-broker",
+    spec: { region: r0, nodes: String(brokerNodes) },
+    generation: gen,
+    lifecycle: "stateful",
+    service: svc,
+    region: r0,
+    cell: "data",
+  });
+  cost += JOB_COST + brokerNodes * STATEFUL_NODE_COST; // external is consumed, not provisioned
 
   const levelRank = RES_LEVELS.indexOf(resilience);
   const score = levelRank * 1000 + activeRegions.length * 100 + headroom * 10 + (multiAZ ? 5 : 0);
@@ -258,6 +271,15 @@ export function plan(posture: Posture, gen: Generation): Plan {
       });
       continue;
     }
+    if (r.lifecycle === "stateful") {
+      proof.push({
+        resourceId: r.id,
+        claim: `stateful broker (${r.spec.nodes}-node quorum)`,
+        reason:
+          "self-run cluster (§1) — health rolls up by quorum; minority of nodes = Unavailable",
+      });
+      continue;
+    }
     if (r.cell === "app") {
       proof.push({
         resourceId: r.id,
@@ -317,6 +339,7 @@ export function manifestCost(m: Manifest): number {
   for (const r of Object.values(m.resources)) {
     if (r.lifecycle === "external") continue; // consumed, not provisioned
     if (r.lifecycle === "job") cost += JOB_COST;
+    else if (r.lifecycle === "stateful") cost += Number(r.spec.nodes ?? "1") * STATEFUL_NODE_COST;
     else if (r.cell === "app") cost += COMPUTE_COST[r.spec.size] * Number(r.spec.replicas ?? "1");
     else if (r.cell === "data") cost += DB_COST[r.spec.size] * (r.spec.multiAZ === "true" ? 2 : 1);
     else cost += LB_COST;

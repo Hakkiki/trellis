@@ -7,6 +7,7 @@ import {
   Cloud,
   Database,
   Eye,
+  Layers,
   Network,
   Server,
   ShieldAlert,
@@ -45,6 +46,7 @@ const ALL_SERVICES: { kind: Kind; label: string }[] = [
 function resourceIcon(r: ResourceView) {
   if (r.lifecycle === "job") return Clock;
   if (r.lifecycle === "external") return Cloud;
+  if (r.lifecycle === "stateful") return Layers;
   if (r.cell === "edge") return Network;
   if (r.cell === "data") return Database;
   return Server;
@@ -53,6 +55,7 @@ function resourceIcon(r: ResourceView) {
 function resourceSub(r: ResourceView) {
   if (r.lifecycle === "job") return "batch-job · nightly";
   if (r.lifecycle === "external") return "external SaaS · observe-only";
+  if (r.lifecycle === "stateful") return `stateful broker · ${r.detail ?? "quorum"}`;
   return `${r.kind} · ${r.size}${r.cell === "app" ? ` · ${r.replicas}×` : ""}`;
 }
 
@@ -591,7 +594,8 @@ function ResourceCard({
     r.state === "Converging" ||
     r.state === "Degraded" ||
     r.state === "Drifted" ||
-    r.state === "Running";
+    r.state === "Running" ||
+    r.state === "Unavailable";
   return (
     <button
       onClick={onSelect}

@@ -22,6 +22,7 @@ export interface Status {
   health: Health;
   action: Action;
   reason: string;
+  detail?: string; // e.g. quorum "2/3 nodes" for stateful clusters
 }
 
 export class Reconciler {
@@ -125,7 +126,7 @@ export class Reconciler {
       // Circuit breaker (§9): a resource that keeps failing self-heal flaps,
       // then trips to Stalled — the reconciler stops retrying into a crash-loop
       // and escalates to a human.
-      if (st === "Degraded") {
+      if (st === "Degraded" || st === "Unavailable") {
         const n = (this.attempts.get(id) ?? 0) + 1;
         this.attempts.set(id, n);
         if (n > this.flapThreshold) {
@@ -138,6 +139,7 @@ export class Reconciler {
       }
 
       const s: Status = { id, state: st, health: o.health, action: "none", reason: "" };
+      if (o.quorum) s.detail = `${o.quorum.healthy}/${o.quorum.total} nodes`;
 
       switch (st) {
         case "Converged":
@@ -152,6 +154,11 @@ export class Reconciler {
           this.p.apply(d);
           s.action = "apply";
           s.reason = "self-heal: unhealthy, re-provisioning";
+          break;
+        case "Unavailable":
+          this.p.apply(d);
+          s.action = "apply";
+          s.reason = "quorum lost — restoring nodes";
           break;
         case "Drifted":
           if (this.driftPolicy === "enforce") {

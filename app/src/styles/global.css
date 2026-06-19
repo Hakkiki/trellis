@@ -54,6 +54,7 @@
   --state-degraded: oklch(0.78 0.14 85);
   --state-drifted: oklch(0.68 0.13 300);
   --state-stalled: oklch(0.63 0.17 18);
+  --state-unavailable: oklch(0.5 0.19 12);
   --state-frozen: oklch(0.62 0.01 70);
   --state-unknown: oklch(0.55 0.01 70);
 }
@@ -86,6 +87,7 @@
   --color-degraded: var(--state-degraded);
   --color-drifted: var(--state-drifted);
   --color-stalled: var(--state-stalled);
+  --color-unavailable: var(--state-unavailable);
   --color-frozen: var(--state-frozen);
   --color-unknown: var(--state-unknown);
 }
