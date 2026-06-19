@@ -7,6 +7,14 @@ The simulator deploys continuously from `main`, so entries are grouped by date r
 
 ### Added
 
+- **Spec promotions** — three decisions that had been living as applied-decision pages are now folded
+  into the **normative specification** (canonical `docs/trellis-spec.md` and the site mirror, kept
+  byte-identical): (1) **control-plane partitioning** — the enforcer is not exempt; anything with
+  standing write is sliced to the containment boundary, with a new **Invariant 10**; (2) the
+  **Kubernetes boundary** — Trellis owns the cluster as a resource, the in-cluster GitOps loop owns
+  workloads, slice at the cluster not the namespace (§6); (3) the control plane keeps **no consensus
+  store of its own** — desired state in Git, audit external, live State derived (§12/§18). Promoted
+  maker/checker; recorded in §21 provenance.
 - **Docs split into three genres** to reduce cognitive load and keep the story coherent: a *narrative*
   (the case / use case), the *model* (concept primers), *applied decisions* (operating model, bootstrap,
   crosswalk, architecture), and the *normative specification* (the source of truth). The sidebar is

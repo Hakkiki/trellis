@@ -735,6 +735,32 @@ isolation domain. A shared C0 dependency stays *shared*, isolated **as its own u
 protection — never duplicated per consumer. (This separates the two meanings the dimension carries:
 "more protection" up the dependency graph, and "more separation" via the `isolation` knob, are distinct.)
 
+### Slicing Kubernetes — the boundary between two reconcilers
+
+Kubernetes is the one substrate that is **itself a reconciler**: a closed loop with declared state in
+etcd, controllers converging reality, and its own RBAC and standing write. Trellis managing it is
+therefore a *reconciler managing a reconciler*, and correctness turns entirely on **where the line between
+the two loops falls**:
+
+- **Trellis owns the cluster *as a resource*** — its existence, version, node groups, networking,
+  pod-identity, and the platform add-ons (CNI, CSI, DNS, autoscaler, the in-cluster GitOps agent). This is
+  infrastructure authority, expressed in the normal Posture → plan → reconcile loop.
+- **Kubernetes owns what runs *inside*** — Deployments, pods, autoscaling, Services. Trellis **stops at
+  the cluster API and platform add-ons** and leaves workload runtime to the in-cluster loop (Argo/Flux).
+
+The rule is that **the two loops never address the same object** — violating it is the classic "two
+reconcilers fighting," each undoing the other; a defect, not a tuning choice.
+
+**Slice at the cluster, not the namespace.** A cluster's control plane, etcd, and upgrade cycle are a
+shared fate for everything in it, so a namespace-per-tenant re-creates the very shared single point of
+failure the isolation grain exists to remove — a cluster upgrade, etcd failure, or bad operator rollout
+takes all namespaces down at once. The **cluster is the unit of containment**; namespace + network-policy
+isolation is the weaker grain, chosen deliberately for density under low Criticality, never for
+blast-radius containment. The one honest seam: a Kubernetes upgrade removes APIs and can break
+*workloads*, not just infrastructure, so the cluster-upgrade transition (§10) must carry a deprecated-API
+compat gate — the point where "infra only" legitimately reaches into workload space. (Keep data off the
+cluster — managed stores, not databases-on-k8s — so cluster churn never threatens State.)
+
 ---
 
 ## 7. Authorization, execution, and the trusted computing base
@@ -1221,6 +1247,16 @@ The whole model assumes credentials already exist; the platform can't provision 
    (restored to a signed, externally-attested known-good generation — §7). Only the very first stand-up is
    manual.
 
+### Near-stateless — no consensus store of its own
+
+The control plane keeps **no quorum/consensus datastore of its own.** Desired state lives in external Git
+(generations are commit SHAs), the privileged-action record lives in the external append-only audit, and
+live State is **derived, not stored** (`state = f(desired, observed, health)`, §4) — recomputed from the
+provider on demand. The only standing stateful bit is a **trivial lock for reconciler leader-election**;
+secrets are *referenced*, never held (§18). This is a security property, not just efficiency: there is no
+snowflake consensus state to split-brain, corrupt, or lose — which is exactly what lets meta-DR be a
+**re-bootstrap** from the external seed + manifest repo + audit, not a database restore.
+
 ### Deployment: self-hosted first
 
 The control plane runs in a **customer-owned management account**, and the **trust root never leaves the
@@ -1370,6 +1406,30 @@ sealed root. Orgs mutate. Treat each change as a **first-class, gated, proof-car
   roots** (or migrates one under the other) as an explicit, gated trust-merge — the one deliberate
   relaxation of the single-root assumption.
 
+### Control-plane partitioning — the enforcer is not exempt
+
+A single control plane governing the whole org holds standing write across all of it — making it the
+**largest shared single point of failure**, and a bad self-upgrade to it a company-wide outage at the
+meta-level. **The control plane cannot be exempt from the containment rule it enforces.** So anything that
+holds standing write is **partitioned to the containment boundary**: each isolation domain (the
+containment grain of §6 — Criticality-driven, not fixed) runs its **own control-plane instance** — its own planner, gate,
+reconciler fleet (§18), desired-state store, and bootstrap (§12) — on its own upgrade cadence. Upgrading
+or losing one domain's control plane **cannot touch** another's. This is the §18 reconciler-fleet
+partition taken to the isolation boundary; the C0-self-environment and meta-DR properties (§12) hold per
+instance.
+
+What stays shared is constrained to surfaces that **cannot exert standing god-write**:
+
+- the **signed, versioned catalog** (§18) — pulled and version-pinned, promoted per domain on its own
+  schedule (§11), so a bad publish auto-deploys nowhere;
+- the **org root + Governance floor / guardrails** (Invariant 6, monotonic tightening) — the single-root
+  reality;
+- the **external append-only audit store** (§12, §14).
+
+Each is read-mostly, signed, versioned, and pulled — never a synchronous-fate dependency. That is the
+smallest shared blast radius compatible with central governance: **slice everything with standing write
+down to the boundary; share only what is signed, versioned, and pulled.**
+
 ---
 
 ## 17. Invariants
@@ -1404,6 +1464,11 @@ The non-negotiable rules a builder must preserve. A violation is a defect, not a
    dual-implementation parity is optional hardening); the audit of all privileged actions is written
    to an append-only store outside the system, and self-environment changes pass a higher gate than the
    ordinary merge.
+10. **The enforcer is not exempt.** Anything holding standing write is partitioned to the containment
+    boundary it serves — **including the control plane itself** (whose reconciler fleet is the
+    standing-write holder), which runs one instance per isolation domain on its own upgrade cadence (§16). The only cross-domain shared surfaces are signed-and-pulled
+    (the catalog), the org root / Governance floor, and the external audit; none may be a standing
+    god-write service.
 
 ---
 
@@ -1415,7 +1480,9 @@ The buildable components, their responsibilities, boundaries, and trust relation
   signed plan+proof; rungs 0–2 in v1), the **gate** (binds human approval to the signed plan), and the
   **audit emitter**. Holds *no* write credentials. Authenticates via workload identity. Independently
   verified / parity-checked (Invariant 9). The platform's own control plane is itself a C0 environment it
-  manages.
+  manages. Keeps **no consensus store of its own** — live State is derived (§4), the only standing
+  stateful bit a leader-election lock — and is **partitioned to the containment boundary** (one instance
+  per isolation domain; §16, Invariant 10).
 - **Mint authority (minimal, isolated).** Re-derives credential scope from the *signed manifest generation*
   — never consumes a scope the planner asserts — and mints the ephemeral, plan-scoped credential. The
   confused-deputy firewall between "what the proof says" and "what the actuator can do."
@@ -1525,6 +1592,11 @@ Other resolutions:
   standalone concept (their mechanisms differ; two dissimilar instances don't justify a category).
 - **Views scope-creep** — fenced in §13: Views is a projection layer, **not** a query engine or
   dashboarding tool; the *kind* is bounded, *which* views exist stays open.
+- **Control-plane partitioning, the Kubernetes boundary, and the no-consensus-store property** — folded in
+  from the operating-model and architecture decision pages: §16 + Invariant 10 (partition the control
+  plane to the containment boundary), §6 (slice Kubernetes at the cluster, not the namespace), and
+  §12 / §18 (the control plane keeps no consensus store of its own). Promotions from applied decisions to
+  normative spec.
 
 ---
 

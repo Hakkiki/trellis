@@ -6,6 +6,15 @@ description: Recent changes to the Trellis simulator, newest first.
 What's shipped to the live simulator, newest first. The footer shows the exact build
 (date · commit) currently deployed.
 
+## Three decisions promoted into the spec
+
+Three things that had been living as applied-decision pages are now part of the **normative
+specification**: **control-plane partitioning** (the enforcer is not exempt — anything with standing
+write is sliced to the containment boundary; new Invariant 10), the **Kubernetes boundary** (Trellis owns
+the cluster, the in-cluster GitOps loop owns the workloads; slice at the cluster, not the namespace), and
+the control plane keeping **no consensus store of its own** (desired state in Git, audit external, live
+State derived). Promoted maker/checker, and recorded in the spec's provenance.
+
 ## Docs, in three genres
 
 The documentation is now sorted into clear genres so it's obvious what each page *is*: the **narrative**
