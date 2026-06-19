@@ -63,6 +63,13 @@ export type Criticality = "C0" | "C1" | "C2" | "C3";
 export type Resilience = "active-active" | "active-passive" | "single";
 export type Optimize = "minimize-cost" | "maximize-resilience";
 
+/** A Service the environment owns (spec §6): a function tag + its own
+ *  Criticality, which drives sizing/replication independently of its peers. */
+export interface ServiceSpec {
+  name: string;
+  criticality: Criticality;
+}
+
 export interface Posture {
   intent: string;
   criticality: Criticality;
@@ -73,6 +80,16 @@ export interface Posture {
   compliance: string[];
   /** Governance service whitelist — the resource kinds permitted (§2, hard). */
   governanceServices: Kind[];
+  /** The Services this environment owns (§6). When absent (legacy session), a
+   *  single Service is synthesized from intent + criticality. */
+  services?: ServiceSpec[];
+}
+
+/** The effective Service list: explicit `services`, or a single Service
+ *  synthesized from the legacy `intent` + `criticality` fields. */
+export function servicesOf(p: Posture): ServiceSpec[] {
+  if (p.services?.length) return p.services;
+  return [{ name: p.intent, criticality: p.criticality }];
 }
 
 // ---- Plan + proof (the planner's output, spec §5) -------------------------

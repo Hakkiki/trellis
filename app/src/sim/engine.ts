@@ -4,8 +4,18 @@
 // provider, and the Reconciler, and records an audit trail (the §7 duality:
 // every action emits a record of who/why).
 
-import type { CellKind, Lifecycle, Manifest, Plan, Posture, Resilience, ResourceID } from "./model";
-import { manifestCost, resourceCost, plan as runPlanner } from "./planner";
+import {
+  type CellKind,
+  type Criticality,
+  type Lifecycle,
+  type Manifest,
+  type Plan,
+  type Posture,
+  type Resilience,
+  type ResourceID,
+  servicesOf,
+} from "./model";
+import { manifestCost, resourceCost, plan as runPlanner, serviceSlug } from "./planner";
 import { Reconciler, type Status } from "./reconcile";
 import { SimCloud } from "./sim";
 import { rollup, type State } from "./state";
@@ -60,8 +70,19 @@ export interface EngineSnapshot {
   changeFreeze: boolean;
   blastTripped: boolean;
   regionRollups: { region: string; state: State }[];
+  serviceRollups: ServiceRollup[];
   envRollup: State;
   envNote: string;
+}
+
+/** Ownership roll-up (§6): a Service's state (worst-of its managed children) and
+ *  the spend that attributes to it — the read-side of the Service → org tree. */
+export interface ServiceRollup {
+  service: string; // display name
+  slug: string;
+  criticality: Criticality;
+  state: State;
+  monthlyCost: number;
 }
 
 export const DEFAULT_POSTURE: Posture = {
@@ -69,10 +90,16 @@ export const DEFAULT_POSTURE: Posture = {
   criticality: "C0",
   resilience: "active-active",
   regions: ["us-east-1", "eu-west-1"],
-  budgetMonthly: 8000,
+  budgetMonthly: 12000,
   optimize: "minimize-cost",
   compliance: ["pci-dss", "soc2"],
   governanceServices: ["load-balancer", "compute", "managed-relational-db"],
+  // The environment owns two Services at different Criticality — spend and
+  // health attribute to each owner up the tree (§6).
+  services: [
+    { name: "payments-api", criticality: "C0" },
+    { name: "internal-dashboard", criticality: "C3" },
+  ],
 };
 
 export class Engine {
@@ -307,6 +334,20 @@ export class Engine {
     }));
     const envRollup = rollup(regionRollups.map((r) => r.state));
     const envNote = environmentNote(this.posture.resilience, regionRollups);
+
+    // Ownership roll-up (§6): state + spend attribute to each owning Service.
+    const serviceRollups: ServiceRollup[] = servicesOf(this.posture).map((s) => {
+      const sl = serviceSlug(s.name);
+      const own = resources.filter((r) => r.service === sl);
+      const ownManaged = own.filter((r) => r.lifecycle === "service" || r.lifecycle === "stateful");
+      return {
+        service: s.name,
+        slug: sl,
+        criticality: s.criticality,
+        state: rollup(ownManaged.map((r) => r.state)),
+        monthlyCost: own.reduce((sum, r) => sum + r.monthlyCost, 0),
+      };
+    });
     return {
       tMs: this.cloud.now(),
       phase,
@@ -323,6 +364,7 @@ export class Engine {
       changeFreeze: this.rec.isChangeFreeze(),
       blastTripped: this.rec.blastTripped(),
       regionRollups,
+      serviceRollups,
       envRollup,
       envNote,
     };

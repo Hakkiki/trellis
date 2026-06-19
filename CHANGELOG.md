@@ -7,6 +7,13 @@ The simulator deploys continuously from `main`, so entries are grouped by date r
 
 ### Added
 
+- **Multi-service & ownership (§6)**: an environment now owns **several Services**, each with its own
+  Criticality (e.g. a C0 `payments-api` beside a C3 `internal-dashboard`), sharing one budget. The
+  planner solves the **shared-budget objective across Services** — floor each, then greedily upgrade by
+  score until the budget is spent. State and spend **attribute up the Service → environment tree**: a new
+  **Owners** tab shows each owner's roll-up state, $/mo, and share of budget, and the 3D stage wires each
+  Service's tier chain independently. The Posture editor manages the Service list (add/remove, per-service
+  Criticality). Legacy single-service sessions are synthesized from the old intent/criticality.
 - **Topology Views (§13)**: a `state · cost · health` lens toggle that recolors the same Structure —
   State reads the lifecycle, Cost is a $/mo heatmap (cheap→costly, anchored to the fleet max, with
   per-card $ labels), Health collapses the lifecycle into healthy / degraded / at-risk / unknown. The

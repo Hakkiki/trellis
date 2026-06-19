@@ -6,6 +6,20 @@ description: Recent changes to the Trellis simulator, newest first.
 What's shipped to the live simulator, newest first. The footer shows the exact build
 (date · commit) currently deployed.
 
+## Multi-service & ownership
+
+An environment now owns **more than one Service** (spec §6), each with its own **Criticality** — a C0
+`payments-api` next to a C3 `internal-dashboard`, sharing one budget:
+
+- **The planner solves across Services** — it floors every Service at its cheapest realization meeting
+  the declared resilience, then (maximize-resilience) greedily upgrades by score-per-dollar until the
+  **shared budget** is spent.
+- **State and spend attribute up the tree** — a new **Owners** tab shows each Service's roll-up state,
+  monthly cost, and share of budget, summing to the environment total. Fail one Service and only its
+  owner reddens; its peer is untouched.
+- **The Posture editor manages the Service list** (add/remove, per-service Criticality), and the 3D
+  stage wires each Service's edge→app→data chain independently so the topology stays legible.
+
 ## Topology Views
 
 The topology now has a **`state · cost · health`** lens toggle (spec §13) — the same Structure, recolored
