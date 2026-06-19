@@ -9,3 +9,26 @@
   --sl-color-accent: #9a7320;
   --sl-color-accent-high: #4a3a12;
 }
+
+/* Mermaid diagrams — colours come from the themed runtime (mermaid-runtime.ts);
+   this is the on-brand panel they sit in, plus the pre-render fallback. */
+.mermaid {
+  margin: 1.75rem auto;
+  padding: 1rem 1.25rem;
+  border: 1px solid color-mix(in oklab, var(--sl-color-accent) 26%, var(--sl-color-gray-5));
+  border-radius: 0.75rem;
+  background: color-mix(in oklab, var(--sl-color-accent) 4%, var(--sl-color-bg));
+  overflow-x: auto;
+  text-align: center;
+  line-height: normal;
+}
+/* Hide the raw source until the runtime has rendered the SVG (avoid a flash). */
+.mermaid:not([data-processed]) {
+  color: transparent;
+  min-height: 3rem;
+}
+.mermaid svg {
+  max-width: 100%;
+  height: auto;
+}
+

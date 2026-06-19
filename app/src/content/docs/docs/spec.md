@@ -10,7 +10,8 @@ tableOfContents:
 > spec wins. Decisions made elsewhere on the site are folded back here over time.
 
 :::note
-Diagrams are written in Mermaid; they render on GitHub and in the source. Source: `docs/trellis-spec.md`.
+Diagrams are written in Mermaid and render inline here (themed to brand), on GitHub, and in the source.
+Source: `docs/trellis-spec.md`.
 :::
 
 

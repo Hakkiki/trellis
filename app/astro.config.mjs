@@ -3,6 +3,7 @@
 import react from "@astrojs/react";
 import starlight from "@astrojs/starlight";
 import { defineConfig } from "astro/config";
+import remarkMermaid from "./src/lib/remark-mermaid.mjs";
 
 // GitHub Pages: served from https://hakkiki.github.io/trellis
 const SITE = "https://hakkiki.github.io";
@@ -11,6 +12,8 @@ const BASE = "/trellis";
 export default defineConfig({
   site: SITE,
   base: BASE,
+  // Render ```mermaid fences as diagrams (themed client-side in Head.astro).
+  markdown: { remarkPlugins: [remarkMermaid] },
   integrations: [
     react(),
     starlight({
@@ -73,6 +76,10 @@ export default defineConfig({
         },
       ],
       customCss: ["./src/styles/starlight.css"],
+      components: {
+        // Boot the themed Mermaid runtime from the document head.
+        Head: "./src/components/Head.astro",
+      },
     }),
   ],
 });
