@@ -1,3 +1,13 @@
+# Go
 /trellisctl
 *.wasm
+
+# Node / Astro
+app/node_modules/
+app/dist/
+app/.astro/
+app/.vite/
+node_modules/
+
+# misc
 .DS_Store

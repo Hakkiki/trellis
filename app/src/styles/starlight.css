@@ -1,0 +1,11 @@
+/* Brand tint for the Starlight docs (warm gold accent). */
+:root {
+  --sl-color-accent-low: #2b2008;
+  --sl-color-accent: #c8a040;
+  --sl-color-accent-high: #e6cf94;
+}
+:root[data-theme="light"] {
+  --sl-color-accent-low: #f3e7c4;
+  --sl-color-accent: #9a7320;
+  --sl-color-accent-high: #4a3a12;
+}

@@ -46,47 +46,39 @@ A non-negotiable corollary (spec, "How to read this"): the Frame/Cell/Resource g
 | `reconcile` | The **reconcile loop**: observe → derive state → converge gaps within the envelope. **Converge actions only** — never Author. | §7, §9 |
 | `cmd/trellisctl` | Terminal driver for the spine. | §20 step 1 |
 
-## Three deployment targets, one core
+## Two implementations, one model
 
-The same Go core compiles to three places — this is the answer to "Go is a backend, the simulator is a
-UI, how does that fit GitHub Pages?"
+The reconcile semantics are written twice — on purpose — and kept faithful to each other:
 
-| Target | Build | Where it runs | Purpose |
+| Implementation | Stack | Where it runs | Purpose |
 |---|---|---|---|
-| **CLI** | `go build ./cmd/trellisctl` | a dev terminal | tests, demos, the spine driver (today) |
-| **Browser / WASM** | `GOOS=js GOARCH=wasm` | static page (GitHub Pages) | the **public simulator UI**, powered by the *real* core |
-| **Native server** | `go build` (server cmd, later) | customer's management account | the **production control plane** against `provider/aws` |
+| **Reference spine** | Go (`model/ state/ provider/ reconcile/`) | CLI / `go test` | the canonical semantics, with tests proving them |
+| **Simulator engine** | TypeScript (`app/src/sim/`) | the browser (GitHub Pages) | the full-blown interactive showcase |
+| **Production control plane** | the model driving a real provider | a customer account | *later* — the real thing |
 
-### How the UI and GitHub Pages fit
+The TypeScript engine mirrors the Go reference line-for-line in behavior: the same
+`state = f(desired, observed, health)`, the same provenance-based drift rule, the same converge logic.
+Both are tested. The point of keeping the Go reference is fidelity — a place where the semantics are
+pinned independently of the UI.
 
-The "simulator" is two different things that were worth separating:
+### Why this fits GitHub Pages
 
-1. **The behavioral/UX simulator** — the existing [`docs/sim/index.html`](docs/sim/index.html): a
-   browser visualization (the **Experience** axis of the spec — the operator's view). This is what
-   belongs on GitHub Pages: a static page, no server.
-2. **The simulation *core*** — the Go reconcile loop + `provider/sim`. This is the part that "turns
-   into the real thing."
+The "simulator" is two things worth separating:
 
-They connect without ever needing a server behind GitHub Pages, via **Go → WebAssembly**:
+1. **The simulator UI** — the Astro + shadcn React app in `app/`. The **Experience** axis (operator's
+   view). Static; belongs on Pages.
+2. **The simulation engine** — `app/src/sim/`. Runs entirely client-side in TypeScript, with IndexedDB
+   for state. No backend.
 
-```
-   Go core (model + state + reconcile + provider/sim)
-        │  compiled with GOOS=js GOARCH=wasm
-        ▼
-   trellis-sim.wasm  ─────────────►  loaded by index.html on GitHub Pages
-        │  exposes step()/inject-drift()/fail-node() to JS
-        ▼
-   the CSS-3D UI renders the State/topology the *real* loop produces
-```
+Because the engine is TypeScript, it runs natively in the browser alongside shadcn/React and IndexedDB —
+no WASM marshaling, no server. The Astro build produces a static `dist/` that
+[`.github/workflows/deploy.yml`](.github/workflows/deploy.yml) publishes to Pages.
 
-So the browser simulator is driven by the **identical** reconcile loop and State derivation that will
-later run server-side against AWS — not a separate JavaScript reimplementation that can drift from the
-real behavior. GitHub Pages stays a plain static host (`index.html` + `.wasm` + assets); there is no
-backend to deploy. The current `docs/sim/index.html` is a hand-written behavioral mock; the next UI
-step is to swap its faked dynamics for calls into the WASM core, keeping its visuals.
+> IndexedDB maps onto the spec's stores: the **desired-state store** (Git, §11) and the **observed-state
+> history** (external append-only store, §14) — both realized in the browser so a session is durable.
 
-(For production the console is *not* on Pages — it talks to the native server over an API. Pages hosts
-the public, offline simulator only.)
+(For production the console is *not* on Pages — it talks to a real control plane over an API. Pages
+hosts the public, offline simulator only.)
 
 ## Build sequence (spec §20) — status
 

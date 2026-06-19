@@ -10,6 +10,17 @@ traceable to an explainable plan.
 The complete design is in [`docs/`](docs/) — start with [`docs/trellis-spec.md`](docs/trellis-spec.md).
 This repository is the build that grows from it.
 
+## Two things live here
+
+| Path | What | Stack |
+|---|---|---|
+| [`app/`](app/) | The **full-blown simulator + docs site** (deploys to GitHub Pages). Declare a posture, approve a plan, watch the reconciler heal — all client-side, IndexedDB-backed. | Astro · Starlight · shadcn/ui · Tailwind v4 · TypeScript |
+| [`model/`, `state/`, `provider/`, `reconcile/`](model/) | The **Go reference spine** — the canonical reconcile semantics with tests proving them. | Go |
+
+The TypeScript engine in `app/src/sim/` is a **faithful mirror** of the Go reference, so the showcase
+and the canonical implementation cannot silently diverge. Run `cd app && npm install && npm run dev` for
+the simulator, or `go test ./...` for the reference.
+
 ## The strategy: one core, simulated first, then real
 
 The whole codebase is organized around a single seam — the **provider port**
