@@ -16,7 +16,13 @@ export default defineConfig({
       title: "Trellis",
       description:
         "Posture → planner → Structure → reconcile loop. The interactive simulator and design docs.",
-      tagline: "Declare what you want; a reconciler keeps reality matching it.",
+      logo: {
+        light: "./src/assets/trellis-lockup.svg",
+        dark: "./src/assets/trellis-lockup-dark.svg",
+        replacesTitle: true,
+      },
+      favicon: "/favicon.svg",
+      social: [{ icon: "github", label: "GitHub", href: "https://github.com/hakkiki/trellis" }],
       disable404Route: true,
       pagefind: false,
       sidebar: [

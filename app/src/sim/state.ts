@@ -81,7 +81,11 @@ export function derive(
 
   const sync = classifySync(d, o, nowMs, stalenessBudgetMs);
 
-  if (control === "Stalled" && sync !== "InSync") return "Stalled";
+  // A reconciler that has given up (circuit breaker tripped) reports Stalled
+  // until the resource is genuinely Converged again (the breaker resets).
+  if (control === "Stalled") {
+    return sync === "InSync" && o.health === "Healthy" ? "Converged" : "Stalled";
+  }
   if (sync === "Unknown") return "Unknown";
 
   switch (sync) {

@@ -9,7 +9,9 @@ import {
   Network,
   Server,
   ShieldAlert,
+  Siren,
   Snowflake,
+  Wrench,
   Zap,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -22,15 +24,21 @@ import {
   Engine,
   type AuditEntry,
   type EngineSnapshot,
+  type Incident,
   type ResourceView,
 } from "@/sim/engine";
-import type { CellKind, Criticality, Posture, Resilience } from "@/sim/model";
+import type { CellKind, Criticality, Kind, Posture, Resilience } from "@/sim/model";
 import { ALL_STATES, stateColorVar, type State } from "@/sim/state";
 import { loadSession, saveSession } from "@/sim/store";
 import Stage3D from "./Stage3D";
 
 const ALL_REGIONS = ["us-east-1", "eu-west-1", "ap-south-1"];
 const CRITS: Criticality[] = ["C0", "C1", "C2", "C3"];
+const ALL_SERVICES: { kind: Kind; label: string }[] = [
+  { kind: "load-balancer", label: "load balancer" },
+  { kind: "compute", label: "compute" },
+  { kind: "managed-relational-db", label: "managed DB" },
+];
 
 function cellIcon(cell: CellKind) {
   if (cell === "edge") return Network;
@@ -215,6 +223,32 @@ export default function Simulator() {
               ]}
             />
           </Field>
+          <Field label="Governance — allowed services">
+            <div className="flex flex-wrap gap-1.5">
+              {ALL_SERVICES.map((s) => {
+                const on = form.governanceServices.includes(s.kind);
+                return (
+                  <button
+                    key={s.kind}
+                    onClick={() =>
+                      setForm({
+                        ...form,
+                        governanceServices: on
+                          ? form.governanceServices.filter((k) => k !== s.kind)
+                          : [...form.governanceServices, s.kind],
+                      })
+                    }
+                    className={cn(
+                      "rounded-md border px-2 py-1 text-[11px] transition",
+                      on ? "border-primary bg-primary/15 text-foreground" : "border-input text-muted-foreground line-through",
+                    )}
+                  >
+                    {s.label}
+                  </button>
+                );
+              })}
+            </div>
+          </Field>
           <div className="flex flex-col gap-2 pt-1">
             <Button onClick={onPlan} variant="secondary" className="w-full">
               Plan
@@ -306,6 +340,7 @@ export default function Simulator() {
               <EventButton icon={Eye} label="Inject drift" hint={sel?.id} onClick={() => sel && act((e) => e.injectDrift(sel.id))} />
               <EventButton icon={Zap} label="Region outage" hint={sel?.region} onClick={() => sel && act((e) => e.regionOutage(sel.region))} />
               <EventButton icon={CircleSlash} label="Telemetry loss" hint={sel?.id} onClick={() => sel && act((e) => e.setStale(sel.id, true))} />
+              <EventButton icon={Wrench} label="Hard failure" hint={sel?.id} onClick={() => sel && act((e) => e.hardFailure(sel.id))} />
               <EventButton
                 icon={engineRef.current && sel && engineRef.current.isFrozen(sel.id) ? Snowflake : ShieldAlert}
                 label={engineRef.current && sel && engineRef.current.isFrozen(sel.id) ? "Ratify (repay)" : "Break-glass"}
@@ -317,6 +352,14 @@ export default function Simulator() {
               />
             </CardContent>
           </Card>
+        )}
+
+        {phase === "applied" && (snap?.incidents.length ?? 0) > 0 && (
+          <IncidentSurface
+            incidents={snap!.incidents}
+            onResolve={(id) => act((e) => e.resolveIncident(id))}
+            onSelect={setSelected}
+          />
         )}
       </div>
 
@@ -332,7 +375,7 @@ export default function Simulator() {
               <TabsTrigger value="audit" className="flex-1">Audit</TabsTrigger>
             </TabsList>
             <TabsContent value="proof" className="mt-3">
-              <ProofPanel snap={snap} />
+              <ProofPanel snap={snap} selectedId={sel?.id ?? null} />
             </TabsContent>
             <TabsContent value="audit" className="mt-3">
               <AuditPanel audit={snap?.audit ?? []} />
@@ -490,15 +533,37 @@ function Legend() {
   );
 }
 
-function ProofPanel({ snap }: { snap: EngineSnapshot | null }) {
+function ProofPanel({ snap, selectedId }: { snap: EngineSnapshot | null; selectedId: string | null }) {
   const plan = snap?.plan;
   if (!plan) return <p className="text-muted-foreground text-xs">Plan a posture to see its proof.</p>;
+  const selRows = selectedId ? plan.proof.filter((r) => r.resourceId === selectedId) : [];
+  const selRes = selectedId ? snap?.resources.find((r) => r.id === selectedId) : null;
   return (
     <div className="space-y-3 text-xs">
       <div className="text-muted-foreground flex justify-between">
         <span>generation {plan.generation}</span>
         <span className={plan.feasible ? "" : "text-destructive"}>${plan.estMonthlyCost}/mo</span>
       </div>
+      {selRes && selRows.length > 0 && (
+        <div className="border-primary/40 bg-primary/5 rounded-md border p-2">
+          <div className="text-foreground flex items-center justify-between font-medium">
+            <span>Why this exists</span>
+            <span
+              className="rounded px-1 py-0.5 text-[9px]"
+              style={{ background: stateColorVar(selRes.state), color: "#15110d" }}
+            >
+              {selRes.state}
+            </span>
+          </div>
+          <div className="text-muted-foreground mt-0.5 mb-1.5 text-[10px]">{selRes.id}</div>
+          {selRows.map((row, i) => (
+            <div key={i} className="mt-1">
+              <span className="text-foreground font-medium">{row.claim}</span>
+              <p className="text-muted-foreground">{row.reason}</p>
+            </div>
+          ))}
+        </div>
+      )}
       <div className="space-y-2">
         {plan.proof.map((row, i) => (
           <div key={i} className={cn("border-border/60 border-b pb-2", row.binding && "")}>
@@ -519,6 +584,46 @@ function ProofPanel({ snap }: { snap: EngineSnapshot | null }) {
         </div>
       )}
     </div>
+  );
+}
+
+function IncidentSurface({
+  incidents,
+  onResolve,
+  onSelect,
+}: {
+  incidents: Incident[];
+  onResolve: (id: string) => void;
+  onSelect: (id: string) => void;
+}) {
+  const regions = [...new Set(incidents.map((i) => i.region))];
+  return (
+    <Card className="border-[var(--state-stalled)]">
+      <CardHeader className="pb-2">
+        <CardTitle className="flex items-center gap-2 text-sm">
+          <Siren className="size-4 text-[var(--state-stalled)]" />
+          Incident — {incidents.length} resource{incidents.length > 1 ? "s" : ""} Stalled
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-2 text-xs">
+        <p className="text-muted-foreground">
+          Self-heal flapped and the circuit breaker tripped (§9). Routed by Frame + Criticality to
+          on-call (§13). Blast radius: {regions.join(", ")}. The reconciler is holding — a human must
+          fix the root cause.
+        </p>
+        {incidents.map((inc) => (
+          <div key={inc.id} className="flex items-center gap-2 rounded-md border border-[var(--state-stalled)]/40 px-2 py-1.5">
+            <span className="size-2 rounded-full" style={{ background: "var(--state-stalled)" }} />
+            <button onClick={() => onSelect(inc.id)} className="hover:text-foreground min-w-0 flex-1 truncate text-left">
+              {inc.id}
+            </button>
+            <Button size="sm" variant="outline" className="h-7 gap-1.5" onClick={() => onResolve(inc.id)}>
+              <Wrench className="size-3.5" /> Resolve
+            </Button>
+          </div>
+        ))}
+      </CardContent>
+    </Card>
   );
 }
 
