@@ -30,6 +30,7 @@ export default defineConfig({
         {
           label: "Start here",
           items: [
+            { label: "The case", slug: "docs/the-case" },
             { label: "Overview", slug: "docs/overview" },
             { label: "Why Trellis (use case)", slug: "docs/use-case" },
             { label: "FAQ", slug: "docs/faq" },

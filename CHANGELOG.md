@@ -7,6 +7,11 @@ The simulator deploys continuously from `main`, so entries are grouped by date r
 
 ### Added
 
+- **"The case" page** (Start here): a three-minute, exec/investor-readable narrative — the 2 a.m.
+  shared-service outage, why HA doesn't help, the declare→prove→reconcile insight, slicing the blast
+  radius per division (control plane included), the per-division-platform wedge, what's proven today
+  (the simulator) vs. what's deferred, and what building it takes. Written maker/checker (drafted, then
+  independently reviewed for integrity/coherence/persuasion before merge).
 - **"Trellis and Kubernetes" section** (in the operating model): where the two control loops divide —
   Trellis manages the cluster (version, nodes, add-ons), the in-cluster GitOps loop owns the workloads,
   never overlapping; slice at the cluster, not the namespace; with the honest costs (cluster sprawl, the
