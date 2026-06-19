@@ -7,6 +7,13 @@ The simulator deploys continuously from `main`, so entries are grouped by date r
 
 ### Added
 
+- **Self-upgrade — the control plane managing itself (§16)**: the TCB (planner · proof · gate · catalog ·
+  reconciler) is modeled as a Criticality-0 self-environment. Propose a self-upgrade on a component and
+  it's a transition gated at the **highest bar (dual-control / sealed-root)**, then canaried in. A
+  **faulty** upgrade bricks the component — and bricking the **reconciler disables the workload loop**
+  (the one change the loop can't heal itself); recovery is the **meta-DR re-bootstrap** from the external
+  seed + the last-good generation. Surfaced in a new control-plane panel; while the loop is down the
+  topology still observes reality but reconciles nothing.
 - **Security View (§7)**: a 4th topology lens — a trust/exposure projection. Each resource is tiered
   **exposed** (internet-facing edge), **sensitive** (data/stateful crown jewels), or **internal** (app),
   and flagged **at-risk** when it's a third-party dependency (outside the TCB), an exposed surface without
