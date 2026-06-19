@@ -29,6 +29,7 @@ flowchart TB
     LEAD["Division / Product lead<br/>Criticality · budget · owns the risk"]
     OPS["Platform Operator<br/>runs this instance · upgrades · kill-switch"]
     ENG["Service / Eng teams<br/>author Posture · ship via PR"]
+    BG["Break-glass responders<br/>dual-control · time-boxed · sealed"]
   end
 
   CP["Trellis control plane (this division)<br/>plan → gate → reconcile"]
@@ -43,7 +44,8 @@ flowchart TB
   ENG -->|PR = the only Author path| CP
   OPS -->|operates| CP
   CP ==>|provisions + heals| CLOUD
-  VEN -.->|break-glass, scoped| CLOUD
+  BG -.->|"break-glass: dual-control, sealed"| CLOUD
+  VEN -.->|ephemeral, scoped — via the loop| CP
   CP -->|append-only record| AUD
   CP -->|cost signal| FIN
 
@@ -165,6 +167,22 @@ sequenceDiagram
   CP->>Audit: record the whole ceremony
 ```
 
+The same day, read as a journey (how each step *feels* — 1 tense, 5 calm):
+
+```mermaid
+journey
+  title A day for the platform operator
+  section Prepare
+    Propose a canaried self-upgrade: 4: Operator
+    Highest gate, dual-control sign-off: 3: Operator, Approver
+  section Roll it out
+    Apply to the canary env only: 4: Operator
+    Health green, wave outward: 5: Operator
+  section If it bricks
+    Recover from the external seed: 2: Operator
+    Last-good generation restored: 4: Operator
+```
+
 ### Service / Engineering teams
 
 **Mandate:** ship the things that deliver value. They **author** Posture and manifests, consume catalog
@@ -180,10 +198,28 @@ batteries, and ship via PR — the *only* path that changes desired state.
 ```mermaid
 flowchart LR
   ENG["Engineer"] -->|declare what, not how| POST["Posture / manifest"]
-  POST -->|PR| GATE{"gate<br/>rigor by blast radius"}
+  POST -->|PR| PLAN["planner in CI<br/>plan + proof"]
+  PLAN --> GATE{"gate<br/>rigor by blast radius"}
   GATE -->|merge| REC["Reconciler converges"]
   REC --> SVC["Running service"]:::good
   classDef good fill:#7fb06929,stroke:#6fae6a;
+```
+
+And as a journey — declare, ship, converge:
+
+```mermaid
+journey
+  title A day for a service engineer
+  section Morning
+    Check what I own is healthy: 5: Engineer
+    Need a database and a queue: 3: Engineer
+  section Ship via PR
+    Declare intent in a Posture: 4: Engineer
+    Read the plan and the proof: 4: Engineer, Reviewer
+    Merge below the floor: 5: Engineer
+  section Converge
+    Reconciler canaries then waves: 4: Reconciler
+    Service live, audit recorded: 5: Engineer
 ```
 
 ### Break-glass responders
@@ -211,6 +247,21 @@ sequenceDiagram
   R1->>Cloud: minimal fix
   BG-->>BG: credential expires → access seals
   R1->>Audit: full record — divergence reconciled back
+```
+
+The night, as a journey (it starts tense, ends sealed):
+
+```mermaid
+journey
+  title A night for a break-glass responder
+  section Paged
+    Health failing, loop is stuck: 1: Responder
+    Open scoped, time-boxed access: 3: Responder, Second
+  section Fix
+    Make the minimal change: 4: Responder
+    Credential expires, access seals: 5: Responder
+  section After
+    Divergence reconciled back: 5: Responder, Auditor
 ```
 
 ---
