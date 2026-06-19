@@ -27,6 +27,7 @@ import {
 import type { CellKind, Criticality, Posture, Resilience } from "@/sim/model";
 import { ALL_STATES, stateColorVar, type State } from "@/sim/state";
 import { loadSession, saveSession } from "@/sim/store";
+import Stage3D from "./Stage3D";
 
 const ALL_REGIONS = ["us-east-1", "eu-west-1", "ap-south-1"];
 const CRITS: Criticality[] = ["C0", "C1", "C2", "C3"];
@@ -48,7 +49,7 @@ export default function Simulator() {
   const [running, setRunning] = React.useState(false);
   const [selected, setSelected] = React.useState<string | null>(null);
   const [form, setForm] = React.useState<Posture>(DEFAULT_POSTURE);
-  const [view, setView] = React.useState<"state" | "cost">("state");
+  const [layout, setLayout] = React.useState<"stage" | "grid">("stage");
 
   const refresh = React.useCallback(() => {
     if (engineRef.current) setSnap(engineRef.current.snapshot());
@@ -122,6 +123,7 @@ export default function Simulator() {
   const phase = snap?.phase ?? "empty";
   const resources = snap?.resources ?? [];
   const sel = resources.find((r) => r.id === selected) ?? resources[0] ?? null;
+  const frozenIds = new Set(resources.filter((r) => r.state === "Frozen").map((r) => r.id));
 
   return (
     <div className="dark text-foreground grid gap-4 lg:grid-cols-[300px_1fr_340px]">
@@ -217,8 +219,14 @@ export default function Simulator() {
             <Button onClick={onPlan} variant="secondary" className="w-full">
               Plan
             </Button>
-            <Button onClick={onApprove} disabled={!plan?.feasible || phase === "applied"} className="w-full">
-              Approve &amp; apply
+            <Button
+              onClick={onApprove}
+              disabled={!plan?.feasible || (phase === "applied" && (plan?.generation ?? 0) <= (snap?.appliedGen ?? 0))}
+              className="w-full"
+            >
+              {phase === "applied" && (plan?.generation ?? 0) > (snap?.appliedGen ?? 0)
+                ? "Approve transition"
+                : "Approve & apply"}
             </Button>
           </div>
         </CardContent>
@@ -245,13 +253,13 @@ export default function Simulator() {
             </button>
           )}
           <div className="ml-auto flex gap-1">
-            {(["state", "cost"] as const).map((v) => (
+            {(["stage", "grid"] as const).map((v) => (
               <button
                 key={v}
-                onClick={() => setView(v)}
+                onClick={() => setLayout(v)}
                 className={cn(
-                  "rounded-md border px-2 py-1 text-xs",
-                  view === v ? "border-primary text-foreground" : "border-input text-muted-foreground",
+                  "rounded-md border px-2 py-1 text-xs capitalize",
+                  layout === v ? "border-primary text-foreground" : "border-input text-muted-foreground",
                 )}
               >
                 {v}
@@ -277,7 +285,15 @@ export default function Simulator() {
         )}
 
         {phase === "applied" && (
-          <Topology resources={resources} selected={sel?.id ?? null} onSelect={setSelected} view={view} budget={snap!.budget} costNow={snap!.costNow} />
+          <Topology
+            resources={resources}
+            selected={sel?.id ?? null}
+            onSelect={setSelected}
+            layout={layout}
+            frozenIds={frozenIds}
+            budget={snap!.budget}
+            costNow={snap!.costNow}
+          />
         )}
 
         {phase === "applied" && (
@@ -373,14 +389,16 @@ function Topology({
   resources,
   selected,
   onSelect,
-  view,
+  layout,
+  frozenIds,
   budget,
   costNow,
 }: {
   resources: ResourceView[];
   selected: string | null;
   onSelect: (id: string) => void;
-  view: "state" | "cost";
+  layout: "stage" | "grid";
+  frozenIds: Set<string>;
   budget: number;
   costNow: number;
 }) {
@@ -389,38 +407,41 @@ function Topology({
   return (
     <Card>
       <CardContent className="space-y-4 pt-6">
-        {view === "cost" && (
-          <div>
-            <div className="text-muted-foreground mb-1 flex justify-between text-xs">
-              <span>cost vs budget</span>
-              <span className={costNow > budget ? "text-destructive" : ""}>${costNow} / ${budget} /mo</span>
-            </div>
-            <div className="bg-secondary h-2 w-full overflow-hidden rounded-full">
-              <div
-                className={cn("h-full rounded-full", costNow > budget ? "bg-destructive" : "bg-primary")}
-                style={{ width: `${Math.min(100, (costNow / budget) * 100)}%` }}
-              />
-            </div>
+        <div>
+          <div className="text-muted-foreground mb-1 flex justify-between text-xs">
+            <span>cost vs budget</span>
+            <span className={costNow > budget ? "text-destructive" : ""}>${costNow} / ${budget} /mo</span>
+          </div>
+          <div className="bg-secondary h-2 w-full overflow-hidden rounded-full">
+            <div
+              className={cn("h-full rounded-full", costNow > budget ? "bg-destructive" : "bg-primary")}
+              style={{ width: `${Math.min(100, (costNow / budget) * 100)}%` }}
+            />
+          </div>
+        </div>
+
+        {layout === "stage" ? (
+          <Stage3D resources={resources} selected={selected} frozenIds={frozenIds} onSelect={onSelect} />
+        ) : (
+          <div className={cn("grid gap-3", regions.length > 1 ? "md:grid-cols-2" : "")}>
+            {regions.map((region) => (
+              <div key={region} className="border-border/60 rounded-lg border p-3">
+                <div className="text-muted-foreground mb-2 flex items-center gap-1.5 text-xs">
+                  <Network className="size-3" /> {region}
+                </div>
+                <div className="space-y-2">
+                  {order.map((cell) =>
+                    resources
+                      .filter((r) => r.region === region && r.cell === cell)
+                      .map((r) => (
+                        <ResourceCard key={r.id} r={r} selected={r.id === selected} onSelect={() => onSelect(r.id)} />
+                      )),
+                  )}
+                </div>
+              </div>
+            ))}
           </div>
         )}
-        <div className={cn("grid gap-3", regions.length > 1 ? "md:grid-cols-2" : "")}>
-          {regions.map((region) => (
-            <div key={region} className="border-border/60 rounded-lg border p-3">
-              <div className="text-muted-foreground mb-2 flex items-center gap-1.5 text-xs">
-                <Network className="size-3" /> {region}
-              </div>
-              <div className="space-y-2">
-                {order.map((cell) =>
-                  resources
-                    .filter((r) => r.region === region && r.cell === cell)
-                    .map((r) => (
-                      <ResourceCard key={r.id} r={r} selected={r.id === selected} onSelect={() => onSelect(r.id)} />
-                    )),
-                )}
-              </div>
-            </div>
-          ))}
-        </div>
         <Legend />
       </CardContent>
     </Card>
