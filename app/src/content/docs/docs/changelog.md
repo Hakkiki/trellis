@@ -40,7 +40,9 @@ Kubernetes / S3 / Terraform, where the platform/application line sits, what inte
 third-party "batteries" are included, and an honest take on what's real vs simulated and what's deferred.
 It also answers a sharp architecture question: **Trellis needs no etcd or Consul of its own** — desired
 state is Git, audit is an external append-only log, and live state is derived, so each control-plane
-instance is near-stateless and re-bootstrappable.
+instance is near-stateless and re-bootstrappable. And a follow-on: **where the live console gets "down"
+or "in transition"** — derived on the fly from Git (desired) + live telemetry (observed), with the
+timeline coming from the external audit; nothing reads a stored "status."
 
 ## Reduced-motion support
 
