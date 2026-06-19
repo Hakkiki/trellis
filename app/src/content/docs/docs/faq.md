@@ -237,6 +237,40 @@ The mechanics that make it real:
 - **Audit lives outside the control plane.** A compromised control plane can't be trusted to log its own
   changes honestly, so every privileged action is written to an external, append-only store.
 
+### Where does the audit log live, and what's the storage?
+
+The spec fixes the *properties*; the product is mapped through the provider contract. Required properties:
+
+- **External** — outside the control plane's write authority, so a compromised control plane can't
+  rewrite its own history. This is the whole reason it's separate.
+- **Append-only / immutable** — you add records, never edit or delete them (within retention).
+  Tamper-evident, ideally hash-chained.
+- **Written at the moment of action, by the mint/gate** — each privileged action (Author approval,
+  credential mint, break-glass, self-upgrade, even bootstrap genesis) emits its record as it happens.
+
+It is **not** the control plane's database, and not a queryable state store — it's a durable, ordered log.
+
+On AWS the canonical realization, in a Control Tower / landing-zone setup:
+
+- **org-level CloudTrail → an S3 bucket in a separate, locked log-archive account** (every API action,
+  every account, one central trail);
+- **S3 Object Lock (WORM)** on that bucket — write-once-read-many — for true immutability; even an admin
+  can't delete within the retention window;
+- **a separate account fenced by SCPs**, so the control plane (and even org admins) *cannot* delete or
+  rewrite it — the "external" property enforced by AWS, not by trust;
+- **CloudTrail log-file validation** (digest/hash files) for tamper-evidence;
+- for the platform's own gate/mint decision records (the "who approved which proof"), optionally
+  **Amazon QLDB** — a purpose-built, cryptographically verifiable, immutable ledger.
+
+In one line: an **org CloudTrail trail landing in a WORM-locked S3 bucket in a separate log-archive
+account** (with QLDB an option for verifiable gate/mint records). Retention/lifecycle archives to Glacier
+per compliance; within retention it's immutable. It must exist and be seeded **at bootstrap**, before the
+control plane is trusted with anything.
+
+**In this simulator** the audit is in-memory + IndexedDB — browser-local and overwrite-on-save, the
+*opposite* of external/append-only. The entries are real (the engine records who/why per action); their
+storage is a stand-in, not the WORM-in-a-separate-account design the architecture calls for.
+
 ### What is the "security" lens in the simulator?
 
 A read-only projection (a *View*) of trust/exposure: each resource is tiered **exposed** (internet-facing

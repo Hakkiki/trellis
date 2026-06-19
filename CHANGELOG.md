@@ -29,6 +29,10 @@ The simulator deploys continuously from `main`, so entries are grouped by date r
   live status is *derived* (`f(desired, observed, health)`) from Git + fresh telemetry, never read from a
   stored status field; the timeline comes from the external append-only audit; stale telemetry → Unknown
   (degrades honestly instead of lying green).
+- **FAQ — "Where does the audit log live, and what's the storage?"**: the required properties (external,
+  append-only/immutable, written at action time) and the AWS mapping — org CloudTrail → an Object-Locked
+  (WORM) S3 bucket in a separate, SCP-fenced log-archive account, with QLDB an option for verifiable
+  gate/mint records; honest that the simulator's IndexedDB audit is a local stand-in, not that design.
 - **FAQ**: a thorough, spec-grounded docs page that answers the hard questions in plain English — what
   problem Trellis solves and why; who it's for and explicitly not for; what fails and why (the TCB
   hazards and their mitigations); cross-region connectivity and healing; the security model; who manages
