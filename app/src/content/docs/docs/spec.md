@@ -794,7 +794,7 @@ Every action is exactly one of four **classes**, and the class *is* the authorit
 
 | Class | Mutates | Who | Gate | Why / When |
 |---|---|---|---|---|
-| **Author** | *desired state* (the manifest) | humans only | **always** — plan + proof + approval | intent/policy/budget change; on-demand |
+| **Author** | *desired state* (the manifest) | humans only | **always** — plan + proof + approval (per-plan, or a standing auto-merge policy below the blast-radius floor — Inv 18) | intent/policy/budget change; on-demand |
 | **Converge** | *reality* toward desired state | the platform / reconciler | pre-authorized — human approved the **envelope**, not each act | drift, health, schedule, load; continuous / event |
 | **Observe** | nothing | anyone in scope | none (read-only) | telemetry; continuous / on-demand |
 | **Break-glass** | reality, *outside* the gate | elevated human | emergency only — time-boxed, dual-control, max-logged | outage / incident; rare |
@@ -1201,10 +1201,10 @@ gate — §7.)
 | **Generation** (drift-vs-progress provenance) | a commit SHA |
 | **Author** action — the only way to change desired state | a commit / PR |
 | **The plan is a proof** | the planner runs in CI on the PR, posts the plan+proof as the check |
-| **The one human gate** (approve) | PR review + **merge** |
+| **The human gate** (approve), rigor-scaled (Inv 18) | PR review + **merge**; below the blast-radius floor, a standing human-authored auto-merge policy |
 | Reconciler converges to desired | reconciler **pulls** the merged manifest |
 
-*Propose (PR) → planner posts plan+proof → human reviews → merge = approve → reconciler applies.* Two
+*Propose (PR) → planner posts plan+proof → human reviews → merge = approve → reconciler applies.* Below a posture-set blast-radius floor the "human reviews" step is a standing, human-authored auto-merge policy evaluated fresh per plan (Invariant 18); above it, per-plan review, with an independent second at high blast radius. Two
 caveats: the reconciler **pulls** (not CI-push), and **secrets never live in Git** — the manifest
 *references* a secret (in the secrets-store battery, Governance-controlled); the value is never committed.
 
@@ -1538,7 +1538,8 @@ platform could cause the very catastrophe it exists to prevent (the inversion st
     forward); above the ceilings rigor **escalates** — an independent second approver (Invariant 14),
     dual-control, phase gates (§10). And a **proof must be readable at its tier** — a one-line headline
     with honest drill-down; a proof no human can read **fails the gate**, because an unreadable proof is
-    magic by another name. This forecloses social defeat by design, not exhortation.
+    magic by another name. This forecloses the *structural* path to social defeat by design, not
+    exhortation.
 19. **The control plane is cheap by construction, and its cost is a first-class signal.** Slicing only
     survives if running many control planes costs about the same as running one — so each per-division
     instance is **near-stateless and scale-to-zero when idle**, holds **no standing consensus store**
