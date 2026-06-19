@@ -3,6 +3,8 @@ title: Architecture
 description: The provider-port seam, the engine, and how the simulator is organized.
 ---
 
+> **Applied decision & guidance** — extends and applies the [specification](/trellis/docs/spec) (the source of truth); not itself normative.
+
 The **source of truth is the specification** (see [Full spec](/trellis/docs/spec/)) — a living document
 that co-evolves with this simulator. The simulator implements the spec; building it is partly how the
 spec gets refined.

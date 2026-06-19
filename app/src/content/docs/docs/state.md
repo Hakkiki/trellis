@@ -3,6 +3,8 @@ title: Structure & State
 description: What the planner compiles, and the derived live condition of every resource.
 ---
 
+> **Concept primer** — explains a piece of the model; the normative version is in the [specification](/trellis/docs/spec).
+
 ## Structure — the planner's output
 
 A **Structure** is what the planner compiles a Posture into. It has three facets:

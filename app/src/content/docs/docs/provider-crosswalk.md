@@ -3,6 +3,8 @@ title: "Provider crosswalk (AWS → GCP / Azure)"
 description: Execute AWS now, think ahead. The provider-neutral capability contract mapped to AWS (the column we build) with the GCP and Azure equivalents documented as the crosswalk — built only when the time comes.
 ---
 
+> **Applied decision & guidance** — extends and applies the [specification](/trellis/docs/spec) (the source of truth); not itself normative.
+
 We're **fully committed to AWS** for the implementation — one provider, executed richly. But the
 vocabulary, Topology, and Structure stay **provider-neutral**, expressed against a **capability
 contract**. This page is the escape hatch: the contract mapped to AWS (the column we build) with the GCP

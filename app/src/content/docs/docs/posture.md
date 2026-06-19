@@ -3,6 +3,8 @@ title: Posture & Criticality
 description: What a human declares, and the one dial that moves it all together.
 ---
 
+> **Concept primer** — explains a piece of the model; the normative version is in the [specification](/trellis/docs/spec).
+
 A **Posture** is what a human declares — the desired intent and constraints for an environment,
 expressed as four **orthogonal, independently-swappable** axes, each owned by a distinct audience.
 

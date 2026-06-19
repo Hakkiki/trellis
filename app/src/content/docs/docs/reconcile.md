@@ -3,6 +3,8 @@ title: The reconcile loop
 description: The one law, the four action classes, and self-healing.
 ---
 
+> **Concept primer** — explains a piece of the model; the normative version is in the [specification](/trellis/docs/spec).
+
 ```
 solve → PLAN (+ proof) → human approves → apply → reconcile → (drift / change) → re-solve
 ```

@@ -3,6 +3,8 @@ title: "Operating model: boundaries & slicing the control plane"
 description: How to pick a division's isolation grain (org / account / VPC / namespace), why the boundary you choose is the blast-radius guarantee you get, and why each division should run its own Trellis instead of one central control plane.
 ---
 
+> **Applied decision & guidance** — extends and applies the [specification](/trellis/docs/spec) (the source of truth); not itself normative.
+
 The companion to [Why Trellis](/trellis/docs/use-case). That page makes the case for per-division
 environments; this one is the *how* — where the boundary goes, why synchronous-only coupling is the
 healthy kind, and why the control plane itself gets sliced too.
