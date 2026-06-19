@@ -358,7 +358,10 @@ expressed against a provider-neutral **capability contract** (twelve buckets: Co
 Storage · Data · Identity · Secrets · Certs · DNS · Delivery/CI · Traffic/LB · Observability ·
 Governance). Today one provider is implemented richly (AWS); others are documented crosswalks built on
 demand. Adding a provider is *additive* (a new adapter against the same contract, parity-gated), never a
-rewrite — but don't expect three live clouds on day one.
+rewrite — but don't expect three live clouds on day one. The
+[provider crosswalk](/trellis/docs/provider-crosswalk) maps every capability to AWS, GCP, and Azure and
+calls out where the mapping leaks (identity, the org boundary, Aurora/QLDB) — the documented escape hatch,
+built on demand.
 
 ### What integrations does it have, or will it have?
 

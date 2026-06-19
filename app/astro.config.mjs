@@ -42,6 +42,7 @@ export default defineConfig({
           items: [
             { label: "Operating model", slug: "docs/operating-model" },
             { label: "Bootstrap & footprint", slug: "docs/bootstrap" },
+            { label: "Provider crosswalk", slug: "docs/provider-crosswalk" },
             { label: "Posture & Criticality", slug: "docs/posture" },
             { label: "Structure & State", slug: "docs/state" },
             { label: "The reconcile loop", slug: "docs/reconcile" },
