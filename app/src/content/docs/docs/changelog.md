@@ -6,6 +6,14 @@ description: Recent changes to the Trellis simulator, newest first.
 What's shipped to the live simulator, newest first. The footer shows the exact build
 (date · commit) currently deployed.
 
+## Docs, in three genres
+
+The documentation is now sorted into clear genres so it's obvious what each page *is*: the **narrative**
+(The case, Why Trellis), the **model** (concept primers), **applied decisions** (operating model,
+bootstrap, provider crosswalk, architecture), and the **specification** — the normative source of truth.
+The sidebar is regrouped to match, and every page carries a one-line status banner saying which genre it
+belongs to, so you always know whether you're reading canon or commentary.
+
 ## Trellis and Kubernetes
 The [operating model](/trellis/docs/operating-model#trellis-and-kubernetes-where-the-line-is) now spells
 out where Trellis ends and Kubernetes begins. Because k8s is itself a reconciler, the rule is: Trellis

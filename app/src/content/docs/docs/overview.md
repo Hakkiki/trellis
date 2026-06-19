@@ -10,6 +10,9 @@ action traceable to an explainable plan.
 
 > **Posture → planner → Structure → reconcile loop; manifest-driven; no magic.**
 
+> **Orientation** — start with [The case](/trellis/docs/the-case) for the *why*, the **Concepts** pages
+> for the model, and the [specification](/trellis/docs/spec) for the normative source of truth.
+
 ## The metaphor
 
 A **trellis** is a governed shape. A **vine** grows freely *within* that shape. A **gardener** tends it

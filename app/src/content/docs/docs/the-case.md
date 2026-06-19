@@ -3,6 +3,9 @@ title: "The case"
 description: The three-minute version — the problem worth funding, the insight, the wedge, what's proven today, and what it takes to build.
 ---
 
+> **Narrative** — the case for Trellis, written for a fast read. Not a normative reference; the rigor
+> lives in the pages it links to (and in the [specification](/trellis/docs/spec)).
+
 The short, plain version for someone deciding whether this is worth backing. Depth lives one click down;
 this page is the arc.
 

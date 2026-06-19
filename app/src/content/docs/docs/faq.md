@@ -3,6 +3,8 @@ title: FAQ
 description: The honest answers — what problem Trellis solves, what it doesn't, what fails and why, and how the hard parts (security, networking, data, integrations) actually work.
 ---
 
+> **Applied decision & guidance** — extends and applies the [specification](/trellis/docs/spec) (the source of truth); not itself normative.
+
 Straight answers, including the uncomfortable ones. Where this says "today," it means the shipped
 artifact — a specification plus the interactive simulator on this site. The cloud is **simulated**; the
 dynamics are **real** (applies take time, nodes fail, telemetry goes stale, bills drift). The target is a

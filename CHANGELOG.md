@@ -7,6 +7,15 @@ The simulator deploys continuously from `main`, so entries are grouped by date r
 
 ### Added
 
+- **Docs split into three genres** to reduce cognitive load and keep the story coherent: a *narrative*
+  (the case / use case), the *model* (concept primers), *applied decisions* (operating model, bootstrap,
+  crosswalk, architecture), and the *normative specification* (the source of truth). The sidebar is
+  regrouped to match, and every page now carries a one-line **status banner** declaring which genre it
+  is — "Concept primer", "Applied decision & guidance", "Source of truth", or "Narrative" — so a reader
+  always knows whether a page is canon or commentary. No spec contradictions (verified maker/checker).
+
+### Changed
+
 - **Blast-radius demo** (`/blast-radius`): the pitch money-shot — the *same* bad upgrade to a shared
   service rolled out two ways, a shared instance everyone depends on (100% blast radius) vs one instance
   per division (contained to one, recovers from last-good). A purpose-built illustration, in the nav and

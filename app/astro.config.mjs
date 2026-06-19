@@ -26,24 +26,31 @@ export default defineConfig({
       social: [{ icon: "github", label: "GitHub", href: "https://github.com/hakkiki/trellis" }],
       disable404Route: true,
       pagefind: false,
+      // Sidebar is organized by *genre* so it's obvious what each page is:
+      // the story (narrative), orientation, model primers, applied decisions,
+      // and the normative specification (the source of truth).
       sidebar: [
         {
-          label: "Start here",
+          label: "The case (start here)",
           items: [
             { label: "The case", slug: "docs/the-case" },
-            { label: "Overview", slug: "docs/overview" },
-            { label: "Why Trellis (use case)", slug: "docs/use-case" },
-            { label: "FAQ", slug: "docs/faq" },
-            { label: "What's new", slug: "docs/changelog" },
-            { label: "Architecture", slug: "docs/architecture" },
+            { label: "Why Trellis — use case", slug: "docs/use-case" },
+            // Standalone page (not a docs entry), so use an absolute `link` —
+            // Starlight does not prepend the base path to sidebar `link`s.
+            { label: "Blast radius (demo)", link: "/trellis/blast-radius" },
           ],
         },
         {
-          label: "Concepts",
+          label: "Orientation",
           items: [
-            { label: "Operating model", slug: "docs/operating-model" },
-            { label: "Bootstrap & footprint", slug: "docs/bootstrap" },
-            { label: "Provider crosswalk", slug: "docs/provider-crosswalk" },
+            { label: "Overview", slug: "docs/overview" },
+            { label: "FAQ", slug: "docs/faq" },
+            { label: "What's new", slug: "docs/changelog" },
+          ],
+        },
+        {
+          label: "Concepts (the model)",
+          items: [
             { label: "Posture & Criticality", slug: "docs/posture" },
             { label: "Structure & State", slug: "docs/state" },
             { label: "The reconcile loop", slug: "docs/reconcile" },
@@ -51,7 +58,16 @@ export default defineConfig({
           ],
         },
         {
-          label: "Specification",
+          label: "Architecture & decisions",
+          items: [
+            { label: "Operating model", slug: "docs/operating-model" },
+            { label: "Bootstrap & footprint", slug: "docs/bootstrap" },
+            { label: "Provider crosswalk", slug: "docs/provider-crosswalk" },
+            { label: "Architecture", slug: "docs/architecture" },
+          ],
+        },
+        {
+          label: "Specification (source of truth)",
           items: [{ label: "Full spec", slug: "docs/spec" }],
         },
       ],

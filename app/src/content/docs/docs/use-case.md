@@ -3,6 +3,10 @@ title: "Use case: the shared-service blast radius"
 description: Why per-division platforms — how a single shared service becomes a company-wide single point of failure, and how Trellis contains the blast radius without making every team run their own cloud.
 ---
 
+> **Narrative** — a worked example of the problem and the fix. Not normative; see the
+> [operating model](/trellis/docs/operating-model) for the how and the [specification](/trellis/docs/spec)
+> for the canon.
+
 The clearest reason Trellis exists. If you run a large org on a few shared services, this is probably
 your story too.
 

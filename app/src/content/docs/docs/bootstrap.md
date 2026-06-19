@@ -3,6 +3,8 @@ title: "Bootstrap & footprint"
 description: How Trellis gets installed the first time (the externally-rooted bootstrap ceremony), and what privileges and resources it actually needs standing to run.
 ---
 
+> **Applied decision & guidance** — extends and applies the [specification](/trellis/docs/spec) (the source of truth); not itself normative.
+
 This is the part everything else hangs from — and the genuinely hard bit, because bootstrap is the **one
 moment that happens outside the gated loop.** Two questions: how does Trellis get *installed*, and what
 does it need *standing* to run?

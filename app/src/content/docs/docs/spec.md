@@ -5,6 +5,10 @@ tableOfContents:
   maxHeadingLevel: 2
 ---
 
+> **Source of truth.** This specification is **normative**. The narrative, Concepts, and
+> Architecture & decisions pages explain and apply it — where any of them disagrees with the spec, the
+> spec wins. Decisions made elsewhere on the site are folded back here over time.
+
 :::note
 Diagrams are written in Mermaid; they render on GitHub and in the source. Source: `docs/trellis-spec.md`.
 :::

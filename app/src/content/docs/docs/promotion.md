@@ -3,6 +3,8 @@ title: Promotion
 description: Advancing an immutable, validated version through an ordered pipeline.
 ---
 
+> **Concept primer** — explains a piece of the model; the normative version is in the [specification](/trellis/docs/spec).
+
 > **Promotion = advancing an immutable, validated version reference through an ordered pipeline of
 > environments.**
 
