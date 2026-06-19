@@ -11,6 +11,11 @@ The simulator deploys continuously from `main`, so entries are grouped by date r
   Trellis manages the cluster (version, nodes, add-ons), the in-cluster GitOps loop owns the workloads,
   never overlapping; slice at the cluster, not the namespace; with the honest costs (cluster sprawl, the
   upgrade/API-compat seam). The FAQ's Kubernetes answer links to it.
+- **Provider-crosswalk page** (Concepts): the provider-neutral capability contract mapped to **AWS (built)
+  → GCP → Azure** across all twelve buckets — the documented escape hatch for "execute AWS now, think
+  ahead." Honest about where the mapping leaks (identity / the credential mint, the org boundary
+  account→project→subscription, no-twin services like Aurora and QLDB, fading managed Git). Linked from
+  the FAQ's provider-neutral answer.
 - **Bootstrap & footprint page** (Concepts): how Trellis gets installed the first time — the one-time,
   externally-rooted, dual-controlled ceremony (seed once → discover read-only → plan+prove → approve the
   minimal scoped write → seal the root) — and what it needs standing to run (workload identity; a

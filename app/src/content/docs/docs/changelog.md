@@ -14,6 +14,15 @@ never overlapping, or the two loops fight. And you slice at the **cluster**, not
 namespace shares the cluster's control plane and upgrade fate. Includes the honest costs (cluster sprawl;
 the upgrade/API-compat seam where "infra only" blurs).
 
+## Provider crosswalk
+
+A new [provider-crosswalk page](/trellis/docs/provider-crosswalk) maps the provider-neutral capability
+contract to **AWS (the column we build) → GCP → Azure** across all twelve buckets — the documented escape
+hatch. We're fully committed to AWS now (one provider, executed richly); the crosswalk means adding GCP or
+Azure later is an additive, parity-gated adapter, never a rewrite. It's honest about where the mapping
+leaks: identity / the credential mint, the org boundary (account → project → subscription), and services
+with no twin (Aurora, QLDB).
+
 ## Bootstrap & footprint
 
 A new [Bootstrap & footprint page](/trellis/docs/bootstrap) covers the part everything hangs from: how
