@@ -85,11 +85,7 @@ function classifySync(
   stalenessBudgetMs: number,
 ): Sync {
   if (!o.exists) return "Progressing"; // authored creation in flight
-  if (
-    stalenessBudgetMs > 0 &&
-    o.observedAtMs > 0 &&
-    nowMs - o.observedAtMs > stalenessBudgetMs
-  ) {
+  if (stalenessBudgetMs > 0 && o.observedAtMs > 0 && nowMs - o.observedAtMs > stalenessBudgetMs) {
     return "Unknown";
   }
   if (specEqual(o.spec, d.spec)) return "InSync";

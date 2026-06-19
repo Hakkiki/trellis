@@ -4,7 +4,6 @@
 
 import {
   cloneSpec,
-  specEqual,
   type DesiredResource,
   type Health,
   type JobPhase,
@@ -12,6 +11,7 @@ import {
   type Observation,
   type ResourceID,
   type Spec,
+  specEqual,
 } from "./model";
 import type { Provider } from "./provider";
 
@@ -134,16 +134,11 @@ export class SimCloud implements Provider {
       r.appliedGen = d.generation;
       return;
     }
-    const converged =
-      r.exists && specEqual(r.observed, d.spec) && r.appliedGen === d.generation;
+    const converged = r.exists && specEqual(r.observed, d.spec) && r.appliedGen === d.generation;
     if (converged && r.health === "Healthy") return;
     // Already converging toward this exact desired state: don't restart the
     // latency clock. (Self-heal/drift have convergeIn === 0 and fall through.)
-    if (
-      r.convergeIn > 0 &&
-      specEqual(r.target, d.spec) &&
-      r.appliedGen === d.generation
-    ) {
+    if (r.convergeIn > 0 && specEqual(r.target, d.spec) && r.appliedGen === d.generation) {
       return;
     }
     r.kind = d.kind;
@@ -185,7 +180,15 @@ export class SimCloud implements Provider {
 
   observe(id: ResourceID): Observation {
     const r = this.res.get(id);
-    if (!r) return { id, exists: false, spec: {}, health: "Unknown", appliedGeneration: 0, observedAtMs: 0 };
+    if (!r)
+      return {
+        id,
+        exists: false,
+        spec: {},
+        health: "Unknown",
+        appliedGeneration: 0,
+        observedAtMs: 0,
+      };
     return this.toObservation(id, r);
   }
 
@@ -244,7 +247,7 @@ export class SimCloud implements Provider {
 
   injectDrift(id: ResourceID, mutate: (s: Spec) => void) {
     const r = this.res.get(id);
-    if (r && r.exists) mutate(r.observed);
+    if (r?.exists) mutate(r.observed);
   }
 
   setStale(id: ResourceID, stale: boolean) {

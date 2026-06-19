@@ -8,17 +8,17 @@
 // fits the budget. When nothing is feasible it fails loudly with the binding
 // constraint.
 
-import {
-  type CellKind,
-  type Criticality,
-  type DesiredResource,
-  type Generation,
-  type Kind,
-  type Manifest,
-  type Plan,
-  type Posture,
-  type ProofRow,
-  type Resilience,
+import type {
+  CellKind,
+  Criticality,
+  DesiredResource,
+  Generation,
+  Kind,
+  Manifest,
+  Plan,
+  Posture,
+  ProofRow,
+  Resilience,
 } from "./model";
 
 const COMPUTE_COST: Record<string, number> = { small: 120, medium: 300, large: 700 };
@@ -27,7 +27,12 @@ const LB_COST = 25;
 const REPL_LINK_COST = 200;
 const JOB_COST = 80;
 
-const SIZE_FOR: Record<Criticality, string> = { C0: "large", C1: "medium", C2: "medium", C3: "small" };
+const SIZE_FOR: Record<Criticality, string> = {
+  C0: "large",
+  C1: "medium",
+  C2: "medium",
+  C3: "small",
+};
 const REPLICAS_FOR: Record<Criticality, number> = { C0: 3, C1: 2, C2: 2, C3: 1 };
 const ISOLATION_FOR: Record<Criticality, string> = {
   C0: "isolate-per-service",
@@ -45,7 +50,12 @@ const CELLS: { cell: CellKind; kind: Kind }[] = [
 const RES_LEVELS: Resilience[] = ["single", "active-passive", "active-active"];
 
 function slug(s: string): string {
-  return s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "service";
+  return (
+    s
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-|-$/g, "") || "service"
+  );
 }
 
 interface Candidate {
@@ -57,7 +67,12 @@ interface Candidate {
   score: number;
 }
 
-function buildCandidate(posture: Posture, resilience: Resilience, headroom: number, gen: Generation): Candidate {
+function buildCandidate(
+  posture: Posture,
+  resilience: Resilience,
+  headroom: number,
+  gen: Generation,
+): Candidate {
   const svc = slug(posture.intent);
   const c = posture.criticality;
   const size = SIZE_FOR[c];
@@ -84,7 +99,16 @@ function buildCandidate(posture: Posture, resilience: Resilience, headroom: numb
       } else {
         cost += LB_COST;
       }
-      resources.push({ id, kind, spec, generation: gen, lifecycle: "service", service: svc, region, cell });
+      resources.push({
+        id,
+        kind,
+        spec,
+        generation: gen,
+        lifecycle: "service",
+        service: svc,
+        region,
+        cell,
+      });
     }
   });
 
@@ -167,7 +191,9 @@ export function plan(posture: Posture, gen: Generation): Plan {
     chosen =
       posture.optimize === "minimize-cost"
         ? feasibleCands.reduce((a, b) => (b.cost < a.cost ? b : a))
-        : feasibleCands.reduce((a, b) => (b.score > a.score || (b.score === a.score && b.cost < a.cost) ? b : a));
+        : feasibleCands.reduce((a, b) =>
+            b.score > a.score || (b.score === a.score && b.cost < a.cost) ? b : a,
+          );
   }
 
   if (!chosen) {
@@ -209,38 +235,80 @@ export function plan(posture: Posture, gen: Generation): Plan {
     reason: `Criticality ${posture.criticality} default (authored, not solved — §6)`,
   });
   if (posture.compliance.length) {
-    proof.push({ resourceId: "*", claim: `compliance: ${posture.compliance.join(", ")}`, reason: "Governance hard constraint, enforced at plan time (§2)" });
+    proof.push({
+      resourceId: "*",
+      claim: `compliance: ${posture.compliance.join(", ")}`,
+      reason: "Governance hard constraint, enforced at plan time (§2)",
+    });
   }
   for (const r of chosen.resources) {
     if (r.lifecycle === "job") {
-      proof.push({ resourceId: r.id, claim: "batch job (nightly)", reason: "run-to-completion workload (§1) — a finished run is success, not drift" });
+      proof.push({
+        resourceId: r.id,
+        claim: "batch job (nightly)",
+        reason: "run-to-completion workload (§1) — a finished run is success, not drift",
+      });
       continue;
     }
     if (r.lifecycle === "external") {
-      proof.push({ resourceId: r.id, claim: "external SaaS (payments)", reason: "third-party dependency — consumed, observe-only, never provisioned (§1)" });
+      proof.push({
+        resourceId: r.id,
+        claim: "external SaaS (payments)",
+        reason: "third-party dependency — consumed, observe-only, never provisioned (§1)",
+      });
       continue;
     }
     if (r.cell === "app") {
-      proof.push({ resourceId: r.id, claim: `${r.spec.replicas}× ${r.spec.size} compute`, reason: `Criticality ${posture.criticality}${chosen.headroom ? " + headroom" : ""} sizing` });
+      proof.push({
+        resourceId: r.id,
+        claim: `${r.spec.replicas}× ${r.spec.size} compute`,
+        reason: `Criticality ${posture.criticality}${chosen.headroom ? " + headroom" : ""} sizing`,
+      });
     } else if (r.cell === "data") {
-      proof.push({ resourceId: r.id, claim: `managed DB (${r.spec.multiAZ === "true" ? "multi-AZ" : "single-AZ"})`, reason: r.spec.multiAZ === "true" ? `Criticality ${posture.criticality} requires multi-AZ HA` : "single-AZ permitted at this Criticality" });
+      proof.push({
+        resourceId: r.id,
+        claim: `managed DB (${r.spec.multiAZ === "true" ? "multi-AZ" : "single-AZ"})`,
+        reason:
+          r.spec.multiAZ === "true"
+            ? `Criticality ${posture.criticality} requires multi-AZ HA`
+            : "single-AZ permitted at this Criticality",
+      });
     } else {
-      proof.push({ resourceId: r.id, claim: "load balancer", reason: "edge cell accepts LB/NAT (§3)" });
+      proof.push({
+        resourceId: r.id,
+        claim: "load balancer",
+        reason: "edge cell accepts LB/NAT (§3)",
+      });
     }
   }
   if (chosen.resilience === "active-active" && chosen.regionsActive > 1) {
-    proof.push({ resourceId: "*", claim: `${chosen.regionsActive - 1}× cross-region replication`, reason: "active-active synchronizes data across regions (§3 Weave)" });
+    proof.push({
+      resourceId: "*",
+      claim: `${chosen.regionsActive - 1}× cross-region replication`,
+      reason: "active-active synchronizes data across regions (§3 Weave)",
+    });
   }
 
   // --- Sensitivity: the alternatives the solver weighed. ---
   for (const cand of candidates) {
     if (cand === chosen) continue;
-    const verdict = cand.cost > posture.budgetMonthly ? `$${cand.cost}/mo — over budget` : `$${cand.cost}/mo`;
+    const verdict =
+      cand.cost > posture.budgetMonthly ? `$${cand.cost}/mo — over budget` : `$${cand.cost}/mo`;
     sensitivity.push(`${cand.resilience}${cand.headroom ? " +headroom" : ""}: ${verdict}`);
   }
 
-  const manifest: Manifest = { generation: gen, resources: Object.fromEntries(chosen.resources.map((r) => [r.id, r])) };
-  return { generation: gen, manifest, proof, estMonthlyCost: chosen.cost, feasible: true, sensitivity };
+  const manifest: Manifest = {
+    generation: gen,
+    resources: Object.fromEntries(chosen.resources.map((r) => [r.id, r])),
+  };
+  return {
+    generation: gen,
+    manifest,
+    proof,
+    estMonthlyCost: chosen.cost,
+    feasible: true,
+    sensitivity,
+  };
 }
 
 /** Estimated monthly cost of an arbitrary manifest (for the FinOps view). */

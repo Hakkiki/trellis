@@ -1,12 +1,12 @@
+import { AlertTriangle, ArrowRight, Eye, GitCommitVertical, Rocket } from "lucide-react";
 import * as React from "react";
-import { ArrowRight, GitCommitVertical, AlertTriangle, Eye, Rocket } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
-import { Fleet, type EnvId, type EnvView, type FleetSnapshot } from "@/sim/fleet";
-import { stateColorVar } from "@/sim/state";
 import type { AuditEntry } from "@/sim/engine";
+import { type EnvView, Fleet, type FleetSnapshot } from "@/sim/fleet";
+import { stateColorVar } from "@/sim/state";
 
 function fmtClock(ms: number) {
   const s = Math.floor(ms / 1000);
@@ -140,7 +140,9 @@ function EnvCard({
           ) : (
             <span>—</span>
           )}
-          {env.drifted && <span className="text-[var(--state-drifted)]">· drifted off version</span>}
+          {env.drifted && (
+            <span className="text-[var(--state-drifted)]">· drifted off version</span>
+          )}
         </div>
       </CardHeader>
       <CardContent className="space-y-3">
@@ -154,7 +156,10 @@ function EnvCard({
           </div>
           <div className="bg-secondary h-1.5 w-full overflow-hidden rounded-full">
             <div
-              className={cn("h-full rounded-full", env.costNow > env.budget ? "bg-destructive" : "bg-primary")}
+              className={cn(
+                "h-full rounded-full",
+                env.costNow > env.budget ? "bg-destructive" : "bg-primary",
+              )}
               style={{ width: `${Math.min(100, (env.costNow / Math.max(1, env.budget)) * 100)}%` }}
             />
           </div>
@@ -173,7 +178,8 @@ function EnvCard({
                     .filter((r) => r.region === region)
                     .map((r) => {
                       const color = stateColorVar(r.state);
-                      const pulsing = r.state === "Converging" || r.state === "Degraded" || r.state === "Drifted";
+                      const pulsing =
+                        r.state === "Converging" || r.state === "Degraded" || r.state === "Drifted";
                       return (
                         <span
                           key={r.id}
@@ -196,7 +202,12 @@ function EnvCard({
         )}
 
         <div className="flex flex-wrap gap-2 pt-1">
-          <Button size="sm" className="flex-1 gap-1.5" disabled={!env.canPromote} onClick={onPromote}>
+          <Button
+            size="sm"
+            className="flex-1 gap-1.5"
+            disabled={!env.canPromote}
+            onClick={onPromote}
+          >
             <Rocket className="size-3.5" />
             {env.canPromote ? `Promote v${env.promoteTo}` : "up to date"}
           </Button>
@@ -222,7 +233,10 @@ function AuditPanel({ audit }: { audit: AuditEntry[] }) {
     Converge: "text-[var(--state-converged)]",
     Observe: "text-muted-foreground",
   };
-  if (!audit.length) return <p className="text-muted-foreground text-xs">No actions yet — cut a version to begin.</p>;
+  if (!audit.length)
+    return (
+      <p className="text-muted-foreground text-xs">No actions yet — cut a version to begin.</p>
+    );
   return (
     <div className="max-h-64 space-y-1.5 overflow-auto text-[11px]">
       {[...audit].reverse().map((a, i) => (

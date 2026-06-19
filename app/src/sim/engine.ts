@@ -4,18 +4,11 @@
 // provider, and the Reconciler, and records an audit trail (the §7 duality:
 // every action emits a record of who/why).
 
+import type { CellKind, Lifecycle, Manifest, Plan, Posture, ResourceID } from "./model";
 import { manifestCost, plan as runPlanner } from "./planner";
 import { Reconciler, type Status } from "./reconcile";
 import { SimCloud } from "./sim";
 import type { State } from "./state";
-import {
-  type CellKind,
-  type Lifecycle,
-  type Manifest,
-  type Plan,
-  type Posture,
-  type ResourceID,
-} from "./model";
 
 export type AuditClass = "Author" | "Converge" | "Observe" | "Break-glass" | "Gate";
 
@@ -100,21 +93,41 @@ export class Engine {
     this.posture = posture;
     this.gen += 1;
     this.plan = runPlanner(posture, this.gen);
-    this.log("Author", "team", "propose", `gen ${this.gen}`, this.plan.feasible ? `plan: ${Object.keys(this.plan.manifest.resources).length} resources, $${this.plan.estMonthlyCost}/mo` : `INFEASIBLE: ${this.plan.failure}`);
+    this.log(
+      "Author",
+      "team",
+      "propose",
+      `gen ${this.gen}`,
+      this.plan.feasible
+        ? `plan: ${Object.keys(this.plan.manifest.resources).length} resources, $${this.plan.estMonthlyCost}/mo`
+        : `INFEASIBLE: ${this.plan.failure}`,
+    );
     return this.plan;
   }
 
   /** The gate: approve the current plan = merge. Mints a scoped credential. */
   approve(): boolean {
-    if (!this.plan || !this.plan.feasible) return false;
+    if (!this.plan?.feasible) return false;
     this.manifest = this.plan.manifest;
     this.appliedGen = this.plan.generation;
     // External dependencies are discovered, not provisioned (observe-only, §1).
     for (const r of Object.values(this.manifest.resources)) {
       if (r.lifecycle === "external") this.cloud.seedExternal(r);
     }
-    this.log("Gate", "approver", "approve+merge", `gen ${this.appliedGen}`, "human approved the signed plan");
-    this.log("Author", "mint", "mint-credential", `${Object.keys(this.manifest.resources).length} resources`, "ephemeral credential scoped to the approved diff");
+    this.log(
+      "Gate",
+      "approver",
+      "approve+merge",
+      `gen ${this.appliedGen}`,
+      "human approved the signed plan",
+    );
+    this.log(
+      "Author",
+      "mint",
+      "mint-credential",
+      `${Object.keys(this.manifest.resources).length} resources`,
+      "ephemeral credential scoped to the approved diff",
+    );
     return true;
   }
 
@@ -158,14 +171,26 @@ export class Engine {
   /** A root-cause failure self-heal can't fix → the breaker trips to Stalled. */
   hardFailure(id: ResourceID) {
     this.cloud.failPermanent(id);
-    this.log("Observe", "fault", "hard-failure", id, "root-cause failure (bad config / quota) — self-heal cannot fix");
+    this.log(
+      "Observe",
+      "fault",
+      "hard-failure",
+      id,
+      "root-cause failure (bad config / quota) — self-heal cannot fix",
+    );
   }
 
   /** Incident response (§13): a human fixes the root cause; the breaker resets. */
   resolveIncident(id: ResourceID) {
     this.cloud.repair(id);
     this.rec.resetBreaker(id);
-    this.log("Author", "on-call", "resolve-incident", id, "root cause fixed; circuit breaker reset, reconciliation resumes");
+    this.log(
+      "Author",
+      "on-call",
+      "resolve-incident",
+      id,
+      "root cause fixed; circuit breaker reset, reconciliation resumes",
+    );
   }
 
   regionOutage(region: string) {
@@ -175,17 +200,35 @@ export class Engine {
 
   setStale(id: ResourceID, stale: boolean) {
     this.cloud.setStale(id, stale);
-    this.log("Observe", "fault", stale ? "telemetry-loss" : "telemetry-restored", id, stale ? "observability plane degraded" : "telemetry returned");
+    this.log(
+      "Observe",
+      "fault",
+      stale ? "telemetry-loss" : "telemetry-restored",
+      id,
+      stale ? "observability plane degraded" : "telemetry returned",
+    );
   }
 
   breakGlass(id: ResourceID) {
     this.rec.freeze(id);
-    this.log("Break-glass", "operator+second", "freeze", id, "dual-control override; reconciliation suspended (debt owed)");
+    this.log(
+      "Break-glass",
+      "operator+second",
+      "freeze",
+      id,
+      "dual-control override; reconciliation suspended (debt owed)",
+    );
   }
 
   ratify(id: ResourceID) {
     this.rec.unfreeze(id);
-    this.log("Author", "operator", "ratify", id, "debt repaid via Author gate; reverting to approved desired state");
+    this.log(
+      "Author",
+      "operator",
+      "ratify",
+      id,
+      "debt repaid via Author gate; reverting to approved desired state",
+    );
   }
 
   isFrozen(id: ResourceID) {
@@ -247,13 +290,24 @@ function isSettled(r: ResourceView): boolean {
   return r.state === "Converged";
 }
 
-function transitionNote(prev: State, next: State, reason: string): { verb: string; reason: string } | null {
+function transitionNote(
+  prev: State,
+  next: State,
+  reason: string,
+): { verb: string; reason: string } | null {
   if (next === "Converged") return { verb: "converged", reason: "matches spec and healthy" };
   if (next === "Degraded") return { verb: "degraded", reason: "health check failed" };
   if (next === "Drifted") return { verb: "drift-detected", reason: "unauthored divergence" };
-  if (next === "Converging") return { verb: prev === "Degraded" ? "self-heal" : prev === "Drifted" ? "correcting-drift" : "converging", reason };
-  if (next === "Unknown") return { verb: "telemetry-stale", reason: "holding — fail-safe on Unknown" };
+  if (next === "Converging")
+    return {
+      verb:
+        prev === "Degraded" ? "self-heal" : prev === "Drifted" ? "correcting-drift" : "converging",
+      reason,
+    };
+  if (next === "Unknown")
+    return { verb: "telemetry-stale", reason: "holding — fail-safe on Unknown" };
   if (next === "Frozen") return { verb: "frozen", reason: "break-glass" };
-  if (next === "Stalled") return { verb: "STALLED", reason: "circuit breaker tripped — needs a human (incident raised)" };
+  if (next === "Stalled")
+    return { verb: "STALLED", reason: "circuit breaker tripped — needs a human (incident raised)" };
   return null;
 }

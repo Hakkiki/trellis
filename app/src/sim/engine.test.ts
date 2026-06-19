@@ -1,16 +1,33 @@
-import { describe, it, expect } from "vitest";
-import { derive } from "./state";
-import { SimCloud } from "./sim";
-import { Reconciler, allConverged, type Status } from "./reconcile";
-import { plan } from "./planner";
-import type { DesiredResource, Manifest, Observation, Posture } from "./model";
+import { describe, expect, it } from "vitest";
 import { DEFAULT_POSTURE, Engine } from "./engine";
+import type { DesiredResource, Manifest, Observation, Posture } from "./model";
+import { plan } from "./planner";
+import { allConverged, Reconciler, type Status } from "./reconcile";
+import { SimCloud } from "./sim";
+import { derive } from "./state";
 
 function dr(id: string, gen: number, spec: Record<string, string>): DesiredResource {
-  return { id, kind: "compute", spec, generation: gen, lifecycle: "service", service: "s", region: "us-east-1", cell: "app" };
+  return {
+    id,
+    kind: "compute",
+    spec,
+    generation: gen,
+    lifecycle: "service",
+    service: "s",
+    region: "us-east-1",
+    cell: "app",
+  };
 }
 function obs(over: Partial<Observation>): Observation {
-  return { id: "x", exists: true, spec: {}, health: "Healthy", appliedGeneration: 1, observedAtMs: 1000, ...over };
+  return {
+    id: "x",
+    exists: true,
+    spec: {},
+    health: "Healthy",
+    appliedGeneration: 1,
+    observedAtMs: 1000,
+    ...over,
+  };
 }
 
 describe("state.derive", () => {
@@ -20,19 +37,27 @@ describe("state.derive", () => {
   });
   it("Degraded when in-sync but unhealthy", () => {
     const d = dr("x", 1, { a: "1" });
-    expect(derive(d, obs({ spec: { a: "1" }, health: "Degraded" }), "Settled", 1000, 0)).toBe("Degraded");
+    expect(derive(d, obs({ spec: { a: "1" }, health: "Degraded" }), "Settled", 1000, 0)).toBe(
+      "Degraded",
+    );
   });
   it("Drifted vs Converging is decided by provenance, not gap size", () => {
     const d = dr("x", 1, { a: "2" });
     // same generation already applied, spec differs -> unauthored drift
-    expect(derive(d, obs({ spec: { a: "1" }, appliedGeneration: 1 }), "Settled", 1000, 0)).toBe("Drifted");
+    expect(derive(d, obs({ spec: { a: "1" }, appliedGeneration: 1 }), "Settled", 1000, 0)).toBe(
+      "Drifted",
+    );
     // newer generation not yet applied -> authored progress
     const d2 = dr("x", 2, { a: "2" });
-    expect(derive(d2, obs({ spec: { a: "1" }, appliedGeneration: 1 }), "Settled", 1000, 0)).toBe("Converging");
+    expect(derive(d2, obs({ spec: { a: "1" }, appliedGeneration: 1 }), "Settled", 1000, 0)).toBe(
+      "Converging",
+    );
   });
   it("Unknown (fail-safe) on stale telemetry", () => {
     const d = dr("x", 1, { a: "1" });
-    expect(derive(d, obs({ spec: { a: "1" }, observedAtMs: 0 + 1 }), "Settled", 100000, 5000)).toBe("Unknown");
+    expect(derive(d, obs({ spec: { a: "1" }, observedAtMs: 0 + 1 }), "Settled", 100000, 5000)).toBe(
+      "Unknown",
+    );
   });
   it("Frozen dominates", () => {
     const d = dr("x", 1, { a: "1" });
@@ -45,7 +70,16 @@ function manifest(gen: number): Manifest {
     generation: gen,
     resources: {
       web: dr("web", gen, { size: "small", replicas: "2" }),
-      db: { id: "db", kind: "managed-relational-db", spec: { size: "medium" }, generation: gen, lifecycle: "service", service: "s", region: "us-east-1", cell: "data" },
+      db: {
+        id: "db",
+        kind: "managed-relational-db",
+        spec: { size: "medium" },
+        generation: gen,
+        lifecycle: "service",
+        service: "s",
+        region: "us-east-1",
+        cell: "data",
+      },
     },
   };
 }
@@ -209,7 +243,7 @@ describe("circuit breaker + incidents", () => {
 
     e.hardFailure(appId);
     for (let i = 0; i < 25; i++) e.tick();
-    let snap = e.snapshot();
+    const snap = e.snapshot();
     expect(snap.resources.find((r) => r.id === appId)!.state).toBe("Stalled");
     expect(snap.incidents.some((inc) => inc.id === appId)).toBe(true);
 

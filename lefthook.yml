@@ -1,0 +1,17 @@
+# Git hooks — a backstop for the same gates CI runs.
+# Install once: `cd app && npx lefthook install`. Never bypass with --no-verify;
+# a hook failure is a root cause to fix.
+pre-commit:
+  commands:
+    lint:
+      run: npm --prefix app run lint
+
+pre-push:
+  parallel: false
+  commands:
+    typecheck:
+      run: npm --prefix app run typecheck
+    test:
+      run: npm --prefix app run test
+    build:
+      run: npm --prefix app run build
