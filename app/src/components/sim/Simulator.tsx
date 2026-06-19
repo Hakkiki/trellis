@@ -5,6 +5,7 @@ import {
   CircleSlash,
   Clock,
   Cloud,
+  Cpu,
   Database,
   DollarSign,
   Eye,
@@ -23,6 +24,12 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
+import {
+  APPROVALS_REQUIRED,
+  type ControlPlaneView,
+  type TcbId,
+  type TcbState,
+} from "@/sim/control";
 import {
   type AuditEntry,
   DEFAULT_POSTURE,
@@ -93,6 +100,7 @@ export default function Simulator() {
   const [form, setForm] = React.useState<Posture>(DEFAULT_POSTURE);
   const [layout, setLayout] = React.useState<"stage" | "grid">("stage");
   const [view, setView] = React.useState<ViewMode>("state");
+  const [cpTarget, setCpTarget] = React.useState<TcbId>("reconciler");
 
   const refresh = React.useCallback(() => {
     if (engineRef.current) setSnap(engineRef.current.snapshot());
@@ -586,6 +594,17 @@ export default function Simulator() {
             onSelect={setSelected}
           />
         )}
+
+        {phase === "applied" && snap && (
+          <ControlPlanePanel
+            cp={snap.controlPlane}
+            target={cpTarget}
+            onTarget={setCpTarget}
+            onPropose={(faulty) => act((e) => e.proposeSelfUpgrade(cpTarget, faulty))}
+            onApprove={() => act((e) => e.approveSelfUpgrade())}
+            onReBootstrap={() => act((e) => e.reBootstrap())}
+          />
+        )}
       </div>
 
       {/* ---- Right: Proof + audit ---- */}
@@ -782,6 +801,131 @@ function OwnersPanel({
         );
       })}
     </div>
+  );
+}
+
+function tcbColor(state: TcbState): string {
+  if (state === "Bricked") return "var(--state-stalled)";
+  if (state === "Upgrading") return "var(--state-converging)";
+  return "var(--state-converged)";
+}
+
+function ControlPlanePanel({
+  cp,
+  target,
+  onTarget,
+  onPropose,
+  onApprove,
+  onReBootstrap,
+}: {
+  cp: ControlPlaneView;
+  target: TcbId;
+  onTarget: (id: TcbId) => void;
+  onPropose: (faulty: boolean) => void;
+  onApprove: () => void;
+  onReBootstrap: () => void;
+}) {
+  const { pending } = cp;
+  return (
+    <Card className={cp.bricked ? "border-destructive" : ""}>
+      <CardHeader className="pb-2">
+        <CardTitle className="flex items-center gap-2 text-xs tracking-wide uppercase">
+          <Cpu className="size-3.5" /> Control plane · self-environment (C0)
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-3 text-xs">
+        <div className="flex flex-wrap gap-1.5">
+          {cp.components.map((c) => {
+            const color = tcbColor(c.state);
+            return (
+              <button
+                key={c.id}
+                onClick={() => onTarget(c.id)}
+                className={cn(
+                  "flex items-center gap-1.5 rounded-md border px-2 py-1",
+                  target === c.id && !pending ? "ring-1 ring-[var(--ring)]" : "",
+                )}
+                style={{ borderColor: `color-mix(in srgb, ${color} 50%, transparent)` }}
+              >
+                <span
+                  className="size-2 rounded-full"
+                  style={{ background: color, boxShadow: `0 0 6px ${color}` }}
+                />
+                {c.name} v{c.version}
+                {c.state === "Bricked" ? " ✕" : c.state === "Upgrading" ? " ⟳" : ""}
+              </button>
+            );
+          })}
+        </div>
+
+        {!pending && !cp.bricked && (
+          <div className="space-y-2">
+            <p className="text-muted-foreground">
+              The loop manages itself reflexively (§16): a self-upgrade is a transition on the C0
+              self-environment, at the <b>highest gate</b> (dual-control / sealed-root). Target:{" "}
+              <b className="text-foreground">{target}</b>.
+            </p>
+            <div className="flex gap-2">
+              <Button size="sm" variant="secondary" onClick={() => onPropose(false)}>
+                Propose upgrade
+              </Button>
+              <Button size="sm" variant="outline" onClick={() => onPropose(true)}>
+                Propose faulty
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {pending && (
+          <div className="border-border/60 space-y-2 rounded-md border p-2">
+            <div className="font-medium">
+              {pending.component} v{pending.fromVersion} → v{pending.toVersion} · {pending.phase}
+            </div>
+            {pending.phase === "proposed" && (
+              <>
+                <p className="text-muted-foreground">
+                  Highest gate — dual-control / sealed-root (you're changing the thing that governs
+                  change). {APPROVALS_REQUIRED - pending.approvals} more approval required.
+                </p>
+                <Button size="sm" onClick={onApprove}>
+                  Approve ({pending.approvals}/{APPROVALS_REQUIRED})
+                </Button>
+              </>
+            )}
+            {pending.phase === "canary" && (
+              <>
+                <p className="text-muted-foreground">Canary rollout — {pending.canaryPct}%</p>
+                <div className="bg-secondary h-1.5 w-full overflow-hidden rounded-full">
+                  <div
+                    className="bg-primary h-full rounded-full transition-all"
+                    style={{ width: `${pending.canaryPct}%` }}
+                  />
+                </div>
+              </>
+            )}
+            {pending.phase === "bricked" && (
+              <p className="text-destructive">Canary failed — {pending.component} is bricked.</p>
+            )}
+          </div>
+        )}
+
+        {cp.bricked && (
+          <div className="border-destructive space-y-2 rounded-md border p-2">
+            <div className="text-destructive font-medium">
+              Control plane bricked{cp.loopDown ? " — workload self-heal is DOWN" : ""}
+            </div>
+            <p className="text-muted-foreground">
+              A bad self-upgrade disabled the loop — the one change the loop can't heal itself
+              (§16). Recover via the meta-DR path: re-bootstrap from the external seed + the
+              last-good generation.
+            </p>
+            <Button size="sm" variant="outline" onClick={onReBootstrap}>
+              Re-bootstrap (meta-DR)
+            </Button>
+          </div>
+        )}
+      </CardContent>
+    </Card>
   );
 }
 

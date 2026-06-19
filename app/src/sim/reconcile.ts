@@ -88,6 +88,40 @@ export class Reconciler {
     this.attempts.delete(id);
   }
 
+  /** Read-only observe: derive each resource's State without converging. Used
+   *  when the loop is down (e.g. the reconciler component is bricked, §16) — the
+   *  topology still shows reality, but nothing is remediated. */
+  observeStates(m: Manifest, nowMs: number): Status[] {
+    const byId = new Map(this.p.observeAll().map((o) => [o.id, o]));
+    const out: Status[] = [];
+    for (const [id, d] of Object.entries(m.resources)) {
+      const o = byId.get(id) ?? {
+        id,
+        exists: false,
+        spec: {},
+        health: "Unknown" as Health,
+        appliedGeneration: 0,
+        observedAtMs: 0,
+      };
+      const control: Control = this.frozen.has(id)
+        ? "Frozen"
+        : this.stalled.has(id)
+          ? "Stalled"
+          : "Settled";
+      const st = derive(d, o, control, nowMs, this.stalenessBudgetMs);
+      out.push({
+        id,
+        state: st,
+        health: o.health,
+        action: "hold",
+        reason: "control-plane loop down — observing only, not reconciling",
+        detail: o.quorum ? `${o.quorum.healthy}/${o.quorum.total} nodes` : undefined,
+      });
+    }
+    out.sort((a, b) => (a.id < b.id ? -1 : 1));
+    return out;
+  }
+
   step(m: Manifest, nowMs: number): Status[] {
     const obs = this.p.observeAll();
     const byId = new Map(obs.map((o) => [o.id, o]));

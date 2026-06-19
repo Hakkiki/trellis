@@ -4,6 +4,7 @@
 // provider, and the Reconciler, and records an audit trail (the §7 duality:
 // every action emits a record of who/why).
 
+import { ControlPlane, type ControlPlaneView, type TcbId } from "./control";
 import {
   type BudgetPolicy,
   type CellKind,
@@ -107,6 +108,7 @@ export interface EngineSnapshot {
   serviceRollups: ServiceRollup[];
   envRollup: State;
   envNote: string;
+  controlPlane: ControlPlaneView;
 }
 
 /** Ownership roll-up (§6): a Service's state (worst-of its managed children) and
@@ -145,6 +147,7 @@ export class Engine {
     stalenessBudgetMs: 5000,
     blastRadiusPct: 0.4,
   });
+  private cp = new ControlPlane();
   private gen = 0;
   private appliedGen = 0;
   private posture: Posture;
@@ -233,11 +236,20 @@ export class Engine {
     return true;
   }
 
-  /** One reconcile pass + advance the simulated cloud. */
+  /** One reconcile pass + advance the simulated cloud (and any self-upgrade). */
   tick() {
+    this.cp.tick();
     if (!this.manifest) return;
-    this.statuses = this.rec.step(this.manifest, this.cloud.now());
-    this.recordTransitions();
+    // A bad self-upgrade can brick the reconciler — the one change that disables
+    // the thing that would heal (§16). The workload loop is then down: the cloud
+    // still drifts, but nothing reconciles it until a re-bootstrap.
+    if (!this.cp.loopDown()) {
+      this.statuses = this.rec.step(this.manifest, this.cloud.now());
+      this.recordTransitions();
+    } else {
+      // Loop down: still observe (the topology shows reality) but never converge.
+      this.statuses = this.rec.observeStates(this.manifest, this.cloud.now());
+    }
     this.cloud.tick();
   }
 
@@ -374,6 +386,48 @@ export class Engine {
     );
   }
 
+  // ---- Self-upgrade: the control plane managing itself (§16) -----------------
+
+  /** Propose a self-upgrade transition on a TCB component (the C0 self-env). */
+  proposeSelfUpgrade(id: TcbId, faulty: boolean) {
+    if (!this.cp.propose(id, faulty)) return;
+    this.log(
+      "Author",
+      "platform-team",
+      "propose-self-upgrade",
+      `tcb/${id}`,
+      `transition on the C0 self-environment${faulty ? " (canary will fail)" : ""} — needs the highest gate`,
+    );
+  }
+
+  /** A dual-control approval for the in-flight self-upgrade (the highest gate). */
+  approveSelfUpgrade() {
+    if (!this.cp.approve()) return;
+    const remaining = this.cp.approvalsRemaining();
+    this.log(
+      "Gate",
+      "sealed-root",
+      remaining > 0 ? "self-upgrade-approval" : "self-upgrade-gate-cleared",
+      "control-plane",
+      remaining > 0
+        ? `dual-control: ${remaining} more approval required`
+        : "highest gate cleared — canary rollout begins",
+    );
+  }
+
+  /** Meta-DR (§12): re-bootstrap a bricked control plane from the external seed. */
+  reBootstrap() {
+    if (!this.cp.view().bricked) return;
+    this.cp.reBootstrap();
+    this.log(
+      "Break-glass",
+      "sealed-root",
+      "re-bootstrap",
+      "control-plane",
+      "bricked self-upgrade recovered from the external seed + last-good generation",
+    );
+  }
+
   // ---- Snapshot for the UI --------------------------------------------------
 
   snapshot(): EngineSnapshot {
@@ -465,6 +519,7 @@ export class Engine {
       serviceRollups,
       envRollup,
       envNote,
+      controlPlane: this.cp.view(),
     };
   }
 

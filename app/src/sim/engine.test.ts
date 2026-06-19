@@ -337,6 +337,58 @@ describe("multi-service ownership (§6)", () => {
   });
 });
 
+describe("self-upgrade — the control plane managing itself (§16)", () => {
+  function applied() {
+    const e = new Engine(DEFAULT_POSTURE);
+    e.declare(DEFAULT_POSTURE);
+    e.approve();
+    for (let i = 0; i < 30 && !e.snapshot().converged; i++) e.tick();
+    return e;
+  }
+
+  it("a good self-upgrade needs the highest gate (dual-control), then canaries in", () => {
+    const e = applied();
+    e.proposeSelfUpgrade("planner", false);
+    expect(e.snapshot().controlPlane.pending?.phase).toBe("proposed");
+
+    // One approval is not enough — the highest gate is dual-control.
+    e.approveSelfUpgrade();
+    expect(e.snapshot().controlPlane.pending?.phase).toBe("proposed");
+    e.approveSelfUpgrade();
+    expect(e.snapshot().controlPlane.pending?.phase).toBe("canary");
+
+    // Canary rolls out over ticks; the component lands on the new version.
+    for (let i = 0; i < 6; i++) e.tick();
+    const cp = e.snapshot().controlPlane;
+    expect(cp.pending).toBeNull();
+    expect(cp.components.find((c) => c.id === "planner")!.version).toBe(2);
+    expect(cp.bricked).toBe(false);
+  });
+
+  it("a faulty self-upgrade bricks the reconciler and disables the loop until re-bootstrap", () => {
+    const e = applied();
+    e.proposeSelfUpgrade("reconciler", true);
+    e.approveSelfUpgrade();
+    e.approveSelfUpgrade();
+    for (let i = 0; i < 6; i++) e.tick();
+    expect(e.snapshot().controlPlane.bricked).toBe(true);
+    expect(e.snapshot().controlPlane.loopDown).toBe(true);
+
+    // With the loop down, an injected failure is NOT self-healed.
+    const app = e.snapshot().resources.find((r) => r.lifecycle === "service" && r.cell === "app")!;
+    e.failNode(app.id);
+    for (let i = 0; i < 15; i++) e.tick();
+    expect(e.snapshot().resources.find((r) => r.id === app.id)!.state).not.toBe("Converged");
+
+    // Meta-DR: re-bootstrap restores the loop; self-heal resumes.
+    e.reBootstrap();
+    expect(e.snapshot().controlPlane.bricked).toBe(false);
+    expect(e.snapshot().controlPlane.loopDown).toBe(false);
+    for (let i = 0; i < 20 && !e.snapshot().converged; i++) e.tick();
+    expect(e.snapshot().converged).toBe(true);
+  });
+});
+
 describe("security posture projection (§7)", () => {
   it("classifies trust/exposure tiers and flags the attack surface", () => {
     // External is always at-risk (third-party, outside our TCB).

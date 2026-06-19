@@ -6,6 +6,22 @@ description: Recent changes to the Trellis simulator, newest first.
 What's shipped to the live simulator, newest first. The footer shows the exact build
 (date · commit) currently deployed.
 
+## Self-upgrade — the loop managing itself
+
+The capstone (spec §16): the control plane manages *itself*. Its **TCB** — planner · proof · gate ·
+catalog · reconciler — is a **Criticality-0 self-environment**, and a Trellis upgrade is a transition on
+that environment:
+
+- **Propose a self-upgrade** on a component → it's gated at the **highest bar**: dual-control /
+  sealed-root (you're changing the thing that governs change). Two approvals, then a **canary rollout**.
+- **The circularity hazard** — a **faulty** upgrade bricks the component. Brick the **reconciler** and the
+  workload self-heal loop goes **down**: the topology still observes reality, but nothing reconciles —
+  the one change the loop can't heal itself.
+- **Meta-DR recovery** — re-bootstrap from the **external seed + the last-good generation** (never the
+  ordinary loop), and the loop comes back and resumes healing.
+
+A new control-plane panel shows the five TCB components, the in-flight transition, and the recovery path.
+
 ## Security View
 
 A 4th topology lens (spec §7) — a **trust/exposure projection** of the same Structure. Switch the lens to
