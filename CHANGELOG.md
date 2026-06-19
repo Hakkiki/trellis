@@ -7,6 +7,10 @@ The simulator deploys continuously from `main`, so entries are grouped by date r
 
 ### Added
 
+- **"What's new" surface**: a build stamp (date · commit) in the footer, a hero pill, and a
+  `/docs/changelog` page — so the live site always shows what's deployed.
+- **Stateful clusters**: a self-run quorum broker (the 4th workload archetype) with an `Unavailable`
+  state when quorum is lost.
 - **Developer workflow**: `CLAUDE.md` agent guide; PR-gated CI (`ci.yml`: lint + typecheck + test +
   build); Biome (format + lint); lefthook pre-commit/pre-push hooks; `.nvmrc` (Node 22); PR template;
   this changelog.

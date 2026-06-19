@@ -64,7 +64,15 @@ const surfaces = [
       alt="Trellis"
       class="mx-auto h-16 w-auto sm:h-20"
     />
-    <p class="text-primary mt-8 text-sm font-medium tracking-wide uppercase">
+    <a
+      href={`${base}/docs/changelog`}
+      class="border-border/60 bg-card/40 text-muted-foreground hover:text-foreground mt-7 inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs transition"
+    >
+      <span class="bg-primary size-1.5 rounded-full"></span>
+      New: stateful clusters &amp; quorum roll-up
+      <span class="text-primary">→</span>
+    </a>
+    <p class="text-primary mt-5 text-sm font-medium tracking-wide uppercase">
       Self-hosted cloud control plane
     </p>
     <h1 class="mx-auto mt-3 max-w-3xl text-4xl font-semibold tracking-tight sm:text-5xl">
