@@ -7,6 +7,11 @@ The simulator deploys continuously from `main`, so entries are grouped by date r
 
 ### Added
 
+- **Blast-radius demo** (`/blast-radius`): the pitch money-shot — the *same* bad upgrade to a shared
+  service rolled out two ways, a shared instance everyone depends on (100% blast radius) vs one instance
+  per division (contained to one, recovers from last-good). A purpose-built illustration, in the nav and
+  linked from the case + landing. Built maker/checker (genericized the vendor name, simplified state,
+  fixed projector-readability, removed dead classes per the review).
 - **"The case" page** (Start here): a three-minute, exec/investor-readable narrative — the 2 a.m.
   shared-service outage, why HA doesn't help, the declare→prove→reconcile insight, slicing the blast
   radius per division (control plane included), the per-division-platform wedge, what's proven today
