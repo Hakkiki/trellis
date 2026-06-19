@@ -12,7 +12,7 @@ always invert."* So we did not ask "how does Trellis win?" We asked the opposite
 > outage, an unrecoverable control plane, an unauthorized change that looks authorized?**
 
 Then we walked every kill-path and made sure the design forecloses it. The genuine gaps this surfaced
-became **new normative invariants** (spec [§17](/trellis/docs/spec), Invariants 11–15). This page is the
+became **new normative invariants** (spec [§17](/trellis/docs/spec), Invariants 11–16). This page is the
 distilled version; the raw red-team enumeration lives in the off-site design bundle.
 
 ## The promises an attacker would target
@@ -100,6 +100,19 @@ The subtlest one. The gate approved a change; it just happened to be bad.
   **reflexive, highest-gate, dual-controlled, externally-audited** change ([§16](/trellis/docs/spec)) —
   never a single root action.
 
+## Kill-path 7 — Run out of authority mid-change
+
+- **Hand the actuator a credential that expires mid-apply** — a long migration or a slow provider
+  operation (a database or cluster taking 20+ minutes) outlives the plan-scoped credential's lifetime,
+  leaving reality half-changed. **➕ newly hardened (Inv 16):** an apply is **leased**. A step never starts
+  unless its worst-case duration fits the credential's remaining lifetime plus a buffer — otherwise the
+  actuator **re-mints a fresh credential, waits for one, or refuses and flags**, never start-and-hope. And
+  because every step is **idempotent and reversible**, a credential that *does* expire mid-flight can only
+  leave a **resumable** state, never a half-applied one. Unavoidably long provider operations are
+  **initiate-then-poll under a refreshed lease**, the operation itself idempotent. (The credential in question is the plan-scoped
+  ephemeral mint credential of [Inv 4](/trellis/docs/spec) — the actuator's short-lived STS session — not
+  the auto-rotated workload identity.)
+
 ## The honest residual
 
 Inversion hardens; it doesn't make a system invincible. What remains, stated plainly:
@@ -115,9 +128,9 @@ Inversion hardens; it doesn't make a system invincible. What remains, stated pla
   back into one. The near-stateless, self-managing footprint ([§12](/trellis/docs/spec)) is what keeps the
   sliced model cheaper than the SPOF it replaces — but it's a pressure to watch, not a law.
 
-## The five invariants this produced
+## The six invariants this produced
 
-Folded into the normative spec ([§17](/trellis/docs/spec), 11–15):
+Folded into the normative spec ([§17](/trellis/docs/spec), 11–16):
 
 | # | Invariant | Kill-path it shuts |
 |---|---|---|
@@ -126,5 +139,6 @@ Folded into the normative spec ([§17](/trellis/docs/spec), 11–15):
 | 13 | **Recovery is out-of-band** — every recovery dependency works with the system down; M-of-N custody | Bricking the control plane irrecoverably |
 | 14 | **Separation of duties; the gate floor can't be self-loosened** | A malicious-but-"authorized" change; root eroding the floor |
 | 15 | **The checker sits outside the blast radius** — self-observability, attested signals | Acting on a spoofed or broken telemetry path |
+| 16 | **Bounded by the lease** — never start a write you can't finish; re-mint / wait / refuse; idempotent-resumable backstop | A credential expiring mid-apply, leaving reality half-changed |
 
 In one line: **we found where Trellis would die, and built so it can't go there.**
