@@ -306,14 +306,27 @@ export default function Simulator() {
             </Badge>
           )}
           {phase === "applied" && (
-            <button
-              onClick={() => setRunning((r) => !r)}
-              className="text-muted-foreground hover:text-foreground ml-auto text-xs underline"
-            >
-              {running ? "pause loop" : "resume loop"}
-            </button>
+            <div className="ml-auto flex items-center gap-3 text-xs">
+              <button
+                onClick={() => act((e) => e.setChangeFreeze(!snap?.changeFreeze))}
+                className={cn(
+                  "rounded-md border px-2 py-1",
+                  snap?.changeFreeze
+                    ? "border-[var(--state-frozen)] text-foreground"
+                    : "border-input text-muted-foreground hover:text-foreground",
+                )}
+              >
+                {snap?.changeFreeze ? "❄ freeze on" : "change freeze"}
+              </button>
+              <button
+                onClick={() => setRunning((r) => !r)}
+                className="text-muted-foreground hover:text-foreground underline"
+              >
+                {running ? "pause loop" : "resume loop"}
+              </button>
+            </div>
           )}
-          <div className="ml-auto flex gap-1">
+          <div className="flex gap-1">
             {(["stage", "grid"] as const).map((v) => (
               <button
                 key={v}
@@ -409,6 +422,46 @@ export default function Simulator() {
                   sel && act((e) => (e.isFrozen(sel.id) ? e.ratify(sel.id) : e.breakGlass(sel.id)))
                 }
               />
+            </CardContent>
+          </Card>
+        )}
+
+        {phase === "applied" && snap?.changeFreeze && (
+          <Card className="border-[var(--state-frozen)]">
+            <CardContent className="flex items-center gap-3 pt-6 text-sm">
+              <Snowflake className="size-5 shrink-0 text-[var(--state-frozen)]" />
+              <div className="flex-1">
+                <div className="font-semibold">Change freeze active</div>
+                <p className="text-muted-foreground">
+                  Non-emergency Converge actions are held (§9). Drift is recorded but not corrected;
+                  break-glass still overrides per-resource.
+                </p>
+              </div>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => act((e) => e.setChangeFreeze(false))}
+              >
+                Lift freeze
+              </Button>
+            </CardContent>
+          </Card>
+        )}
+
+        {phase === "applied" && snap?.blastTripped && !snap?.changeFreeze && (
+          <Card className="border-destructive">
+            <CardContent className="flex items-center gap-3 pt-6 text-sm">
+              <Zap className="text-destructive size-5 shrink-0" />
+              <div className="flex-1">
+                <div className="text-destructive font-semibold">Blast-radius breaker tripped</div>
+                <p className="text-muted-foreground">
+                  A single pass would remediate a large share of the fleet — halted and paging
+                  instead of mass-stomping (§9). Review, then proceed.
+                </p>
+              </div>
+              <Button size="sm" variant="outline" onClick={() => act((e) => e.acknowledgeBlast())}>
+                Proceed once
+              </Button>
             </CardContent>
           </Card>
         )}

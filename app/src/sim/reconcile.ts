@@ -2,7 +2,7 @@
 // the approved envelope. Converge actions ONLY — it never mutates desired state
 // (that is the Author class).
 
-import type { Health, Manifest, ResourceID } from "./model";
+import type { DesiredResource, Health, Manifest, Observation, ResourceID } from "./model";
 import type { Provider } from "./provider";
 import { type Control, derive, type State } from "./state";
 
@@ -14,6 +14,10 @@ export interface Options {
   stalenessBudgetMs?: number;
   /** Consecutive failed self-heals before the breaker trips to Stalled (§9). */
   flapThreshold?: number;
+  /** Blast-radius breaker (§9): if a single pass would remediate more than this
+   *  fraction of managed resources, halt and page instead of mass-stomping.
+   *  0 disables it. */
+  blastRadiusPct?: number;
 }
 
 export interface Status {
@@ -32,6 +36,10 @@ export class Reconciler {
   private driftPolicy: DriftPolicy;
   private stalenessBudgetMs: number;
   private flapThreshold: number;
+  private blastRadiusPct: number;
+  private freezeOn = false; // change-freeze / maintenance window
+  private blastAck = false; // one-shot: proceed past the blast-radius breaker
+  private lastBlastTripped = false;
 
   constructor(
     private p: Provider,
@@ -40,6 +48,23 @@ export class Reconciler {
     this.driftPolicy = opts.driftPolicy ?? "enforce";
     this.stalenessBudgetMs = opts.stalenessBudgetMs ?? 0;
     this.flapThreshold = opts.flapThreshold ?? 3;
+    this.blastRadiusPct = opts.blastRadiusPct ?? 0;
+  }
+
+  /** Temporal governance (§9): a change-freeze window holds non-emergency
+   *  Converge actions. Break-glass (per-resource freeze) still overrides. */
+  setChangeFreeze(on: boolean) {
+    this.freezeOn = on;
+  }
+  isChangeFreeze() {
+    return this.freezeOn;
+  }
+  /** Acknowledge the blast-radius breaker: let the next pass proceed once. */
+  acknowledgeBlast() {
+    this.blastAck = true;
+  }
+  blastTripped() {
+    return this.lastBlastTripped;
   }
 
   /** Break-glass: suspend reconciliation of a resource (spec §7). */
@@ -67,6 +92,7 @@ export class Reconciler {
     const obs = this.p.observeAll();
     const byId = new Map(obs.map((o) => [o.id, o]));
     const out: Status[] = [];
+    const plans: PlanItem[] = [];
 
     for (const [id, d] of Object.entries(m.resources)) {
       const o = byId.get(id) ?? {
@@ -116,80 +142,109 @@ export class Reconciler {
         continue;
       }
 
+      // --- Decide (no side effects yet) for service / stateful workloads. ---
       const control: Control = this.frozen.has(id)
         ? "Frozen"
         : this.stalled.has(id)
           ? "Stalled"
           : "Settled";
-      let st = derive(d, o, control, nowMs, this.stalenessBudgetMs);
-
-      // Circuit breaker (§9): a resource that keeps failing self-heal flaps,
-      // then trips to Stalled — the reconciler stops retrying into a crash-loop
-      // and escalates to a human.
-      if (st === "Degraded" || st === "Unavailable") {
-        const n = (this.attempts.get(id) ?? 0) + 1;
-        this.attempts.set(id, n);
-        if (n > this.flapThreshold) {
-          this.stalled.add(id);
-          st = "Stalled";
-        }
-      } else if (st === "Converged") {
+      const st = derive(d, o, control, nowMs, this.stalenessBudgetMs);
+      if (st === "Converged") {
         this.attempts.delete(id);
         this.stalled.delete(id);
       }
+      const detail = o.quorum ? `${o.quorum.healthy}/${o.quorum.total} nodes` : undefined;
 
-      const s: Status = { id, state: st, health: o.health, action: "none", reason: "" };
-      if (o.quorum) s.detail = `${o.quorum.healthy}/${o.quorum.total} nodes`;
-
+      let intended: Action = "none";
+      let reason = "";
+      let remediation = false; // unauthored gap the reconciler would close
       switch (st) {
         case "Converged":
-          s.reason = "matches spec and healthy";
+          reason = "matches spec and healthy";
           break;
         case "Converging":
-          this.p.apply(d);
-          s.action = "apply";
-          s.reason = "authored change rolling out";
+          intended = "apply";
+          reason = "authored change rolling out";
           break;
         case "Degraded":
-          this.p.apply(d);
-          s.action = "apply";
-          s.reason = "self-heal: unhealthy, re-provisioning";
+          intended = "apply";
+          reason = "self-heal: unhealthy, re-provisioning";
+          remediation = true;
           break;
         case "Unavailable":
-          this.p.apply(d);
-          s.action = "apply";
-          s.reason = "quorum lost — restoring nodes";
+          intended = "apply";
+          reason = "quorum lost — restoring nodes";
+          remediation = true;
           break;
         case "Drifted":
           if (this.driftPolicy === "enforce") {
-            this.p.apply(d);
-            s.action = "apply";
-            s.reason = "drift: unauthored change, correcting";
+            intended = "apply";
+            reason = "drift: unauthored change, correcting";
+            remediation = true;
           } else if (this.driftPolicy === "warn") {
-            s.action = "warn";
-            s.reason = "drift detected (policy=warn, not correcting)";
+            intended = "warn";
+            reason = "drift detected (policy=warn, not correcting)";
           } else {
-            s.reason = "drift ignored (policy=ignore)";
+            reason = "drift ignored (policy=ignore)";
           }
           break;
         case "Unknown":
-          s.action = "hold";
-          s.reason = "telemetry stale/missing — holding (fail-safe)";
+          intended = "hold";
+          reason = "telemetry stale/missing — holding (fail-safe)";
           break;
         case "Frozen":
-          s.action = "hold";
-          s.reason = "break-glass: reconciliation suspended";
+          intended = "hold";
+          reason = "break-glass: reconciliation suspended";
           break;
         case "Stalled":
-          s.action = "hold";
-          s.reason = "stalled — needs a human";
+          intended = "hold";
+          reason = "stalled — needs a human";
           break;
       }
-      out.push(s);
+      plans.push({ id, d, o, st, intended, reason, detail, remediation });
     }
 
-    // Retire resources absent from desired (unauthored existence) under enforce.
-    if (this.driftPolicy === "enforce") {
+    // --- Blast-radius breaker (§9): count unauthored remediations this pass. ---
+    const remediators = plans.filter((p) => p.intended === "apply" && p.remediation).length;
+    const managed = plans.length;
+    const ratio = managed ? remediators / managed : 0;
+    const blastTripped = this.blastRadiusPct > 0 && ratio > this.blastRadiusPct && !this.blastAck;
+    this.lastBlastTripped = blastTripped;
+
+    // --- Realize: apply within the temporal + blast-radius envelope. ---
+    for (const p of plans) {
+      let st = p.st;
+      let reason = p.reason;
+      let action: Action = p.intended === "apply" ? "apply" : p.intended;
+
+      if (p.intended === "apply") {
+        if (this.freezeOn) {
+          action = "hold";
+          reason = "change-freeze: non-emergency change held";
+        } else if (blastTripped && p.remediation) {
+          action = "hold";
+          reason = `blast-radius breaker: ${Math.round(ratio * 100)}% would change — halted, paging`;
+        } else if (p.remediation && (st === "Degraded" || st === "Unavailable")) {
+          // Flap breaker: stop retrying a self-heal that never sticks.
+          const n = (this.attempts.get(p.id) ?? 0) + 1;
+          this.attempts.set(p.id, n);
+          if (n > this.flapThreshold) {
+            this.stalled.add(p.id);
+            st = "Stalled";
+            action = "hold";
+            reason = "stalled — needs a human";
+          } else {
+            this.p.apply(p.d);
+          }
+        } else {
+          this.p.apply(p.d);
+        }
+      }
+      out.push({ id: p.id, state: st, health: p.o.health, action, reason, detail: p.detail });
+    }
+
+    // Retire resources absent from desired — gated by the same envelope.
+    if (this.driftPolicy === "enforce" && !this.freezeOn && !blastTripped) {
       for (const o of obs) {
         if (m.resources[o.id] || !o.exists || this.frozen.has(o.id)) continue;
         this.p.delete(o.id);
@@ -203,9 +258,22 @@ export class Reconciler {
       }
     }
 
+    this.blastAck = false; // one-shot acknowledgement consumed
+
     out.sort((a, b) => (a.id < b.id ? -1 : 1));
     return out;
   }
+}
+
+interface PlanItem {
+  id: ResourceID;
+  d: DesiredResource;
+  o: Observation;
+  st: State;
+  intended: Action;
+  reason: string;
+  detail?: string;
+  remediation: boolean;
 }
 
 export function allConverged(statuses: Status[]): boolean {

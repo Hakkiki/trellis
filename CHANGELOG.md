@@ -7,6 +7,9 @@ The simulator deploys continuously from `main`, so entries are grouped by date r
 
 ### Added
 
+- **Reconciler safety (§9)**: a change-freeze / maintenance window (holds non-emergency Converge), a
+  blast-radius breaker (halts + pages on mass remediation, with operator Proceed), plus the existing
+  flap breaker. Region outages no longer hit the third-party External (outside our failure domain).
 - **"What's new" surface**: a build stamp (date · commit) in the footer, a hero pill, and a
   `/docs/changelog` page — so the live site always shows what's deployed.
 - **Stateful clusters**: a self-run quorum broker (the 4th workload archetype) with an `Unavailable`
