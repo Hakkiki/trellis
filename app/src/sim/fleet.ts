@@ -121,6 +121,7 @@ export class Fleet {
       budgetMonthly: env.def.budget,
       optimize: "minimize-cost",
       compliance: this.base.compliance,
+      governanceServices: ["load-balancer", "compute", "managed-relational-db"],
     };
     this.gen += 1;
     const p = runPlanner(posture, this.gen);

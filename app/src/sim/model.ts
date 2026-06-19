@@ -55,6 +55,8 @@ export interface Posture {
   budgetMonthly: number;
   optimize: Optimize;
   compliance: string[];
+  /** Governance service whitelist — the resource kinds permitted (§2, hard). */
+  governanceServices: Kind[];
 }
 
 // ---- Plan + proof (the planner's output, spec §5) -------------------------

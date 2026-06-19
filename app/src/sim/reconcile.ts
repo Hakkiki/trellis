@@ -12,6 +12,8 @@ export type Action = "none" | "apply" | "delete" | "hold" | "warn";
 export interface Options {
   driftPolicy?: DriftPolicy;
   stalenessBudgetMs?: number;
+  /** Consecutive failed self-heals before the breaker trips to Stalled (§9). */
+  flapThreshold?: number;
 }
 
 export interface Status {
@@ -24,8 +26,11 @@ export interface Status {
 
 export class Reconciler {
   private frozen = new Set<ResourceID>();
+  private stalled = new Set<ResourceID>();
+  private attempts = new Map<ResourceID, number>();
   private driftPolicy: DriftPolicy;
   private stalenessBudgetMs: number;
+  private flapThreshold: number;
 
   constructor(
     private p: Provider,
@@ -33,6 +38,7 @@ export class Reconciler {
   ) {
     this.driftPolicy = opts.driftPolicy ?? "enforce";
     this.stalenessBudgetMs = opts.stalenessBudgetMs ?? 0;
+    this.flapThreshold = opts.flapThreshold ?? 3;
   }
 
   /** Break-glass: suspend reconciliation of a resource (spec §7). */
@@ -46,6 +52,16 @@ export class Reconciler {
     return this.frozen.has(id);
   }
 
+  /** Circuit-breaker state (spec §9 reconciler self-protection). */
+  isStalled(id: ResourceID) {
+    return this.stalled.has(id);
+  }
+  /** Resolve an incident: clear the breaker so reconciliation resumes. */
+  resetBreaker(id: ResourceID) {
+    this.stalled.delete(id);
+    this.attempts.delete(id);
+  }
+
   step(m: Manifest, nowMs: number): Status[] {
     const obs = this.p.observeAll();
     const byId = new Map(obs.map((o) => [o.id, o]));
@@ -55,8 +71,28 @@ export class Reconciler {
       const o =
         byId.get(id) ??
         { id, exists: false, spec: {}, health: "Unknown" as Health, appliedGeneration: 0, observedAtMs: 0 };
-      const control: Control = this.frozen.has(id) ? "Frozen" : "Settled";
-      const st = derive(d, o, control, nowMs, this.stalenessBudgetMs);
+      const control: Control = this.frozen.has(id)
+        ? "Frozen"
+        : this.stalled.has(id)
+          ? "Stalled"
+          : "Settled";
+      let st = derive(d, o, control, nowMs, this.stalenessBudgetMs);
+
+      // Circuit breaker (§9): a resource that keeps failing self-heal flaps,
+      // then trips to Stalled — the reconciler stops retrying into a crash-loop
+      // and escalates to a human.
+      if (st === "Degraded") {
+        const n = (this.attempts.get(id) ?? 0) + 1;
+        this.attempts.set(id, n);
+        if (n > this.flapThreshold) {
+          this.stalled.add(id);
+          st = "Stalled";
+        }
+      } else if (st === "Converged") {
+        this.attempts.delete(id);
+        this.stalled.delete(id);
+      }
+
       const s: Status = { id, state: st, health: o.health, action: "none", reason: "" };
 
       switch (st) {

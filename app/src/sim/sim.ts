@@ -25,6 +25,7 @@ interface SimResource {
   convergeIn: number; // ticks until target becomes observed
   exists: boolean;
   stale: boolean;
+  broken: boolean; // root-cause failure that self-heal cannot fix
   observedAtMs: number;
 }
 
@@ -55,7 +56,9 @@ export class SimCloud implements Provider {
         if (r.convergeIn === 0) {
           r.observed = cloneSpec(r.target);
           r.exists = true;
-          r.health = "Healthy";
+          // A broken resource lands but stays Degraded — self-heal can't fix
+          // the root cause, so the reconciler will flap until a human repairs it.
+          r.health = r.broken ? "Degraded" : "Healthy";
         }
       }
       if (!r.stale) r.observedAtMs = this.nowMs;
@@ -75,6 +78,7 @@ export class SimCloud implements Provider {
         convergeIn: 0,
         exists: false,
         stale: false,
+        broken: false,
         observedAtMs: this.nowMs,
       };
       this.res.set(d.id, r);
@@ -99,7 +103,7 @@ export class SimCloud implements Provider {
     if (r.convergeIn === 0) {
       r.observed = cloneSpec(d.spec);
       r.exists = true;
-      r.health = "Healthy";
+      r.health = r.broken ? "Degraded" : "Healthy";
     }
   }
 
@@ -135,6 +139,22 @@ export class SimCloud implements Provider {
   failNode(id: ResourceID) {
     const r = this.res.get(id);
     if (r) r.health = "Degraded";
+  }
+
+  /** A root-cause failure self-heal cannot fix (bad config, exhausted quota).
+   *  Re-applies keep landing Degraded → the reconciler flaps, then Stalls. */
+  failPermanent(id: ResourceID) {
+    const r = this.res.get(id);
+    if (r) {
+      r.health = "Degraded";
+      r.broken = true;
+    }
+  }
+
+  /** A human fixes the root cause — the next apply heals it. */
+  repair(id: ResourceID) {
+    const r = this.res.get(id);
+    if (r) r.broken = false;
   }
 
   /** Fail every healthy resource in a region — a region outage. Returns ids hit. */

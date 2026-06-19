@@ -40,6 +40,13 @@ export interface ResourceView {
 
 export type Phase = "empty" | "planned" | "applied";
 
+export interface Incident {
+  id: ResourceID;
+  region: string;
+  service: string;
+  cell: CellKind;
+}
+
 export interface EngineSnapshot {
   tMs: number;
   phase: Phase;
@@ -47,6 +54,7 @@ export interface EngineSnapshot {
   plan: Plan | null;
   resources: ResourceView[];
   audit: AuditEntry[];
+  incidents: Incident[];
   costNow: number;
   budget: number;
   overBudget: boolean;
@@ -62,6 +70,7 @@ export const DEFAULT_POSTURE: Posture = {
   budgetMonthly: 8000,
   optimize: "minimize-cost",
   compliance: ["pci-dss", "soc2"],
+  governanceServices: ["load-balancer", "compute", "managed-relational-db"],
 };
 
 export class Engine {
@@ -137,6 +146,19 @@ export class Engine {
     this.log("Observe", "fault", "node-failure", id, "underlying node died");
   }
 
+  /** A root-cause failure self-heal can't fix → the breaker trips to Stalled. */
+  hardFailure(id: ResourceID) {
+    this.cloud.failPermanent(id);
+    this.log("Observe", "fault", "hard-failure", id, "root-cause failure (bad config / quota) — self-heal cannot fix");
+  }
+
+  /** Incident response (§13): a human fixes the root cause; the breaker resets. */
+  resolveIncident(id: ResourceID) {
+    this.cloud.repair(id);
+    this.rec.resetBreaker(id);
+    this.log("Author", "on-call", "resolve-incident", id, "root cause fixed; circuit breaker reset, reconciliation resumes");
+  }
+
   regionOutage(region: string) {
     const hit = this.cloud.regionOutage(region);
     this.log("Observe", "fault", "region-outage", region, `${hit.length} resources degraded`);
@@ -179,6 +201,9 @@ export class Engine {
       : [];
     const costNow = this.manifest ? manifestCost(this.manifest) : 0;
     const phase: Phase = this.manifest ? "applied" : this.plan ? "planned" : "empty";
+    const incidents: Incident[] = resources
+      .filter((r) => r.state === "Stalled")
+      .map((r) => ({ id: r.id, region: r.region, service: r.service, cell: r.cell }));
     return {
       tMs: this.cloud.now(),
       phase,
@@ -186,6 +211,7 @@ export class Engine {
       plan: this.plan,
       resources,
       audit: this.audit.slice(-80),
+      incidents,
       costNow,
       budget: this.posture.budgetMonthly,
       overBudget: costNow > this.posture.budgetMonthly,
@@ -211,5 +237,6 @@ function transitionNote(prev: State, next: State, reason: string): { verb: strin
   if (next === "Converging") return { verb: prev === "Degraded" ? "self-heal" : prev === "Drifted" ? "correcting-drift" : "converging", reason };
   if (next === "Unknown") return { verb: "telemetry-stale", reason: "holding — fail-safe on Unknown" };
   if (next === "Frozen") return { verb: "frozen", reason: "break-glass" };
+  if (next === "Stalled") return { verb: "STALLED", reason: "circuit breaker tripped — needs a human (incident raised)" };
   return null;
 }

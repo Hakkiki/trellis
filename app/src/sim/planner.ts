@@ -1,16 +1,19 @@
-// A deterministic rung-0/1 planner (spec §5): compile a Posture into a concrete
-// Structure (a 3-tier blueprint per region) and emit a plan that *is a proof* —
-// every resource traced to the objective or a named constraint. It selects and
-// parameterizes a vetted blueprint; it does not search (catalog-not-search).
+// A deterministic rung-2/3 planner (spec §5): compile a Posture into a concrete
+// Structure (a 3-tier blueprint per region) and emit a plan that *is a proof*.
 //
-// This is the demoted, buildable form of the compiler — the one honest bet of
-// the spec, shipped as blueprint-select + parameterize + a cost proof.
+// It genuinely solves the objective program over a small, discrete candidate set
+// (catalog-not-search): Governance is a hard pre-filter, the budget is the bound,
+// and `optimize` chooses between candidates — minimize-cost picks the cheapest
+// that meets the declared floor; maximize-resilience picks the strongest that
+// fits the budget. When nothing is feasible it fails loudly with the binding
+// constraint.
 
 import {
   type CellKind,
   type Criticality,
   type DesiredResource,
   type Generation,
+  type Kind,
   type Manifest,
   type Plan,
   type Posture,
@@ -32,98 +35,147 @@ const ISOLATION_FOR: Record<Criticality, string> = {
   C3: "colocate",
 };
 
-function slug(s: string): string {
-  return (
-    s
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, "-")
-      .replace(/^-|-$/g, "") || "service"
-  );
-}
-
-const CELLS: { cell: CellKind; kind: string }[] = [
+const CELLS: { cell: CellKind; kind: Kind }[] = [
   { cell: "edge", kind: "load-balancer" },
   { cell: "app", kind: "compute" },
   { cell: "data", kind: "managed-relational-db" },
 ];
 
-interface Built {
-  resources: DesiredResource[];
-  cost: number;
-  proof: ProofRow[];
+const RES_LEVELS: Resilience[] = ["single", "active-passive", "active-active"];
+
+function slug(s: string): string {
+  return s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "service";
 }
 
-function buildRegionStack(
-  svc: string,
-  region: string,
-  isPrimary: boolean,
-  posture: Posture,
-  gen: Generation,
-): Built {
+interface Candidate {
+  resilience: Resilience;
+  headroom: number;
+  resources: DesiredResource[];
+  cost: number;
+  regionsActive: number;
+  score: number;
+}
+
+function buildCandidate(posture: Posture, resilience: Resilience, headroom: number, gen: Generation): Candidate {
+  const svc = slug(posture.intent);
   const c = posture.criticality;
   const size = SIZE_FOR[c];
-  const replicas = REPLICAS_FOR[c];
+  const replicas = REPLICAS_FOR[c] + headroom;
   const multiAZ = c === "C0" || c === "C1";
+  const regions = posture.regions.length ? posture.regions : ["us-east-1"];
+  const activeRegions = resilience === "single" ? regions.slice(0, 1) : regions;
+
   const resources: DesiredResource[] = [];
-  const proof: ProofRow[] = [];
   let cost = 0;
 
-  for (const { cell, kind } of CELLS) {
-    // Active-passive standby regions carry data (a replica) but no app/edge.
-    if (!isPrimary && posture.resilience === "active-passive" && cell !== "data") continue;
-
-    const id = `${svc}-${cell}-${region}`;
-    const spec: Record<string, string> = { region, size };
-    let rc = 0;
-    if (cell === "app") {
-      spec.replicas = String(isPrimary ? replicas : Math.max(1, replicas - 1));
-      rc = COMPUTE_COST[size] * Number(spec.replicas);
-      proof.push({
-        resourceId: id,
-        claim: `${spec.replicas}× ${size} compute`,
-        reason: `Criticality ${c} sets ${replicas} replicas at ${size}`,
-      });
-    } else if (cell === "data") {
-      spec.multiAZ = String(multiAZ);
-      rc = DB_COST[size] * (multiAZ ? 2 : 1);
-      proof.push({
-        resourceId: id,
-        claim: `managed DB (${multiAZ ? "multi-AZ" : "single-AZ"})`,
-        reason: multiAZ ? `Criticality ${c} requires multi-AZ for HA` : `Criticality ${c} allows single-AZ to save cost`,
-      });
-    } else {
-      rc = LB_COST;
-      proof.push({ resourceId: id, claim: "load balancer", reason: "edge cell accepts LB/NAT (§3)" });
+  activeRegions.forEach((region, i) => {
+    const primary = i === 0;
+    for (const { cell, kind } of CELLS) {
+      if (!primary && resilience === "active-passive" && cell !== "data") continue;
+      const id = `${svc}-${cell}-${region}`;
+      const spec: Record<string, string> = { region, size };
+      if (cell === "app") {
+        spec.replicas = String(primary ? replicas : Math.max(1, replicas - 1));
+        cost += COMPUTE_COST[size] * Number(spec.replicas);
+      } else if (cell === "data") {
+        spec.multiAZ = String(multiAZ);
+        cost += DB_COST[size] * (multiAZ ? 2 : 1);
+      } else {
+        cost += LB_COST;
+      }
+      resources.push({ id, kind, spec, generation: gen, service: svc, region, cell });
     }
-    cost += rc;
-    resources.push({ id, kind, spec, generation: gen, service: svc, region, cell });
+  });
+
+  if (resilience === "active-active" && activeRegions.length > 1) {
+    cost += (activeRegions.length - 1) * REPL_LINK_COST;
   }
-  return { resources, cost, proof };
+
+  const levelRank = RES_LEVELS.indexOf(resilience);
+  const score = levelRank * 1000 + activeRegions.length * 100 + headroom * 10 + (multiAZ ? 5 : 0);
+  return { resilience, headroom, resources, cost, regionsActive: activeRegions.length, score };
+}
+
+function requiredKinds(): Kind[] {
+  return CELLS.map((c) => c.kind);
 }
 
 export function plan(posture: Posture, gen: Generation): Plan {
-  const svc = slug(posture.intent);
-  const regions = posture.regions.length ? posture.regions : ["us-east-1"];
-  const resilience: Resilience = posture.resilience;
-
-  const resources: DesiredResource[] = [];
   const proof: ProofRow[] = [];
-  let cost = 0;
+  const sensitivity: string[] = [];
 
-  // Macro topology shape comes from blueprint selection, never global search.
-  const activeRegions =
-    resilience === "single" ? regions.slice(0, 1) : regions;
+  // --- Governance: hard pre-filter (never traded away, §2). ---
+  const whitelist = posture.governanceServices ?? requiredKinds();
+  const denied = requiredKinds().filter((k) => !whitelist.includes(k));
+  if (denied.length) {
+    const failure = `Governance denied: ${denied.join(", ")} not in the service whitelist. Governance is a hard pre-filter — never traded for cost or resilience (§2).`;
+    proof.push({ resourceId: "*", claim: "GOVERNANCE DENIED", reason: failure, binding: true });
+    return {
+      generation: gen,
+      manifest: { generation: gen, resources: {} },
+      proof,
+      estMonthlyCost: 0,
+      feasible: false,
+      failure,
+      sensitivity: [`Add ${denied.join(", ")} to the whitelist to proceed.`],
+    };
+  }
 
+  // --- Enumerate candidates: resilience ≥ declared floor × replica headroom. ---
+  const regions = posture.regions.length ? posture.regions : ["us-east-1"];
+  const floorIdx = RES_LEVELS.indexOf(posture.resilience);
+  const maxIdx = regions.length >= 2 ? RES_LEVELS.length - 1 : 0;
+  const candidates: Candidate[] = [];
+  for (let i = floorIdx; i <= maxIdx; i++) {
+    for (const headroom of [0, 1]) {
+      candidates.push(buildCandidate(posture, RES_LEVELS[i], headroom, gen));
+    }
+  }
+
+  const feasibleCands = candidates.filter((c) => c.cost <= posture.budgetMonthly);
+
+  // --- Select per the objective program (§5). ---
+  let chosen: Candidate | undefined;
+  const objLabel = posture.optimize === "minimize-cost" ? "minimize cost" : "maximize resilience";
+  if (feasibleCands.length) {
+    chosen =
+      posture.optimize === "minimize-cost"
+        ? feasibleCands.reduce((a, b) => (b.cost < a.cost ? b : a))
+        : feasibleCands.reduce((a, b) => (b.score > a.score || (b.score === a.score && b.cost < a.cost) ? b : a));
+  }
+
+  if (!chosen) {
+    const cheapest = candidates.reduce((a, b) => (b.cost < a.cost ? b : a));
+    const failure = `No realization fits the budget. Cost is bounded by $${posture.budgetMonthly}/mo (the binding constraint); the cheapest structure meeting Criticality ${posture.criticality} + ${posture.resilience} is $${cheapest.cost}/mo.`;
+    proof.push({ resourceId: "*", claim: "INFEASIBLE", reason: failure, binding: true });
+    return {
+      generation: gen,
+      manifest: { generation: gen, resources: {} },
+      proof,
+      estMonthlyCost: cheapest.cost,
+      feasible: false,
+      failure,
+      sensitivity: [`Raise budget to ≥ $${cheapest.cost}/mo, or lower Criticality / resilience.`],
+    };
+  }
+
+  // --- Proof: objective, the choice, and per-resource derivation. ---
   proof.push({
     resourceId: "*",
-    claim: `${activeRegions.length} region${activeRegions.length > 1 ? "s" : ""} (${resilience})`,
+    claim: `objective: ${objLabel} · budget $${posture.budgetMonthly}/mo (bound)`,
     reason:
-      resilience === "active-active"
-        ? "Resilience active-active → full stack in every region"
-        : resilience === "active-passive"
-          ? "Resilience active-passive → primary + warm standby data"
-          : "Resilience single → one region",
-    binding: resilience !== "single",
+      posture.optimize === "minimize-cost"
+        ? "cost is the objective; Governance + Criticality + declared resilience are hard floors"
+        : "resilience is the objective; budget is the bound; Governance is a hard pre-filter",
+    binding: true,
+  });
+  proof.push({
+    resourceId: "*",
+    claim: `${chosen.regionsActive} region${chosen.regionsActive > 1 ? "s" : ""} · ${chosen.resilience}${chosen.headroom ? " · +headroom" : ""}`,
+    reason:
+      posture.optimize === "minimize-cost"
+        ? `cheapest candidate ($${chosen.cost}/mo) meeting your declared floor`
+        : `strongest candidate that fits the budget ($${chosen.cost}/mo of $${posture.budgetMonthly})`,
   });
   proof.push({
     resourceId: "*",
@@ -131,53 +183,30 @@ export function plan(posture: Posture, gen: Generation): Plan {
     reason: `Criticality ${posture.criticality} default (authored, not solved — §6)`,
   });
   if (posture.compliance.length) {
-    proof.push({
-      resourceId: "*",
-      claim: `compliance: ${posture.compliance.join(", ")}`,
-      reason: "Governance hard constraint — pre-filter, never traded (§2)",
-    });
+    proof.push({ resourceId: "*", claim: `compliance: ${posture.compliance.join(", ")}`, reason: "Governance hard constraint, enforced at plan time (§2)" });
+  }
+  for (const r of chosen.resources) {
+    if (r.cell === "app") {
+      proof.push({ resourceId: r.id, claim: `${r.spec.replicas}× ${r.spec.size} compute`, reason: `Criticality ${posture.criticality}${chosen.headroom ? " + headroom" : ""} sizing` });
+    } else if (r.cell === "data") {
+      proof.push({ resourceId: r.id, claim: `managed DB (${r.spec.multiAZ === "true" ? "multi-AZ" : "single-AZ"})`, reason: r.spec.multiAZ === "true" ? `Criticality ${posture.criticality} requires multi-AZ HA` : "single-AZ permitted at this Criticality" });
+    } else {
+      proof.push({ resourceId: r.id, claim: "load balancer", reason: "edge cell accepts LB/NAT (§3)" });
+    }
+  }
+  if (chosen.resilience === "active-active" && chosen.regionsActive > 1) {
+    proof.push({ resourceId: "*", claim: `${chosen.regionsActive - 1}× cross-region replication`, reason: "active-active synchronizes data across regions (§3 Weave)" });
   }
 
-  activeRegions.forEach((region, i) => {
-    const built = buildRegionStack(svc, region, i === 0, posture, gen);
-    resources.push(...built.resources);
-    proof.push(...built.proof);
-    cost += built.cost;
-  });
-
-  if (resilience === "active-active" && activeRegions.length > 1) {
-    const links = activeRegions.length - 1;
-    cost += links * REPL_LINK_COST;
-    proof.push({
-      resourceId: "*",
-      claim: `${links}× cross-region replication`,
-      reason: "active-active requires synchronized data across regions (§3 Weave)",
-    });
+  // --- Sensitivity: the alternatives the solver weighed. ---
+  for (const cand of candidates) {
+    if (cand === chosen) continue;
+    const verdict = cand.cost > posture.budgetMonthly ? `$${cand.cost}/mo — over budget` : `$${cand.cost}/mo`;
+    sensitivity.push(`${cand.resilience}${cand.headroom ? " +headroom" : ""}: ${verdict}`);
   }
 
-  const manifest: Manifest = {
-    generation: gen,
-    resources: Object.fromEntries(resources.map((r) => [r.id, r])),
-  };
-
-  // Feasibility against budget. Budget is the bound when minimizing cost (§5).
-  const feasible = cost <= posture.budgetMonthly;
-  const sensitivity: string[] = [];
-  let failure: string | undefined;
-
-  if (!feasible) {
-    failure = `No realization of this posture fits the budget. Cost is the objective and budget $${posture.budgetMonthly}/mo is the binding constraint: the cheapest structure meeting Criticality ${posture.criticality} + ${resilience} is $${cost}/mo.`;
-    sensitivity.push(`Raise budget to ≥ $${cost}/mo to make this posture feasible.`);
-    if (resilience === "active-active") sensitivity.push(`Or drop to active-passive (~−$${REPL_LINK_COST * (activeRegions.length - 1)}/mo + smaller standby).`);
-    proof.push({ resourceId: "*", claim: "INFEASIBLE", reason: failure, binding: true });
-  } else {
-    const slack = posture.budgetMonthly - cost;
-    sensitivity.push(`$${slack}/mo budget slack remains.`);
-    if (resilience !== "active-active") sensitivity.push(`Raise to active-active: +~$${REPL_LINK_COST}/mo per extra region.`);
-    if (posture.criticality !== "C0") sensitivity.push(`Tighten to C0 (large, 3×, multi-AZ): higher cost, tighter SLOs.`);
-  }
-
-  return { generation: gen, manifest, proof, estMonthlyCost: cost, feasible, failure, sensitivity };
+  const manifest: Manifest = { generation: gen, resources: Object.fromEntries(chosen.resources.map((r) => [r.id, r])) };
+  return { generation: gen, manifest, proof, estMonthlyCost: chosen.cost, feasible: true, sensitivity };
 }
 
 /** Estimated monthly cost of an arbitrary manifest (for the FinOps view). */

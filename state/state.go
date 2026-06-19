@@ -101,8 +101,12 @@ func Derive(d model.DesiredResource, o model.Observation, ctrl Control, now time
 	sync := classifySync(d, o, now, stalenessBudget)
 
 	// A reconciler that has given up (flap/blast-radius breaker tripped, or
-	// repeated failure) reports Stalled — but only once it is actually behind.
-	if ctrl == ControlStalled && sync != SyncInSync {
+	// repeated failure) reports Stalled until the resource is genuinely
+	// Converged again (the breaker resets).
+	if ctrl == ControlStalled {
+		if sync == SyncInSync && o.Health == model.HealthHealthy {
+			return StateConverged
+		}
 		return StateStalled
 	}
 

@@ -124,3 +124,50 @@ describe("engine end-to-end", () => {
     expect(snap.audit.some((a) => a.cls === "Gate")).toBe(true);
   });
 });
+
+describe("objective program", () => {
+  const base: Posture = {
+    ...DEFAULT_POSTURE,
+    criticality: "C2",
+    resilience: "single",
+    regions: ["us-east-1", "eu-west-1"],
+    budgetMonthly: 5000,
+  };
+  const regionsOf = (p: ReturnType<typeof plan>) =>
+    new Set(Object.values(p.manifest.resources).map((r) => r.region)).size;
+
+  it("maximize-resilience upgrades within budget; minimize-cost stays lean", () => {
+    const cheap = plan({ ...base, optimize: "minimize-cost" }, 1);
+    const resil = plan({ ...base, optimize: "maximize-resilience" }, 2);
+    expect(cheap.feasible && resil.feasible).toBe(true);
+    expect(resil.estMonthlyCost).toBeGreaterThan(cheap.estMonthlyCost);
+    expect(regionsOf(resil)).toBeGreaterThan(regionsOf(cheap));
+  });
+
+  it("Governance rejects a plan when a required kind is not whitelisted", () => {
+    const p = plan({ ...DEFAULT_POSTURE, governanceServices: ["load-balancer", "compute"] }, 1);
+    expect(p.feasible).toBe(false);
+    expect(p.failure).toMatch(/Governance denied/);
+  });
+});
+
+describe("circuit breaker + incidents", () => {
+  it("a hard failure trips to Stalled, raises an incident, and resolve recovers", () => {
+    const e = new Engine(DEFAULT_POSTURE);
+    e.declare(DEFAULT_POSTURE);
+    e.approve();
+    for (let i = 0; i < 30 && !e.snapshot().converged; i++) e.tick();
+    const appId = e.snapshot().resources.find((r) => r.cell === "app")!.id;
+
+    e.hardFailure(appId);
+    for (let i = 0; i < 25; i++) e.tick();
+    let snap = e.snapshot();
+    expect(snap.resources.find((r) => r.id === appId)!.state).toBe("Stalled");
+    expect(snap.incidents.some((inc) => inc.id === appId)).toBe(true);
+
+    e.resolveIncident(appId);
+    for (let i = 0; i < 25 && !e.snapshot().converged; i++) e.tick();
+    expect(e.snapshot().converged).toBe(true);
+    expect(e.snapshot().incidents.length).toBe(0);
+  });
+});
