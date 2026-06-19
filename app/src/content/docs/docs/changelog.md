@@ -42,7 +42,10 @@ It also answers a sharp architecture question: **Trellis needs no etcd or Consul
 state is Git, audit is an external append-only log, and live state is derived, so each control-plane
 instance is near-stateless and re-bootstrappable. And a follow-on: **where the live console gets "down"
 or "in transition"** — derived on the fly from Git (desired) + live telemetry (observed), with the
-timeline coming from the external audit; nothing reads a stored "status."
+timeline coming from the external audit; nothing reads a stored "status." And **where the audit log
+lives** — external, append-only/WORM storage outside the control plane (on AWS: org CloudTrail → an
+Object-Locked S3 bucket in a separate log-archive account, with QLDB an option for verifiable gate/mint
+records).
 
 ## Reduced-motion support
 
