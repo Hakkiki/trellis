@@ -6,6 +6,16 @@ description: Recent changes to the Trellis simulator, newest first.
 What's shipped to the live simulator, newest first. The footer shows the exact build
 (date · commit) currently deployed.
 
+## Bounding the compiler bet — Invariant 17
+
+We went back to the inversion's honest residuals and hardened the biggest one. The **Posture→Structure
+compiler** could emit a Structure that's subtly wrong but *passes its own proof* (a proof shows internal
+consistency, not real-world correctness). New **Invariant 17** requires, above a blast-radius threshold, a
+**second independent planner to reproduce the same realized diff** plus **named real-world checks** (quota,
+residency, dependency-criticality, re-validate-against-observed) — the checker-outside-the-blast-radius
+principle applied to the planner itself. It **shrinks, not eliminates**, the bet: two implementations can
+still share a blind spot, or the blueprint itself can be wrong. The inversion-hardened set is now 11–17.
+
 ## Inversion stress test — six new invariants
 
 We applied **Munger's inversion** to Trellis: instead of "how does it succeed?", we asked *"how would we
