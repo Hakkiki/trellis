@@ -6,6 +6,14 @@ description: Recent changes to the Trellis simulator, newest first.
 What's shipped to the live simulator, newest first. The footer shows the exact build
 (date · commit) currently deployed.
 
+## FAQ
+
+A new [FAQ](/trellis/docs/faq) answers the hard questions in plain English — what problem Trellis solves
+and why, who it's for and *not* for, what fails and why (and the mitigations), how cross-region
+connectivity heals, how security works, who manages database replication, how it relates to GitOps /
+Kubernetes / S3 / Terraform, where the platform/application line sits, what integrations exist, how
+third-party "batteries" are included, and an honest take on what's real vs simulated and what's deferred.
+
 ## Reduced-motion support
 
 Trellis now respects the OS **Reduce Motion** accessibility setting. With it on, the topology's pulsing

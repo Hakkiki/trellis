@@ -7,6 +7,12 @@ The simulator deploys continuously from `main`, so entries are grouped by date r
 
 ### Added
 
+- **FAQ**: a thorough, spec-grounded docs page that answers the hard questions in plain English — what
+  problem Trellis solves and why; who it's for and explicitly not for; what fails and why (the TCB
+  hazards and their mitigations); cross-region connectivity and healing; the security model; who manages
+  database replication; the relationship to GitOps / Kubernetes / S3 / Terraform; platform vs application
+  pipelines; integrations; how third-party "batteries" are included; cost, incidents, org-change; and an
+  honest "what's real vs simulated / what's deferred."
 - **Reduced-motion support**: honors the OS "Reduce Motion" setting — the pulsing nodes, flowing weave
   wires, glow, and the guided tour's animation all stand down (state still reads through color;
   orbit/zoom is unaffected).
