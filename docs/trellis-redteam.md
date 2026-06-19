@@ -120,3 +120,94 @@ discipline once; move **Data Protection** into §9 (batteries); demote "Environm
 §22 "complete and internally consistent" → conceptually complete on its chosen axes, engineering-wise
 incomplete; "plan is a proof" → genuine at solve-time, slogan elsewhere; §18 "dodges the LCD trap" →
 *defers and measures* it; "never act on stale data" → a safety/**liveness** tradeoff, not pure safety.
+
+---
+
+# Inversion stress test — how to kill Trellis
+
+A second pass using **Munger's inversion**: instead of "how does Trellis succeed?", ask *"how would we
+**guarantee** Trellis causes the exact catastrophe it exists to prevent?"* — then design each kill-path
+shut. The promises an attacker targets: **(P1) containment** (no company-wide outage), **(P2) no magic**
+(every change authorized), **(P3) least privilege** (no standing god-write), **(P4) convergence**
+(self-heal to declared state), **(P5) recoverability** (meta-DR).
+
+Each kill-path is scored **✓ foreclosed** (already shut), **◑ partial** (mitigated, residual risk), or
+**➕ GAP → invariant** (real gap; folded into the spec). The five GAPs became spec **Invariants 11–15**.
+
+## Family 1 — re-centralize the SPOF (defeats P1)
+
+| # | Kill-path (the "attack recipe") | Status | Defense / new invariant |
+|---|---|---|---|
+| K1 | Divisions pull the catalog **live at runtime**, or pins drift to `latest`, so one bad publish auto-deploys everywhere | ➕ **Inv 12** | immutable signed pins, no floating tags, **transitive** pins, pull-and-cache |
+| K2 | Make the **external audit / Governance floor a hard runtime dependency** → an audit outage becomes a company-wide reconciler freeze | ➕ **Inv 12** | shared surfaces are **fail-static** (last-known-good when source unreachable); may not block liveness |
+| K3 | Slice the control planes but **centralize the operators** — one team pushes upgrades to all instances on one toolchain | ➕ **Inv 12 + §16** | standing *push* power (incl. human/operator tooling) is sliced too; shared tooling is pulled-and-pinned, never pushed fleet-wide |
+| K4 | A platform-service division (identity/DNS) is depended on **synchronously by all with no graceful degrade** | ◑ partial | Criticality propagation forces dep ≥ consumer; Weave sync edges contained (circuit-break/degrade). *Residual:* a declared degraded-mode per cross-boundary edge is guidance, not yet an invariant |
+| K15 | A **battery that auto-updates internally** (`image:latest`) ships poison org-wide despite a pinned catalog entry | ➕ **Inv 12** | pins are **transitive** — a pinned entry pins its own deps; supply-chain provenance verified at admission |
+
+## Family 2 — turn self-healing into self-harm (defeats P1/P4)
+
+| # | Kill-path | Status | Defense / new invariant |
+|---|---|---|---|
+| K8 | Push an **approved-but-bad generation**; the standing-write reconciler rolls it to its whole managed set **instantly** (the original outage, reproduced inside one division) | ➕ **Inv 11** | convergence is **progressive** (canary→waves), **health-gated**, **auto-rollback** on regression, blast-radius breaker; an approved change may **not** reach a whole blast radius at once |
+
+## Family 3 — defeat the gate / make the proof meaningless (defeats P2/P3)
+
+| # | Kill-path | Status | Defense / new invariant |
+|---|---|---|---|
+| K5 | Socially defeat the gate — proof too long/frequent → rubber-stamp; alarm fatigue | ◑ partial | §18 gate rigor scales to blast radius; **ration attention by blast radius** (auto-handle trivial, escalate significant). Discipline, not just design (the day-2 G14 finding) |
+| K6 | Mutate desired state out of band so the reconciler "heals" toward the attacker's change | ✓ foreclosed | Inv 3 (Author-only); signed commits + branch protection; reconciler converge-only |
+| K7 | **Confused deputy** — hand the mint an attacker-chosen scope inside a benign proof | ✓ foreclosed | Inv 4 — mint **re-derives** scope from the signed generation; never consumes the planner's asserted scope |
+| K13 | Compromise a maintainer / misconfigured branch protection → a malicious merge is "authorized" (merge *is* the gate) | ➕ **Inv 14** | **separation of duties** (approver ≠ author; high blast radius → second approver outside the team); repo-protection is a **non-loosenable floor** |
+
+## Family 4 — brick the control plane / defeat meta-DR (defeats P5)
+
+| # | Kill-path | Status | Defense / new invariant |
+|---|---|---|---|
+| K9 | Bad self-upgrade disables the healer, with the **kill-switch or recovery path living inside the system that's down** | ➕ **Inv 13** | recovery is **out-of-band** — every recovery dependency reachable with the system fully down; never transits the failed system |
+| K10 | Lose the **seed / signing key to a single human or single key** | ➕ **Inv 13** | root + signing authority are **M-of-N** |
+| K11 | Make **Git the new SPOF** — one shared manifest store; down → every reconcile blind | ◑/➕ | desired state is **per-domain** (Git is a role, not shared infra); Inv 12 fail-static → reconciler keeps converging to last-good when the store is unreachable |
+| K12 | Irreversible **schema migration** of the desired-state store bricks state | ✓ foreclosed | §16 — schema migration is a gated, reversible transition |
+| K14 | Compromise the **catalog signing key** → every consumer trusts poison | ➕ **Inv 13** (custody) | signing authority **M-of-N**, rotatable; a single org-wide-trusted key is forbidden |
+
+## Family 5 — observe a lie (defeats P4)
+
+| # | Kill-path | Status | Defense / new invariant |
+|---|---|---|---|
+| K16 | **Spoof telemetry** → reconciler believes converged (stops healing) or drifted (stomps good state) | ➕ **Inv 15** | observed signals **authenticated**; unauth/anomalous = **Unknown, never trusted**; destructive converge needs **corroboration** |
+| K17 | Break the read path so the console shows **green during a real outage** → operators blind when it matters | ➕ **Inv 15** | Trellis **observes itself** on an independent channel (folds red-team #5); no component is the sole verifier of its own correctness |
+
+## Family 6 — erode governance from the top (defeats P1/P2)
+
+| # | Kill-path | Status | Defense / new invariant |
+|---|---|---|---|
+| K18 | Hold root and **quietly loosen the SCP floor** — the "can't be escaped" guardrail is escapable by whoever holds root | ➕ **Inv 14** | loosening the org Governance floor is a **reflexive, highest-gate, dual-controlled, externally-audited** change (§16) — never a single root action |
+| K19 | A division **tightens itself into a corner** (governance forbids everything) → self-DoS | ◑ partial | governance changes are gated transitions; planner proves the tightened posture still admits a valid Structure, else fails loud |
+
+## Family 7 — economic / operational defeat (defeats P1 indirectly)
+
+| # | Kill-path | Status | Defense |
+|---|---|---|---|
+| K20 | Make **N control planes too expensive** → teams collapse them back into one → re-centralize | ◑ partial | near-stateless, self-managing footprint (§12 no-consensus-store promotion) keeps the sliced model cheaper than the SPOF. A pressure to watch, not a law |
+| K21 | **On-call overload** defeats the human gate + incident routing | ◑ partial | §13 routing by Frame+Criticality; ration attention by blast radius (see K5) |
+
+## Family 8 — the compiler bet (defeats P2)
+
+| # | Kill-path | Status | Defense |
+|---|---|---|---|
+| K22 | Compiler emits a **subtly wrong Structure that passes proof** (proof = internal consistency, not real-world correctness) | ◑ partial (the bet) | demoted rung (blueprints + validation + bounded tuning); **dual-planner parity available as hardening above a blast-radius threshold** (Inv 9 keeps it optional). Honest residual research risk |
+
+## Family 9 — time / transactionality (defeats P4)
+
+| # | Kill-path | Status | Defense |
+|---|---|---|---|
+| K23 | Plan-scoped **credential expires mid-apply** → half-applied, inconsistent reality | ◑ partial | §10 gated/reversible Actions + re-validate-before-apply; apply must be **idempotent and resumable** (re-mint and continue) or atomically rolled back. Guidance to harden in §10 |
+
+## What inversion produced
+
+Five genuine gaps → five new normative invariants (spec §17, 11–15): **progressive/reversible
+convergence**, **no-floating-fate / fail-static shared surfaces**, **out-of-band recovery + M-of-N
+custody**, **separation-of-duties on a non-loosenable gate floor**, **self-observability + attested
+signals**. The rest were already foreclosed, or are honest residuals (the compiler bet; social defeat;
+economic re-centralization pressure; apply transactionality) carried as guidance, not solved claims.
+The headline: **the inversion confirms the spine and closes the "even an approved mistake can't go
+company-wide" gap — Invariant 11 is the direct answer to the original 100%-blast-radius outage.**
