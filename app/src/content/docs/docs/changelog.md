@@ -6,6 +6,20 @@ description: Recent changes to the Trellis simulator, newest first.
 What's shipped to the live simulator, newest first. The footer shows the exact build
 (date · commit) currently deployed.
 
+## Security View
+
+A 4th topology lens (spec §7) — a **trust/exposure projection** of the same Structure. Switch the lens to
+**security** and every resource is tiered by where it sits in the trust topology:
+
+- **exposed** — the internet-facing edge (the attack surface).
+- **sensitive** — data and stateful clusters (crown jewels that hold state).
+- **internal** — app compute behind the edge.
+- **at-risk** — flagged when a resource is a **third-party dependency** (outside our TCB), an **exposed
+  surface without per-service isolation** (a C2/C3 colocated edge), or **crown jewels without compliance
+  coverage**. Drop a Service to C3 or clear the compliance tags and watch tiers turn at-risk.
+
+The legend follows the lens, on both the 3D stage and the grid.
+
 ## Cost as a live signal
 
 Cost was a planner input; now it's a **first-class loop signal** (spec §13). The simulated cloud bills

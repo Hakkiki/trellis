@@ -4,15 +4,16 @@
 // observed-health/SLO bucket. Pure colorers, shared by the 3D stage and the grid
 // so both lenses agree — derived, never authoritative.
 
-import type { ResourceView } from "@/sim/engine";
+import type { ResourceView, SecurityTier } from "@/sim/engine";
 import { type State, stateColorVar } from "@/sim/state";
 
-export type ViewMode = "state" | "cost" | "health";
+export type ViewMode = "state" | "cost" | "health" | "security";
 
 export const VIEW_LABELS: Record<ViewMode, string> = {
   state: "state",
   cost: "cost",
   health: "health",
+  security: "security",
 };
 
 /** Cost heatmap: cheap (cool green) → costly (warm red), normalized to the fleet
@@ -65,9 +66,33 @@ export function healthColor(bucket: HealthBucket): string {
   }
 }
 
+export const SECURITY_TIERS: { tier: SecurityTier; label: string }[] = [
+  { tier: "at-risk", label: "at-risk" },
+  { tier: "exposed", label: "exposed" },
+  { tier: "sensitive", label: "sensitive" },
+  { tier: "internal", label: "internal" },
+];
+
+/** Trust/exposure posture color (§7): at-risk reads as the alarm color, the
+ *  exposed attack surface as a warm warning, crown jewels as a distinct accent,
+ *  and internal compute as the calm baseline. */
+export function securityColor(tier: SecurityTier): string {
+  switch (tier) {
+    case "at-risk":
+      return "var(--state-stalled)";
+    case "exposed":
+      return "var(--state-degraded)";
+    case "sensitive":
+      return "var(--state-drifted)";
+    case "internal":
+      return "var(--state-converged)";
+  }
+}
+
 /** The fill color for a resource under the active view. */
 export function viewColor(r: ResourceView, view: ViewMode, maxCost: number): string {
   if (view === "cost") return costColor(r.monthlyCost, maxCost);
   if (view === "health") return healthColor(healthBucket(r.state));
+  if (view === "security") return securityColor(r.security);
   return stateColorVar(r.state);
 }

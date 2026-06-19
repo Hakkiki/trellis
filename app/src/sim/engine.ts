@@ -45,7 +45,34 @@ export interface ResourceView {
   monthlyCost: number; // planned $/mo — tints the cost view
   billedCost: number; // observed $/mo (billed vs planned, §13)
   costDrifted: boolean; // billed > planned — cost drift
+  security: SecurityTier; // trust/exposure posture — tints the security view (§7)
   detail?: string; // e.g. quorum "2/3 nodes" for stateful clusters
+}
+
+/** Security-posture projection (spec §7): where a resource sits in the trust
+ *  topology and whether it's adequately defended.
+ *  - exposed   — internet-facing edge (the attack surface).
+ *  - sensitive — holds state: data / stateful clusters (crown jewels).
+ *  - internal  — compute behind the edge (app / jobs).
+ *  - at-risk   — a third-party dependency (outside the TCB), an exposed surface
+ *                without per-service isolation, or crown jewels without
+ *                governance/compliance coverage. */
+export type SecurityTier = "at-risk" | "exposed" | "sensitive" | "internal";
+
+export function securityTier(
+  cell: CellKind,
+  lifecycle: Lifecycle,
+  weakIsolation: boolean,
+  complianceCovered: boolean,
+): SecurityTier {
+  const exposed = cell === "edge" || lifecycle === "external";
+  const sensitive = cell === "data" || lifecycle === "stateful";
+  if (lifecycle === "external") return "at-risk"; // third-party — outside our TCB
+  if (exposed && weakIsolation) return "at-risk"; // exposed surface sharing trust
+  if (sensitive && !complianceCovered) return "at-risk"; // crown jewels, no coverage
+  if (exposed) return "exposed";
+  if (sensitive) return "sensitive";
+  return "internal";
 }
 
 export type Phase = "empty" | "planned" | "applied";
@@ -351,22 +378,32 @@ export class Engine {
 
   snapshot(): EngineSnapshot {
     const byId = new Map(this.statuses.map((s) => [s.id, s]));
+    // Per-Service Criticality drives isolation strength (C2/C3 colocate = weak).
+    const critBySlug = new Map(
+      servicesOf(this.posture).map((s) => [serviceSlug(s.name), s.criticality]),
+    );
+    const complianceCovered = this.posture.compliance.length > 0;
     const resources: ResourceView[] = this.manifest
-      ? Object.values(this.manifest.resources).map((r) => ({
-          id: r.id,
-          service: r.service,
-          region: r.region,
-          cell: r.cell,
-          kind: r.kind,
-          lifecycle: r.lifecycle,
-          size: r.spec.size,
-          replicas: Number(r.spec.replicas ?? "1"),
-          state: byId.get(r.id)?.state ?? "Unknown",
-          monthlyCost: resourceCost(r),
-          billedCost: Math.round(resourceCost(r) * this.cloud.billedFactor(r.id)),
-          costDrifted: this.cloud.billedFactor(r.id) > 1,
-          detail: byId.get(r.id)?.detail,
-        }))
+      ? Object.values(this.manifest.resources).map((r) => {
+          const crit = critBySlug.get(r.service);
+          const weakIsolation = crit === "C2" || crit === "C3";
+          return {
+            id: r.id,
+            service: r.service,
+            region: r.region,
+            cell: r.cell,
+            kind: r.kind,
+            lifecycle: r.lifecycle,
+            size: r.spec.size,
+            replicas: Number(r.spec.replicas ?? "1"),
+            state: byId.get(r.id)?.state ?? "Unknown",
+            monthlyCost: resourceCost(r),
+            billedCost: Math.round(resourceCost(r) * this.cloud.billedFactor(r.id)),
+            costDrifted: this.cloud.billedFactor(r.id) > 1,
+            security: securityTier(r.cell, r.lifecycle, weakIsolation, complianceCovered),
+            detail: byId.get(r.id)?.detail,
+          };
+        })
       : [];
     const costNow = this.manifest ? manifestCost(this.manifest) : 0;
     const billedNow = resources.reduce((sum, r) => sum + r.billedCost, 0);
