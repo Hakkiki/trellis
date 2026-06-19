@@ -5,6 +5,7 @@ import {
   CircleSlash,
   Clock,
   Cloud,
+  Compass,
   Cpu,
   Database,
   DollarSign,
@@ -19,6 +20,12 @@ import {
   Zap,
 } from "lucide-react";
 import * as React from "react";
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -52,6 +59,7 @@ import {
 import { ALL_STATES, type State, stateColorVar } from "@/sim/state";
 import { loadSession, saveSession } from "@/sim/store";
 import Stage3D from "./Stage3D";
+import { startTour } from "./tour";
 import {
   costColor,
   HEALTH_BUCKETS,
@@ -192,461 +200,582 @@ export default function Simulator() {
   );
 
   return (
-    <div className="dark text-foreground grid gap-4 lg:grid-cols-[300px_1fr_340px]">
-      {/* ---- Left: Posture ---- */}
-      <Card className="h-fit">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-sm">
-            <Boxes className="size-4 text-primary" /> Posture
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4 text-sm">
-          <Field label="Services — owned by this environment">
-            <ServicesEditor
-              services={servicesOf(form)}
-              onChange={(services) => setForm({ ...form, services })}
-            />
-          </Field>
-          <Field label="Resilience">
-            <Select
-              value={form.resilience}
-              onChange={(v) => setForm({ ...form, resilience: v as Resilience })}
-              options={[
-                ["active-active", "active-active"],
-                ["active-passive", "active-passive"],
-                ["single", "single"],
-              ]}
-            />
-          </Field>
-          <Field label="Regions">
-            <div className="space-y-1">
-              {ALL_REGIONS.map((r) => {
-                const on = form.regions.includes(r);
-                return (
-                  <button
-                    key={r}
-                    onClick={() =>
-                      setForm({
-                        ...form,
-                        regions: on ? form.regions.filter((x) => x !== r) : [...form.regions, r],
-                      })
-                    }
-                    className={cn(
-                      "flex w-full items-center justify-between rounded-md border px-2 py-1.5 text-xs transition",
-                      on
-                        ? "border-primary bg-primary/15"
-                        : "border-input text-muted-foreground hover:bg-accent",
-                    )}
-                  >
-                    <span>{r}</span>
-                    {on && <span className="text-primary">●</span>}
-                  </button>
-                );
-              })}
-            </div>
-          </Field>
-          <Field label={`Budget — $${form.budgetMonthly}/mo`}>
-            <input
-              type="range"
-              min={500}
-              max={20000}
-              step={500}
-              value={form.budgetMonthly}
-              onChange={(e) => setForm({ ...form, budgetMonthly: Number(e.target.value) })}
-              className="w-full accent-[var(--primary)]"
-            />
-          </Field>
-          <Field label="On budget-breach">
-            <Select
-              value={form.budgetPolicy ?? "alert"}
-              onChange={(v) => setForm({ ...form, budgetPolicy: v as BudgetPolicy })}
-              options={[
-                ["alert", "alert only"],
-                ["block", "block provisioning"],
-              ]}
-            />
-          </Field>
-          <Field label="Optimize">
-            <Select
-              value={form.optimize}
-              onChange={(v) => setForm({ ...form, optimize: v as Posture["optimize"] })}
-              options={[
-                ["minimize-cost", "minimize cost"],
-                ["maximize-resilience", "maximize resilience"],
-              ]}
-            />
-          </Field>
-          <Field label="Governance — allowed services">
-            <div className="flex flex-wrap gap-1.5">
-              {ALL_SERVICES.map((s) => {
-                const allowed = form.governanceServices ?? [];
-                const on = allowed.includes(s.kind);
-                return (
-                  <button
-                    key={s.kind}
-                    onClick={() =>
-                      setForm({
-                        ...form,
-                        governanceServices: on
-                          ? allowed.filter((k) => k !== s.kind)
-                          : [...allowed, s.kind],
-                      })
-                    }
-                    className={cn(
-                      "rounded-md border px-2 py-1 text-[11px] transition",
-                      on
-                        ? "border-primary bg-primary/15 text-foreground"
-                        : "border-input text-muted-foreground line-through",
-                    )}
-                  >
-                    {s.label}
-                  </button>
-                );
-              })}
-            </div>
-          </Field>
-          <div className="flex flex-col gap-2 pt-1">
-            <Button onClick={onPlan} variant="secondary" className="w-full">
-              Plan
-            </Button>
-            <Button
-              onClick={onApprove}
-              disabled={
-                !plan?.feasible ||
-                snap?.canProvision === false ||
-                (phase === "applied" && (plan?.generation ?? 0) <= (snap?.appliedGen ?? 0))
-              }
-              className="w-full"
-            >
-              {phase === "applied" && (plan?.generation ?? 0) > (snap?.appliedGen ?? 0)
-                ? "Approve transition"
-                : "Approve & apply"}
-            </Button>
-            {snap?.canProvision === false && (
-              <p className="text-destructive text-[11px]">
-                Provisioning blocked — budget breached under a block policy (§13). Reconcile the
-                cost drift to continue.
-              </p>
-            )}
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* ---- Center: Topology + events ---- */}
-      <div className="space-y-4">
-        <div className="flex flex-wrap items-center gap-2">
-          <Badge variant="outline" className="gap-1">
-            <Activity className="size-3" /> {fmtClock(snap?.tMs ?? 0)}
-          </Badge>
-          <Badge variant={phase === "applied" ? "default" : "secondary"}>{phase}</Badge>
-          {phase === "applied" && (
-            <Badge variant={snap?.converged ? "outline" : "secondary"} className="gap-1">
-              {snap?.converged ? "converged & holding" : "reconciling…"}
-            </Badge>
-          )}
-          {phase === "applied" && snap && (
-            <Badge
-              variant="outline"
-              className="gap-1.5"
-              title={snap.envNote}
-              style={{ borderColor: stateColorVar(snap.envRollup) }}
-            >
-              <span
-                className="size-2 rounded-full"
-                style={{
-                  background: stateColorVar(snap.envRollup),
-                  boxShadow: `0 0 6px ${stateColorVar(snap.envRollup)}`,
-                }}
+    <div className="dark text-foreground space-y-4">
+      <Guide onTour={startTour} />
+      <div className="grid gap-4 lg:grid-cols-[300px_1fr_340px]">
+        {/* ---- Left: Posture ---- */}
+        <Card id="tour-posture" className="h-fit min-w-0">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-sm">
+              <Boxes className="size-4 text-primary" /> Posture
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4 text-sm">
+            <Field label="Services — owned by this environment">
+              <ServicesEditor
+                services={servicesOf(form)}
+                onChange={(services) => setForm({ ...form, services })}
               />
-              env · {snap.envRollup}
-            </Badge>
-          )}
-          {phase === "applied" && (
-            <div className="ml-auto flex items-center gap-3 text-xs">
-              <button
-                onClick={() => act((e) => e.setChangeFreeze(!snap?.changeFreeze))}
-                className={cn(
-                  "rounded-md border px-2 py-1",
-                  snap?.changeFreeze
-                    ? "border-[var(--state-frozen)] text-foreground"
-                    : "border-input text-muted-foreground hover:text-foreground",
-                )}
+            </Field>
+            <Field label="Resilience">
+              <Select
+                value={form.resilience}
+                onChange={(v) => setForm({ ...form, resilience: v as Resilience })}
+                options={[
+                  ["active-active", "active-active"],
+                  ["active-passive", "active-passive"],
+                  ["single", "single"],
+                ]}
+              />
+            </Field>
+            <Field label="Regions">
+              <div className="space-y-1">
+                {ALL_REGIONS.map((r) => {
+                  const on = form.regions.includes(r);
+                  return (
+                    <button
+                      key={r}
+                      onClick={() =>
+                        setForm({
+                          ...form,
+                          regions: on ? form.regions.filter((x) => x !== r) : [...form.regions, r],
+                        })
+                      }
+                      className={cn(
+                        "flex w-full items-center justify-between rounded-md border px-2 py-1.5 text-xs transition",
+                        on
+                          ? "border-primary bg-primary/15"
+                          : "border-input text-muted-foreground hover:bg-accent",
+                      )}
+                    >
+                      <span>{r}</span>
+                      {on && <span className="text-primary">●</span>}
+                    </button>
+                  );
+                })}
+              </div>
+            </Field>
+            <Field label={`Budget — $${form.budgetMonthly}/mo`}>
+              <input
+                type="range"
+                min={500}
+                max={20000}
+                step={500}
+                value={form.budgetMonthly}
+                onChange={(e) => setForm({ ...form, budgetMonthly: Number(e.target.value) })}
+                className="w-full accent-[var(--primary)]"
+              />
+            </Field>
+            <Field label="On budget-breach">
+              <Select
+                value={form.budgetPolicy ?? "alert"}
+                onChange={(v) => setForm({ ...form, budgetPolicy: v as BudgetPolicy })}
+                options={[
+                  ["alert", "alert only"],
+                  ["block", "block provisioning"],
+                ]}
+              />
+            </Field>
+            <Field label="Optimize">
+              <Select
+                value={form.optimize}
+                onChange={(v) => setForm({ ...form, optimize: v as Posture["optimize"] })}
+                options={[
+                  ["minimize-cost", "minimize cost"],
+                  ["maximize-resilience", "maximize resilience"],
+                ]}
+              />
+            </Field>
+            <Field label="Governance — allowed services">
+              <div className="flex flex-wrap gap-1.5">
+                {ALL_SERVICES.map((s) => {
+                  const allowed = form.governanceServices ?? [];
+                  const on = allowed.includes(s.kind);
+                  return (
+                    <button
+                      key={s.kind}
+                      onClick={() =>
+                        setForm({
+                          ...form,
+                          governanceServices: on
+                            ? allowed.filter((k) => k !== s.kind)
+                            : [...allowed, s.kind],
+                        })
+                      }
+                      className={cn(
+                        "rounded-md border px-2 py-1 text-[11px] transition",
+                        on
+                          ? "border-primary bg-primary/15 text-foreground"
+                          : "border-input text-muted-foreground line-through",
+                      )}
+                    >
+                      {s.label}
+                    </button>
+                  );
+                })}
+              </div>
+            </Field>
+            <div id="tour-plan" className="flex flex-col gap-2 pt-1">
+              <Button onClick={onPlan} variant="secondary" className="w-full">
+                Plan
+              </Button>
+              <Button
+                onClick={onApprove}
+                disabled={
+                  !plan?.feasible ||
+                  snap?.canProvision === false ||
+                  (phase === "applied" && (plan?.generation ?? 0) <= (snap?.appliedGen ?? 0))
+                }
+                className="w-full"
               >
-                {snap?.changeFreeze ? "❄ freeze on" : "change freeze"}
-              </button>
-              <button
-                onClick={() => setRunning((r) => !r)}
-                className="text-muted-foreground hover:text-foreground underline"
-              >
-                {running ? "pause loop" : "resume loop"}
-              </button>
+                {phase === "applied" && (plan?.generation ?? 0) > (snap?.appliedGen ?? 0)
+                  ? "Approve transition"
+                  : "Approve & apply"}
+              </Button>
+              {snap?.canProvision === false && (
+                <p className="text-destructive text-[11px]">
+                  Provisioning blocked — budget breached under a block policy (§13). Reconcile the
+                  cost drift to continue.
+                </p>
+              )}
             </div>
-          )}
-          {phase === "applied" && (
-            <div
-              className="flex gap-1"
-              title="recolor the topology by lens — a read-only View (§13)"
-            >
-              {(Object.keys(VIEW_LABELS) as ViewMode[]).map((v) => (
+          </CardContent>
+        </Card>
+
+        {/* ---- Center: Topology + events ---- */}
+        <div className="min-w-0 space-y-4">
+          <div className="flex flex-wrap items-center gap-2">
+            <Badge variant="outline" className="gap-1">
+              <Activity className="size-3" /> {fmtClock(snap?.tMs ?? 0)}
+            </Badge>
+            <Badge variant={phase === "applied" ? "default" : "secondary"}>{phase}</Badge>
+            {phase === "applied" && (
+              <Badge variant={snap?.converged ? "outline" : "secondary"} className="gap-1">
+                {snap?.converged ? "converged & holding" : "reconciling…"}
+              </Badge>
+            )}
+            {phase === "applied" && snap && (
+              <Badge
+                variant="outline"
+                className="gap-1.5"
+                title={snap.envNote}
+                style={{ borderColor: stateColorVar(snap.envRollup) }}
+              >
+                <span
+                  className="size-2 rounded-full"
+                  style={{
+                    background: stateColorVar(snap.envRollup),
+                    boxShadow: `0 0 6px ${stateColorVar(snap.envRollup)}`,
+                  }}
+                />
+                env · {snap.envRollup}
+              </Badge>
+            )}
+            {phase === "applied" && (
+              <div className="ml-auto flex items-center gap-3 text-xs">
+                <button
+                  onClick={() => act((e) => e.setChangeFreeze(!snap?.changeFreeze))}
+                  className={cn(
+                    "rounded-md border px-2 py-1",
+                    snap?.changeFreeze
+                      ? "border-[var(--state-frozen)] text-foreground"
+                      : "border-input text-muted-foreground hover:text-foreground",
+                  )}
+                >
+                  {snap?.changeFreeze ? "❄ freeze on" : "change freeze"}
+                </button>
+                <button
+                  onClick={() => setRunning((r) => !r)}
+                  className="text-muted-foreground hover:text-foreground underline"
+                >
+                  {running ? "pause loop" : "resume loop"}
+                </button>
+              </div>
+            )}
+            {phase === "applied" && (
+              <div
+                id="tour-views"
+                className="flex flex-wrap gap-1"
+                title="recolor the topology by lens — a read-only View (§13)"
+              >
+                {(Object.keys(VIEW_LABELS) as ViewMode[]).map((v) => (
+                  <button
+                    key={v}
+                    onClick={() => setView(v)}
+                    className={cn(
+                      "rounded-md border px-2 py-1 text-xs capitalize",
+                      view === v
+                        ? "border-primary text-foreground"
+                        : "border-input text-muted-foreground",
+                    )}
+                  >
+                    {VIEW_LABELS[v]}
+                  </button>
+                ))}
+              </div>
+            )}
+            <div className="flex gap-1">
+              {(["stage", "grid"] as const).map((v) => (
                 <button
                   key={v}
-                  onClick={() => setView(v)}
+                  onClick={() => setLayout(v)}
                   className={cn(
                     "rounded-md border px-2 py-1 text-xs capitalize",
-                    view === v
+                    layout === v
                       ? "border-primary text-foreground"
                       : "border-input text-muted-foreground",
                   )}
                 >
-                  {VIEW_LABELS[v]}
+                  {v}
                 </button>
               ))}
             </div>
-          )}
-          <div className="flex gap-1">
-            {(["stage", "grid"] as const).map((v) => (
-              <button
-                key={v}
-                onClick={() => setLayout(v)}
-                className={cn(
-                  "rounded-md border px-2 py-1 text-xs capitalize",
-                  layout === v
-                    ? "border-primary text-foreground"
-                    : "border-input text-muted-foreground",
-                )}
-              >
-                {v}
-              </button>
-            ))}
           </div>
+
+          {phase === "empty" && <EmptyState onPlan={onPlan} />}
+
+          {phase !== "empty" && plan && !plan.feasible && (
+            <Card className="border-destructive/50">
+              <CardContent className="flex gap-3 pt-6 text-sm">
+                <CircleSlash className="text-destructive mt-0.5 size-5 shrink-0" />
+                <div>
+                  <div className="text-destructive font-semibold">
+                    Plan failed loudly — no magic
+                  </div>
+                  <p className="text-muted-foreground mt-1">{plan.failure}</p>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {phase === "applied" && (
+            <Topology
+              resources={resources}
+              regionState={regionState}
+              envNote={snap!.envNote}
+              selected={sel?.id ?? null}
+              onSelect={setSelected}
+              layout={layout}
+              view={view}
+              frozenIds={frozenIds}
+              budget={snap!.budget}
+              costNow={snap!.costNow}
+              billedNow={snap!.billedNow}
+            />
+          )}
+
+          {phase === "applied" && (
+            <Card id="tour-inject">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-xs tracking-wide uppercase">Inject reality</CardTitle>
+              </CardHeader>
+              <CardContent className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                <EventButton
+                  icon={AlertTriangle}
+                  label="Fail node"
+                  hint={sel?.id}
+                  onClick={() => sel && act((e) => e.failNode(sel.id))}
+                />
+                <EventButton
+                  icon={Eye}
+                  label="Inject drift"
+                  hint={sel?.id}
+                  onClick={() => sel && act((e) => e.injectDrift(sel.id))}
+                />
+                <EventButton
+                  icon={Zap}
+                  label="Region outage"
+                  hint={sel?.region}
+                  onClick={() => sel && act((e) => e.regionOutage(sel.region))}
+                />
+                <EventButton
+                  icon={CircleSlash}
+                  label="Telemetry loss"
+                  hint={sel?.id}
+                  onClick={() => sel && act((e) => e.setStale(sel.id, true))}
+                />
+                <EventButton
+                  icon={Wrench}
+                  label="Hard failure"
+                  hint={sel?.id}
+                  onClick={() => sel && act((e) => e.hardFailure(sel.id))}
+                />
+                <EventButton
+                  icon={sel?.costDrifted ? Wrench : DollarSign}
+                  label={sel?.costDrifted ? "Reconcile cost" : "Cost spike"}
+                  hint={sel?.id}
+                  onClick={() =>
+                    sel &&
+                    act((e) => (sel.costDrifted ? e.resolveCost(sel.id) : e.costSpike(sel.id)))
+                  }
+                />
+                <EventButton
+                  icon={
+                    engineRef.current && sel && engineRef.current.isFrozen(sel.id)
+                      ? Snowflake
+                      : ShieldAlert
+                  }
+                  label={
+                    engineRef.current && sel && engineRef.current.isFrozen(sel.id)
+                      ? "Ratify (repay)"
+                      : "Break-glass"
+                  }
+                  hint={sel?.id}
+                  onClick={() =>
+                    sel &&
+                    act((e) => (e.isFrozen(sel.id) ? e.ratify(sel.id) : e.breakGlass(sel.id)))
+                  }
+                />
+              </CardContent>
+            </Card>
+          )}
+
+          {phase === "applied" && snap?.changeFreeze && (
+            <Card className="border-[var(--state-frozen)]">
+              <CardContent className="flex items-center gap-3 pt-6 text-sm">
+                <Snowflake className="size-5 shrink-0 text-[var(--state-frozen)]" />
+                <div className="flex-1">
+                  <div className="font-semibold">Change freeze active</div>
+                  <p className="text-muted-foreground">
+                    Non-emergency Converge actions are held (§9). Drift is recorded but not
+                    corrected; break-glass still overrides per-resource.
+                  </p>
+                </div>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => act((e) => e.setChangeFreeze(false))}
+                >
+                  Lift freeze
+                </Button>
+              </CardContent>
+            </Card>
+          )}
+
+          {phase === "applied" && snap?.blastTripped && !snap?.changeFreeze && (
+            <Card className="border-destructive">
+              <CardContent className="flex items-center gap-3 pt-6 text-sm">
+                <Zap className="text-destructive size-5 shrink-0" />
+                <div className="flex-1">
+                  <div className="text-destructive font-semibold">Blast-radius breaker tripped</div>
+                  <p className="text-muted-foreground">
+                    A single pass would remediate a large share of the fleet — halted and paging
+                    instead of mass-stomping (§9). Review, then proceed.
+                  </p>
+                </div>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => act((e) => e.acknowledgeBlast())}
+                >
+                  Proceed once
+                </Button>
+              </CardContent>
+            </Card>
+          )}
+
+          {phase === "applied" && snap?.budgetBreach && (
+            <Card className="border-destructive">
+              <CardContent className="flex items-center gap-3 pt-6 text-sm">
+                <DollarSign className="text-destructive size-5 shrink-0" />
+                <div className="flex-1">
+                  <div className="text-destructive font-semibold">
+                    Budget breach — billed ${snap.billedNow} / ${snap.budget}/mo
+                  </div>
+                  <p className="text-muted-foreground">
+                    Cost drift (billed ≫ planned) pushed spend over budget (§13).{" "}
+                    {snap.budgetPolicy === "block"
+                      ? "Policy: block — further provisioning is held until reconciled."
+                      : "Policy: alert — provisioning continues; on-call is paged."}{" "}
+                    Reconcile the cost-drifted resource to clear it.
+                  </p>
+                </div>
+                {(() => {
+                  const drifted = resources.find((r) => r.costDrifted);
+                  return drifted ? (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => act((e) => e.resolveCost(drifted.id))}
+                    >
+                      Reconcile cost
+                    </Button>
+                  ) : null;
+                })()}
+              </CardContent>
+            </Card>
+          )}
+
+          {phase === "applied" && (snap?.incidents.length ?? 0) > 0 && (
+            <IncidentSurface
+              incidents={snap!.incidents}
+              onResolve={(id) => act((e) => e.resolveIncident(id))}
+              onSelect={setSelected}
+            />
+          )}
+
+          {phase === "applied" && snap && (
+            <ControlPlanePanel
+              cp={snap.controlPlane}
+              target={cpTarget}
+              onTarget={setCpTarget}
+              onPropose={(faulty) => act((e) => e.proposeSelfUpgrade(cpTarget, faulty))}
+              onApprove={() => act((e) => e.approveSelfUpgrade())}
+              onReBootstrap={() => act((e) => e.reBootstrap())}
+            />
+          )}
         </div>
 
-        {phase === "empty" && <EmptyState onPlan={onPlan} />}
-
-        {phase !== "empty" && plan && !plan.feasible && (
-          <Card className="border-destructive/50">
-            <CardContent className="flex gap-3 pt-6 text-sm">
-              <CircleSlash className="text-destructive mt-0.5 size-5 shrink-0" />
-              <div>
-                <div className="text-destructive font-semibold">Plan failed loudly — no magic</div>
-                <p className="text-muted-foreground mt-1">{plan.failure}</p>
-              </div>
-            </CardContent>
-          </Card>
-        )}
-
-        {phase === "applied" && (
-          <Topology
-            resources={resources}
-            regionState={regionState}
-            envNote={snap!.envNote}
-            selected={sel?.id ?? null}
-            onSelect={setSelected}
-            layout={layout}
-            view={view}
-            frozenIds={frozenIds}
-            budget={snap!.budget}
-            costNow={snap!.costNow}
-            billedNow={snap!.billedNow}
-          />
-        )}
-
-        {phase === "applied" && (
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-xs tracking-wide uppercase">Inject reality</CardTitle>
-            </CardHeader>
-            <CardContent className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-              <EventButton
-                icon={AlertTriangle}
-                label="Fail node"
-                hint={sel?.id}
-                onClick={() => sel && act((e) => e.failNode(sel.id))}
-              />
-              <EventButton
-                icon={Eye}
-                label="Inject drift"
-                hint={sel?.id}
-                onClick={() => sel && act((e) => e.injectDrift(sel.id))}
-              />
-              <EventButton
-                icon={Zap}
-                label="Region outage"
-                hint={sel?.region}
-                onClick={() => sel && act((e) => e.regionOutage(sel.region))}
-              />
-              <EventButton
-                icon={CircleSlash}
-                label="Telemetry loss"
-                hint={sel?.id}
-                onClick={() => sel && act((e) => e.setStale(sel.id, true))}
-              />
-              <EventButton
-                icon={Wrench}
-                label="Hard failure"
-                hint={sel?.id}
-                onClick={() => sel && act((e) => e.hardFailure(sel.id))}
-              />
-              <EventButton
-                icon={sel?.costDrifted ? Wrench : DollarSign}
-                label={sel?.costDrifted ? "Reconcile cost" : "Cost spike"}
-                hint={sel?.id}
-                onClick={() =>
-                  sel && act((e) => (sel.costDrifted ? e.resolveCost(sel.id) : e.costSpike(sel.id)))
-                }
-              />
-              <EventButton
-                icon={
-                  engineRef.current && sel && engineRef.current.isFrozen(sel.id)
-                    ? Snowflake
-                    : ShieldAlert
-                }
-                label={
-                  engineRef.current && sel && engineRef.current.isFrozen(sel.id)
-                    ? "Ratify (repay)"
-                    : "Break-glass"
-                }
-                hint={sel?.id}
-                onClick={() =>
-                  sel && act((e) => (e.isFrozen(sel.id) ? e.ratify(sel.id) : e.breakGlass(sel.id)))
-                }
-              />
-            </CardContent>
-          </Card>
-        )}
-
-        {phase === "applied" && snap?.changeFreeze && (
-          <Card className="border-[var(--state-frozen)]">
-            <CardContent className="flex items-center gap-3 pt-6 text-sm">
-              <Snowflake className="size-5 shrink-0 text-[var(--state-frozen)]" />
-              <div className="flex-1">
-                <div className="font-semibold">Change freeze active</div>
-                <p className="text-muted-foreground">
-                  Non-emergency Converge actions are held (§9). Drift is recorded but not corrected;
-                  break-glass still overrides per-resource.
-                </p>
-              </div>
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => act((e) => e.setChangeFreeze(false))}
-              >
-                Lift freeze
-              </Button>
-            </CardContent>
-          </Card>
-        )}
-
-        {phase === "applied" && snap?.blastTripped && !snap?.changeFreeze && (
-          <Card className="border-destructive">
-            <CardContent className="flex items-center gap-3 pt-6 text-sm">
-              <Zap className="text-destructive size-5 shrink-0" />
-              <div className="flex-1">
-                <div className="text-destructive font-semibold">Blast-radius breaker tripped</div>
-                <p className="text-muted-foreground">
-                  A single pass would remediate a large share of the fleet — halted and paging
-                  instead of mass-stomping (§9). Review, then proceed.
-                </p>
-              </div>
-              <Button size="sm" variant="outline" onClick={() => act((e) => e.acknowledgeBlast())}>
-                Proceed once
-              </Button>
-            </CardContent>
-          </Card>
-        )}
-
-        {phase === "applied" && snap?.budgetBreach && (
-          <Card className="border-destructive">
-            <CardContent className="flex items-center gap-3 pt-6 text-sm">
-              <DollarSign className="text-destructive size-5 shrink-0" />
-              <div className="flex-1">
-                <div className="text-destructive font-semibold">
-                  Budget breach — billed ${snap.billedNow} / ${snap.budget}/mo
-                </div>
-                <p className="text-muted-foreground">
-                  Cost drift (billed ≫ planned) pushed spend over budget (§13).{" "}
-                  {snap.budgetPolicy === "block"
-                    ? "Policy: block — further provisioning is held until reconciled."
-                    : "Policy: alert — provisioning continues; on-call is paged."}{" "}
-                  Reconcile the cost-drifted resource to clear it.
-                </p>
-              </div>
-              {(() => {
-                const drifted = resources.find((r) => r.costDrifted);
-                return drifted ? (
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => act((e) => e.resolveCost(drifted.id))}
-                  >
-                    Reconcile cost
-                  </Button>
-                ) : null;
-              })()}
-            </CardContent>
-          </Card>
-        )}
-
-        {phase === "applied" && (snap?.incidents.length ?? 0) > 0 && (
-          <IncidentSurface
-            incidents={snap!.incidents}
-            onResolve={(id) => act((e) => e.resolveIncident(id))}
-            onSelect={setSelected}
-          />
-        )}
-
-        {phase === "applied" && snap && (
-          <ControlPlanePanel
-            cp={snap.controlPlane}
-            target={cpTarget}
-            onTarget={setCpTarget}
-            onPropose={(faulty) => act((e) => e.proposeSelfUpgrade(cpTarget, faulty))}
-            onApprove={() => act((e) => e.approveSelfUpgrade())}
-            onReBootstrap={() => act((e) => e.reBootstrap())}
-          />
-        )}
+        {/* ---- Right: Proof + audit ---- */}
+        <Card className="h-fit min-w-0">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm">Plan = proof</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <Tabs defaultValue="proof">
+              <TabsList className="w-full">
+                <TabsTrigger value="proof" className="flex-1">
+                  Proof
+                </TabsTrigger>
+                <TabsTrigger id="tour-owners" value="owners" className="flex-1">
+                  Owners
+                </TabsTrigger>
+                <TabsTrigger value="audit" className="flex-1">
+                  Audit
+                </TabsTrigger>
+              </TabsList>
+              <TabsContent value="proof" className="mt-3">
+                <ProofPanel snap={snap} selectedId={sel?.id ?? null} />
+              </TabsContent>
+              <TabsContent value="owners" className="mt-3">
+                <OwnersPanel
+                  rollups={snap?.serviceRollups ?? []}
+                  budget={snap?.budget ?? 0}
+                  envRollup={snap?.envRollup ?? "Unknown"}
+                  selectedSlug={sel?.service ?? null}
+                  onSelect={(slug) => {
+                    const first = resources.find((r) => r.service === slug);
+                    if (first) setSelected(first.id);
+                  }}
+                />
+              </TabsContent>
+              <TabsContent value="audit" className="mt-3">
+                <AuditPanel audit={snap?.audit ?? []} />
+              </TabsContent>
+            </Tabs>
+          </CardContent>
+        </Card>
       </div>
-
-      {/* ---- Right: Proof + audit ---- */}
-      <Card className="h-fit">
-        <CardHeader className="pb-2">
-          <CardTitle className="text-sm">Plan = proof</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <Tabs defaultValue="proof">
-            <TabsList className="w-full">
-              <TabsTrigger value="proof" className="flex-1">
-                Proof
-              </TabsTrigger>
-              <TabsTrigger value="owners" className="flex-1">
-                Owners
-              </TabsTrigger>
-              <TabsTrigger value="audit" className="flex-1">
-                Audit
-              </TabsTrigger>
-            </TabsList>
-            <TabsContent value="proof" className="mt-3">
-              <ProofPanel snap={snap} selectedId={sel?.id ?? null} />
-            </TabsContent>
-            <TabsContent value="owners" className="mt-3">
-              <OwnersPanel
-                rollups={snap?.serviceRollups ?? []}
-                budget={snap?.budget ?? 0}
-                envRollup={snap?.envRollup ?? "Unknown"}
-                selectedSlug={sel?.service ?? null}
-                onSelect={(slug) => {
-                  const first = resources.find((r) => r.service === slug);
-                  if (first) setSelected(first.id);
-                }}
-              />
-            </TabsContent>
-            <TabsContent value="audit" className="mt-3">
-              <AuditPanel audit={snap?.audit ?? []} />
-            </TabsContent>
-          </Tabs>
-        </CardContent>
-      </Card>
     </div>
+  );
+}
+
+function Guide({ onTour }: { onTour: () => void }) {
+  return (
+    <Card>
+      <CardContent className="pt-4">
+        <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
+          <div className="flex items-center gap-2 text-sm font-medium">
+            <Compass className="text-primary size-4" /> New here? Start with the guide.
+          </div>
+          <Button size="sm" variant="secondary" onClick={onTour}>
+            Take the tour
+          </Button>
+        </div>
+        <Accordion type="single" collapsible className="text-sm">
+          <AccordionItem value="what">
+            <AccordionTrigger>What is this?</AccordionTrigger>
+            <AccordionContent className="text-muted-foreground space-y-2">
+              <p>
+                Trellis turns a short declaration of intent — a <b>Posture</b> — into running
+                infrastructure, then keeps it that way. You declare what you want. The planner
+                writes a plan that doubles as its own proof. You approve it. A reconcile loop drives
+                reality to match and holds it there.
+              </p>
+              <p>
+                The cloud here is simulated, but the dynamics are real: applies take time, nodes
+                fail, telemetry goes stale, and bills drift. Everything you do persists in your
+                browser — reload and it's still here.
+              </p>
+            </AccordionContent>
+          </AccordionItem>
+          <AccordionItem value="how">
+            <AccordionTrigger>How to drive it</AccordionTrigger>
+            <AccordionContent className="text-muted-foreground">
+              <ol className="list-decimal space-y-1 pl-4">
+                <li>
+                  Edit the <b>Posture</b> on the left — services and their criticality, resilience,
+                  regions, budget.
+                </li>
+                <li>
+                  Click <b>Plan</b> to compile it, then read the proof on the right.
+                </li>
+                <li>
+                  Click <b>Approve &amp; apply</b> to start the loop and watch it converge.
+                </li>
+                <li>
+                  Use <b>Inject reality</b> to break things, and watch the loop heal or raise an
+                  incident.
+                </li>
+                <li>
+                  Switch the <b>lens</b> (state · cost · health · security) and open <b>Owners</b>.
+                </li>
+              </ol>
+            </AccordionContent>
+          </AccordionItem>
+          <AccordionItem value="batteries">
+            <AccordionTrigger>What's included</AccordionTrigger>
+            <AccordionContent className="text-muted-foreground">
+              <p className="mb-2">Batteries included — this models the whole loop, end to end:</p>
+              <ul className="space-y-1">
+                {[
+                  [
+                    "The reconcile loop",
+                    "Posture → plan-as-proof → gate → reconcile, with state = f(desired, observed, health).",
+                  ],
+                  [
+                    "Four workload types",
+                    "long-running services, run-to-completion jobs, observe-only external SaaS, and stateful quorum clusters.",
+                  ],
+                  [
+                    "A real planner",
+                    "it solves an objective — minimize cost or maximize resilience — under your budget and a governance whitelist, and fails loudly when nothing fits.",
+                  ],
+                  [
+                    "Reconciler safety",
+                    "change-freeze windows, a blast-radius breaker, a flap breaker that trips to Stalled, an incident surface, and break-glass.",
+                  ],
+                  [
+                    "Frame roll-ups",
+                    "region and environment health, read through your resilience choice.",
+                  ],
+                  ["Four lenses", "recolor the topology by state, cost, health, or security."],
+                  [
+                    "Multi-service ownership",
+                    "spend and health attribute up the service → environment tree.",
+                  ],
+                  [
+                    "Cost as a live signal",
+                    "cost drift, budget-breach, and an alert-or-block policy.",
+                  ],
+                  [
+                    "Self-upgrade",
+                    "the control plane manages itself with dual-control and meta-DR recovery.",
+                  ],
+                ].map(([k, v]) => (
+                  <li key={k} className="flex gap-2">
+                    <span className="text-primary mt-0.5 shrink-0">›</span>
+                    <span>
+                      <b className="text-foreground">{k}</b> — {v}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </AccordionContent>
+          </AccordionItem>
+        </Accordion>
+      </CardContent>
+    </Card>
   );
 }
 
@@ -827,7 +956,7 @@ function ControlPlanePanel({
 }) {
   const { pending } = cp;
   return (
-    <Card className={cp.bricked ? "border-destructive" : ""}>
+    <Card id="tour-controlplane" className={cp.bricked ? "border-destructive" : ""}>
       <CardHeader className="pb-2">
         <CardTitle className="flex items-center gap-2 text-xs tracking-wide uppercase">
           <Cpu className="size-3.5" /> Control plane · self-environment (C0)
@@ -1001,7 +1130,7 @@ function Topology({
   const maxCost = Math.max(0, ...resources.map((r) => r.monthlyCost));
   const billedBreach = billedNow > budget;
   return (
-    <Card>
+    <Card id="tour-topology">
       <CardContent className="space-y-4 pt-6">
         <div>
           <div className="text-muted-foreground mb-1 flex justify-between text-xs">
@@ -1325,14 +1454,16 @@ function AuditPanel({ audit }: { audit: AuditEntry[] }) {
   };
   if (!audit.length) return <p className="text-muted-foreground text-xs">No actions yet.</p>;
   return (
-    <div className="max-h-[460px] space-y-1.5 overflow-auto text-[11px]">
+    <div className="max-h-[460px] space-y-1.5 overflow-y-auto overflow-x-hidden text-[11px]">
       {[...audit].reverse().map((a, i) => (
-        <div key={i} className="border-border/40 flex gap-2 border-b pb-1.5">
-          <span className="text-muted-foreground tabular-nums">{fmtClock(a.tMs)}</span>
-          <span className={cn("font-medium", clsColor[a.cls] ?? "")}>{a.verb}</span>
-          <span className="text-muted-foreground min-w-0 flex-1 truncate">
+        <div key={i} className="border-border/40 min-w-0 border-b pb-1.5">
+          <div className="flex items-baseline gap-2">
+            <span className="text-muted-foreground shrink-0 tabular-nums">{fmtClock(a.tMs)}</span>
+            <span className={cn("font-medium break-words", clsColor[a.cls] ?? "")}>{a.verb}</span>
+          </div>
+          <div className="text-muted-foreground break-words">
             {a.target} — {a.reason}
-          </span>
+          </div>
         </div>
       ))}
     </div>

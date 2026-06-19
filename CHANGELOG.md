@@ -7,6 +7,11 @@ The simulator deploys continuously from `main`, so entries are grouped by date r
 
 ### Added
 
+- **Onboarding & UI polish**: a collapsible **guide** at the top (what it is · how to drive it · what's
+  included) plus a **guided tour** (driver.js) that walks the whole loop in plain English. The 3D stage
+  now **auto-fits its container** (no more overflow on phones), with **pinch-to-zoom** on touch and
+  hover-reveal **zoom/reset controls** on desktop. Long audit/proof text wraps instead of forcing
+  horizontal scroll.
 - **Self-upgrade — the control plane managing itself (§16)**: the TCB (planner · proof · gate · catalog ·
   reconciler) is modeled as a Criticality-0 self-environment. Propose a self-upgrade on a component and
   it's a transition gated at the **highest bar (dual-control / sealed-root)**, then canaried in. A

@@ -55,8 +55,36 @@ export default function Stage3D({
   frozenIds: Set<string>;
   onSelect: (id: string) => void;
 }) {
-  const [cam, setCam] = React.useState({ grx: 56, grz: -2, scale: 1 });
+  // grx/grz orbit the camera; zoom is the user's multiplier on top of `fit`,
+  // the base scale that sizes the fixed 760×520 ground plane to the container so
+  // it never overflows on a phone.
+  const [cam, setCam] = React.useState({ grx: 56, grz: -2, zoom: 1 });
+  const [fit, setFit] = React.useState(1);
+  const sceneRef = React.useRef<HTMLDivElement>(null);
   const dragging = React.useRef(false);
+  // Active touch points (for pinch) and the pinch baseline.
+  const pointers = React.useRef(new Map<number, { x: number; y: number }>());
+  const pinch = React.useRef<{ dist: number; zoom: number } | null>(null);
+
+  const setZoom = React.useCallback(
+    (next: number | ((z: number) => number)) =>
+      setCam((c) => ({
+        ...c,
+        zoom: Math.min(2.4, Math.max(0.5, typeof next === "function" ? next(c.zoom) : next)),
+      })),
+    [],
+  );
+
+  // Auto-fit the ground plane to the container width (responsive, no overflow).
+  React.useEffect(() => {
+    const el = sceneRef.current;
+    if (!el) return;
+    const measure = () => setFit(Math.min(1, Math.max(0.44, el.clientWidth / 700)));
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
 
   const regions = React.useMemo(() => [...new Set(resources.map((r) => r.region))], [resources]);
 
@@ -116,39 +144,80 @@ export default function Stage3D({
     return out;
   }, [nodes, regions, resources]);
 
-  const onPointerDown = (e: React.PointerEvent) => {
-    dragging.current = true;
-    (e.target as Element).setPointerCapture?.(e.pointerId);
+  const twoPointerDist = () => {
+    const pts = [...pointers.current.values()];
+    return Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y);
   };
-  const onPointerUp = () => (dragging.current = false);
+  const onPointerDown = (e: React.PointerEvent) => {
+    pointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    (e.target as Element).setPointerCapture?.(e.pointerId);
+    if (pointers.current.size === 2) {
+      pinch.current = { dist: twoPointerDist(), zoom: cam.zoom };
+      dragging.current = false;
+    } else {
+      dragging.current = pointers.current.size === 1;
+    }
+  };
+  const endPointer = (e: React.PointerEvent) => {
+    pointers.current.delete(e.pointerId);
+    if (pointers.current.size < 2) pinch.current = null;
+    dragging.current = pointers.current.size === 1;
+  };
   const onPointerMove = (e: React.PointerEvent) => {
+    if (pointers.current.has(e.pointerId)) {
+      pointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    }
+    // Pinch-to-zoom (touch): scale the zoom by the change in finger distance.
+    if (pointers.current.size >= 2 && pinch.current) {
+      const ratio = twoPointerDist() / pinch.current.dist;
+      setZoom(pinch.current.zoom * ratio);
+      return;
+    }
     if (!dragging.current) return;
     setCam((c) => ({
+      ...c,
       grx: Math.min(80, Math.max(22, c.grx - e.movementY * 0.18)),
       grz: Math.max(-45, Math.min(45, c.grz + e.movementX * 0.25)),
-      scale: c.scale,
     }));
   };
   const onWheel = (e: React.WheelEvent) => {
-    setCam((c) => ({ ...c, scale: Math.min(1.8, Math.max(0.6, c.scale - e.deltaY * 0.0012)) }));
+    setZoom((z) => z - e.deltaY * 0.0014);
   };
 
   const sceneVars = {
     "--grx": `${cam.grx}deg`,
     "--grz": `${cam.grz}deg`,
-    "--scale": cam.scale,
+    "--scale": fit * cam.zoom,
   } as React.CSSProperties;
 
   return (
     <div
-      className={"stage-scene"}
+      ref={sceneRef}
+      className="stage-scene group"
       style={sceneVars}
       onPointerDown={onPointerDown}
-      onPointerUp={onPointerUp}
-      onPointerLeave={onPointerUp}
+      onPointerUp={endPointer}
+      onPointerCancel={endPointer}
+      onPointerLeave={endPointer}
       onPointerMove={onPointerMove}
       onWheel={onWheel}
     >
+      <div className="stage-zoom">
+        <button type="button" aria-label="Zoom in" onClick={() => setZoom((z) => z * 1.2)}>
+          +
+        </button>
+        <button type="button" aria-label="Zoom out" onClick={() => setZoom((z) => z / 1.2)}>
+          −
+        </button>
+        <button
+          type="button"
+          aria-label="Reset view"
+          className="reset"
+          onClick={() => setCam({ grx: 56, grz: -2, zoom: 1 })}
+        >
+          ⤢
+        </button>
+      </div>
       <div className="stage-lattice" />
       <div className="stage-ground">
         {frames.map((f) => {
@@ -219,7 +288,7 @@ export default function Stage3D({
           );
         })}
       </div>
-      <div className="stage-hint">drag to orbit · scroll to zoom</div>
+      <div className="stage-hint">drag to orbit · pinch or scroll to zoom</div>
     </div>
   );
 }
