@@ -6,6 +6,14 @@ description: Recent changes to the Trellis simulator, newest first.
 What's shipped to the live simulator, newest first. The footer shows the exact build
 (date · commit) currently deployed.
 
+## Why Trellis — a use case
+
+A new [use-case page](/trellis/docs/use-case) tells the motivating story plainly: a single shared service
+(privileged access, CI/CD, DNS, source control) becomes a company-wide single point of failure — a
+careful active-active upgrade still takes everything down, because HA hardens against infra failure, not a
+bad change. The fix is per-division environments that contain the blast radius, with the platform team
+curating a vetted catalog + governance so divisions declare intent instead of operating their own cloud.
+
 ## FAQ
 
 A new [FAQ](/trellis/docs/faq) answers the hard questions in plain English — what problem Trellis solves

@@ -31,6 +31,7 @@ export default defineConfig({
           label: "Start here",
           items: [
             { label: "Overview", slug: "docs/overview" },
+            { label: "Why Trellis (use case)", slug: "docs/use-case" },
             { label: "FAQ", slug: "docs/faq" },
             { label: "What's new", slug: "docs/changelog" },
             { label: "Architecture", slug: "docs/architecture" },
