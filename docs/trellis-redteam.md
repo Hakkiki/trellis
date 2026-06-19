@@ -142,6 +142,7 @@ Each kill-path is scored **✓ foreclosed** (already shut), **◑ partial** (mit
 | K2 | Make the **external audit / Governance floor a hard runtime dependency** → an audit outage becomes a company-wide reconciler freeze | ➕ **Inv 12** | shared surfaces are **fail-static** (last-known-good when source unreachable); may not block liveness |
 | K3 | Slice the control planes but **centralize the operators** — one team pushes upgrades to all instances on one toolchain | ➕ **Inv 12 + §16** | standing *push* power (incl. human/operator tooling) is sliced too; shared tooling is pulled-and-pinned, never pushed fleet-wide |
 | K4 | A platform-service division (identity/DNS) is depended on **synchronously by all with no graceful degrade** | ◑ partial | Criticality propagation forces dep ≥ consumer; Weave sync edges contained (circuit-break/degrade). *Residual:* a declared degraded-mode per cross-boundary edge is guidance, not yet an invariant |
+| K15 | A **battery that auto-updates internally** (`image:latest`) ships poison org-wide despite a pinned catalog entry | ➕ **Inv 12** | pins are **transitive** — a pinned entry pins its own deps; supply-chain provenance verified at admission |
 
 ## Family 2 — turn self-healing into self-harm (defeats P1/P4)
 
@@ -166,6 +167,7 @@ Each kill-path is scored **✓ foreclosed** (already shut), **◑ partial** (mit
 | K10 | Lose the **seed / signing key to a single human or single key** | ➕ **Inv 13** | root + signing authority are **M-of-N** |
 | K11 | Make **Git the new SPOF** — one shared manifest store; down → every reconcile blind | ◑/➕ | desired state is **per-domain** (Git is a role, not shared infra); Inv 12 fail-static → reconciler keeps converging to last-good when the store is unreachable |
 | K12 | Irreversible **schema migration** of the desired-state store bricks state | ✓ foreclosed | §16 — schema migration is a gated, reversible transition |
+| K14 | Compromise the **catalog signing key** → every consumer trusts poison | ➕ **Inv 13** (custody) | signing authority **M-of-N**, rotatable; a single org-wide-trusted key is forbidden |
 
 ## Family 5 — observe a lie (defeats P4)
 
@@ -173,8 +175,6 @@ Each kill-path is scored **✓ foreclosed** (already shut), **◑ partial** (mit
 |---|---|---|---|
 | K16 | **Spoof telemetry** → reconciler believes converged (stops healing) or drifted (stomps good state) | ➕ **Inv 15** | observed signals **authenticated**; unauth/anomalous = **Unknown, never trusted**; destructive converge needs **corroboration** |
 | K17 | Break the read path so the console shows **green during a real outage** → operators blind when it matters | ➕ **Inv 15** | Trellis **observes itself** on an independent channel (folds red-team #5); no component is the sole verifier of its own correctness |
-| K14 | Compromise the **catalog signing key** → every consumer trusts poison | ➕ **Inv 13** (custody) | signing authority **M-of-N**, rotatable; a single org-wide-trusted key is forbidden |
-| K15 | A **battery that auto-updates internally** (`image:latest`) ships poison org-wide despite a pinned catalog entry | ➕ **Inv 12** | pins are **transitive** — a pinned entry pins its own deps; supply-chain provenance verified at admission |
 
 ## Family 6 — erode governance from the top (defeats P1/P2)
 
@@ -194,7 +194,7 @@ Each kill-path is scored **✓ foreclosed** (already shut), **◑ partial** (mit
 
 | # | Kill-path | Status | Defense |
 |---|---|---|---|
-| K22 | Compiler emits a **subtly wrong Structure that passes proof** (proof = internal consistency, not real-world correctness) | ◑ partial (the bet) | demoted rung (blueprints + validation + bounded tuning); **dual-planner parity required above a blast-radius threshold** (strengthening of Inv 9, optional→required). Honest residual research risk |
+| K22 | Compiler emits a **subtly wrong Structure that passes proof** (proof = internal consistency, not real-world correctness) | ◑ partial (the bet) | demoted rung (blueprints + validation + bounded tuning); **dual-planner parity available as hardening above a blast-radius threshold** (Inv 9 keeps it optional). Honest residual research risk |
 
 ## Family 9 — time / transactionality (defeats P4)
 

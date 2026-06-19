@@ -54,7 +54,7 @@ The subtlest one. The gate approved a change; it just happened to be bad.
   rollout is simultaneous. **➕ newly hardened (Inv 11):** convergence is **progressive and reversible** —
   canary → waves, **health-gated**, with **automatic rollback** on regression and a blast-radius breaker
   that halts the wave. **An approved change still may not reach a whole blast radius at once.** This is the
-  most important hardening on the page: even a mistake that passes the gate cannot be company-wide.
+  most important hardening on the page: even a mistake that passes the gate must not be company-wide.
 
 ## Kill-path 3 — Make the gate a rubber stamp
 
@@ -78,7 +78,7 @@ The subtlest one. The gate approved a change; it just happened to be bad.
   operable **with the control plane fully down**; recovery never transits the failed system.
 - **Lose the root, or the catalog signing key, to a single person or a single key.** **➕ newly hardened
   (Inv 13):** root and signing authority are **M-of-N** — no single human, no single key.
-- **Make Git the new SPOF** — one shared manifest store; if it's down, every reconcile is blind. **✓ /
+- **Make Git the new SPOF** — one shared manifest store; if it's down, every reconcile is blind. **◑ /
   ➕:** desired state is **per-domain** (Git is a role, not shared infra), and Inv 12's fail-static rule
   means the reconciler keeps converging to its last-good generation when the store is unreachable.
 
@@ -106,8 +106,8 @@ Inversion hardens; it doesn't make a system invincible. What remains, stated pla
 
 - **The compiler is still the bet.** A Posture→Structure compiler can emit a subtly wrong Structure that
   *passes* its proof — a proof shows internal consistency, not real-world correctness. We ship it demoted
-  (blueprints + validation + bounded tuning) and require dual-planner parity above a blast-radius
-  threshold, but this is the genuine research risk, not a solved problem.
+  (blueprints + validation + bounded tuning), with dual-planner parity available as hardening above a
+  blast-radius threshold (the spec keeps it optional), but this is the genuine research risk, not solved.
 - **Social defeat is real.** A proof nobody reads is magic by another name; alarm fatigue defeats any human
   gate. The mitigation is to **ration attention by blast radius** — auto-handle the trivial, escalate only
   what's significant — but discipline, not just design, keeps the gate meaningful.
