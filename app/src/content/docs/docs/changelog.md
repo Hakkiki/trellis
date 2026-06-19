@@ -6,6 +6,13 @@ description: Recent changes to the Trellis simulator, newest first.
 What's shipped to the live simulator, newest first. The footer shows the exact build
 (date · commit) currently deployed.
 
+## Reduced-motion support
+
+Trellis now respects the OS **Reduce Motion** accessibility setting. With it on, the topology's pulsing
+nodes, flowing weave wires, and glow stop, and the guided tour drops its slide/scroll animation — state
+still reads through color, and you can still orbit and zoom. For anyone prone to motion sickness or
+distraction, the page goes calm automatically.
+
 ## Polish pass
 
 Share-ready details:

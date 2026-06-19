@@ -7,6 +7,9 @@ The simulator deploys continuously from `main`, so entries are grouped by date r
 
 ### Added
 
+- **Reduced-motion support**: honors the OS "Reduce Motion" setting — the pulsing nodes, flowing weave
+  wires, glow, and the guided tour's animation all stand down (state still reads through color;
+  orbit/zoom is unaffected).
 - **Polish pass**: the guided tour popovers are now **themed to the Trellis palette** (no more stock
   white box); the landing page is refreshed (current "what's new" pill, cost-drift / ownership /
   self-upgrade stress cards); a **Reset** control clears saved state for a clean demo; the **overview
