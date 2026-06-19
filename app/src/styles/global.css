@@ -101,3 +101,17 @@
     @apply bg-background text-foreground;
   }
 }
+
+/* Respect the OS "Reduce Motion" setting: stop non-essential animation (the
+   topology's pulsing nodes, flowing weave wires, glow, and any pulse dots).
+   State still reads through color; interaction (orbit/zoom) is unaffected. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

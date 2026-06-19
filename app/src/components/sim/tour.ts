@@ -58,8 +58,13 @@ export function startTour() {
     popover: { title: s.title, description: s.description },
   }));
   if (!steps.length) return;
+  // Honor the OS "Reduce Motion" setting — no slide/scroll animation.
+  const reduceMotion =
+    typeof window !== "undefined" &&
+    window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
   driver({
     showProgress: true,
+    animate: !reduceMotion,
     overlayColor: "#0a0705",
     nextBtnText: "Next",
     prevBtnText: "Back",
