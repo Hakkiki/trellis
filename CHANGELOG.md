@@ -7,6 +7,11 @@ The simulator deploys continuously from `main`, so entries are grouped by date r
 
 ### Added
 
+- **Topology that scales to many services**: the 3D stage no longer crowds every service into the same
+  cells. By default it shows a **grouped overview** — one tile per service per region (name · state ·
+  resource count) — and you **tap a tile (or a service chip) to drill into that one service's full
+  edge→app→data weave**. A single-service environment skips straight to the weave. The grid view filters
+  to the focused service too. Readable no matter how many services you own.
 - **Onboarding & UI polish**: a collapsible **guide** at the top (what it is · how to drive it · what's
   included) plus a **guided tour** (driver.js) that walks the whole loop in plain English. The 3D stage
   now **auto-fits its container** (no more overflow on phones), with **pinch-to-zoom** on touch and

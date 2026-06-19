@@ -110,6 +110,8 @@ export default function Simulator() {
   const [layout, setLayout] = React.useState<"stage" | "grid">("stage");
   const [view, setView] = React.useState<ViewMode>("state");
   const [cpTarget, setCpTarget] = React.useState<TcbId>("reconciler");
+  // Topology service focus: "all" = grouped overview; a slug drills into one service.
+  const [serviceFocus, setServiceFocus] = React.useState<string>("all");
 
   const refresh = React.useCallback(() => {
     if (engineRef.current) setSnap(engineRef.current.snapshot());
@@ -454,6 +456,15 @@ export default function Simulator() {
               resources={resources}
               regionState={regionState}
               envNote={snap!.envNote}
+              rollups={snap!.serviceRollups}
+              focus={serviceFocus}
+              onFocus={(slug) => {
+                setServiceFocus(slug);
+                if (slug !== "all") {
+                  const first = resources.find((r) => r.service === slug);
+                  if (first) setSelected(first.id);
+                }
+              }}
               selected={sel?.id ?? null}
               onSelect={setSelected}
               layout={layout}
@@ -1113,6 +1124,9 @@ function Topology({
   resources,
   regionState,
   envNote,
+  rollups,
+  focus,
+  onFocus,
   selected,
   onSelect,
   layout,
@@ -1125,6 +1139,9 @@ function Topology({
   resources: ResourceView[];
   regionState: Record<string, State>;
   envNote: string;
+  rollups: ServiceRollup[];
+  focus: string;
+  onFocus: (slug: string) => void;
   selected: string | null;
   onSelect: (id: string) => void;
   layout: "stage" | "grid";
@@ -1134,10 +1151,14 @@ function Topology({
   costNow: number;
   billedNow: number;
 }) {
-  const regions = [...new Set(resources.map((r) => r.region))];
   const order: CellKind[] = ["edge", "app", "data"];
   const maxCost = Math.max(0, ...resources.map((r) => r.monthlyCost));
   const billedBreach = billedNow > budget;
+  const names = Object.fromEntries(rollups.map((r) => [r.slug, r.service]));
+  // In a specific-service focus, the grid shows only that service too.
+  const focused = focus !== "all" && resources.some((r) => r.service === focus);
+  const shown = focused ? resources.filter((r) => r.service === focus) : resources;
+  const regions = [...new Set(shown.map((r) => r.region))];
   return (
     <Card id="tour-topology">
       <CardContent className="space-y-4 pt-6">
@@ -1171,6 +1192,41 @@ function Topology({
           </div>
         </div>
 
+        {rollups.length > 1 && (
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span className="text-muted-foreground mr-1 text-[11px]">view:</span>
+            <button
+              onClick={() => onFocus("all")}
+              className={cn(
+                "rounded-md border px-2 py-1 text-xs",
+                !focused
+                  ? "border-primary text-foreground"
+                  : "border-input text-muted-foreground hover:text-foreground",
+              )}
+            >
+              All services
+            </button>
+            {rollups.map((r) => (
+              <button
+                key={r.slug}
+                onClick={() => onFocus(r.slug)}
+                className={cn(
+                  "flex items-center gap-1.5 rounded-md border px-2 py-1 text-xs",
+                  focus === r.slug
+                    ? "border-primary text-foreground"
+                    : "border-input text-muted-foreground hover:text-foreground",
+                )}
+              >
+                <span
+                  className="size-2 rounded-full"
+                  style={{ background: stateColorVar(r.state) }}
+                />
+                {r.service}
+              </button>
+            ))}
+          </div>
+        )}
+
         {layout === "stage" ? (
           <Stage3D
             resources={resources}
@@ -1179,6 +1235,9 @@ function Topology({
             maxCost={maxCost}
             selected={selected}
             frozenIds={frozenIds}
+            focus={focus}
+            names={names}
+            onFocus={onFocus}
             onSelect={onSelect}
           />
         ) : (
@@ -1207,7 +1266,7 @@ function Topology({
                   </div>
                   <div className="space-y-2">
                     {order.map((cell) =>
-                      resources
+                      shown
                         .filter((r) => r.region === region && r.cell === cell)
                         .map((r) => (
                           <ResourceCard

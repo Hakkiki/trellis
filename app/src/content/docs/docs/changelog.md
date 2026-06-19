@@ -6,6 +6,18 @@ description: Recent changes to the Trellis simulator, newest first.
 What's shipped to the live simulator, newest first. The footer shows the exact build
 (date · commit) currently deployed.
 
+## Topology that scales to many services
+
+The 3D stage used to pack every service into the same edge/app/data cells, so two services already
+overlapped and more was unreadable. Now it groups and drills in:
+
+- **Overview (default)** — each region shows **one tile per service** (name, roll-up state, resource
+  count). Clean however many services you own.
+- **Drill in** — **tap a service tile** (or a chip above the stage) to open that service's full
+  edge→app→data weave, with its cross-region replication. Tap **All services** to go back.
+- A single-service environment skips the grouping and shows its weave directly. The grid view filters to
+  the focused service too.
+
 ## Onboarding & UI polish
 
 The simulator is easier to pick up and share:
