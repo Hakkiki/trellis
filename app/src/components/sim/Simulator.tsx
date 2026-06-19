@@ -83,14 +83,16 @@ export default function Simulator() {
         refresh();
         return;
       }
-      setForm(s.posture);
+      // Merge over defaults so a session saved before newer posture fields
+      // existed (e.g. governanceServices) doesn't render the form with missing
+      // keys — that would crash on first access.
+      const posture: Posture = { ...DEFAULT_POSTURE, ...s.posture };
+      setForm(posture);
       e.hydrate(s.audit);
+      e.declare(posture);
       if (s.applied) {
-        e.declare(s.posture);
         e.approve();
         setRunning(true);
-      } else {
-        e.declare(s.posture);
       }
       refresh();
     });
@@ -236,7 +238,8 @@ export default function Simulator() {
           <Field label="Governance — allowed services">
             <div className="flex flex-wrap gap-1.5">
               {ALL_SERVICES.map((s) => {
-                const on = form.governanceServices.includes(s.kind);
+                const allowed = form.governanceServices ?? [];
+                const on = allowed.includes(s.kind);
                 return (
                   <button
                     key={s.kind}
@@ -244,8 +247,8 @@ export default function Simulator() {
                       setForm({
                         ...form,
                         governanceServices: on
-                          ? form.governanceServices.filter((k) => k !== s.kind)
-                          : [...form.governanceServices, s.kind],
+                          ? allowed.filter((k) => k !== s.kind)
+                          : [...allowed, s.kind],
                       })
                     }
                     className={cn(

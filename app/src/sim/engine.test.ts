@@ -149,6 +149,13 @@ describe("objective program", () => {
     expect(p.feasible).toBe(false);
     expect(p.failure).toMatch(/Governance denied/);
   });
+
+  it("tolerates a legacy posture missing governanceServices (stale session)", () => {
+    const legacy = { ...DEFAULT_POSTURE } as Partial<Posture>;
+    delete legacy.governanceServices;
+    const p = plan(legacy as Posture, 1);
+    expect(p.feasible).toBe(true);
+  });
 });
 
 describe("workload archetypes", () => {
