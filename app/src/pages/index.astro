@@ -22,40 +22,77 @@ const stress = [
   ["Self-heal", "A failed node is Degraded, then re-provisioned within the approved envelope."],
   ["Fail-safe", "Stale telemetry → Unknown; the loop holds rather than acting blind."],
   ["Break-glass", "A frozen resource suspends reconciliation and owes a ratify-or-revert debt."],
-  ["FinOps", "Live cost vs. budget; the planner fails loudly when no realization fits."],
-  ["Proof", "Every plan carries its derivation; every action emits an audit record."],
+  ["Transitions", "Change the posture and it rolls out as expand-contract — nodes appear and retire."],
+  ["Promotion", "Promote an immutable version dev → staging → prod, re-planned per environment."],
+];
+
+const surfaces = [
+  {
+    href: `${base}/simulator`,
+    label: "Simulator",
+    body: "Declare a posture, read the proof, approve, then drive a CSS-3D topology — inject drift, fail nodes, break glass, and watch it heal.",
+    cta: "Open the simulator",
+  },
+  {
+    href: `${base}/promotion`,
+    label: "Promotion pipeline",
+    body: "Cut an immutable version and advance it through environments, each instantiating it with its own posture overrides.",
+    cta: "Open promotion",
+  },
+  {
+    href: `${base}/docs/overview`,
+    label: "Documentation",
+    body: "The full spec, the architecture, and the concepts — Posture, Structure & State, the reconcile loop, and promotion.",
+    cta: "Read the docs",
+  },
 ];
 ---
 
 <AppLayout>
-  <section class="py-10 text-center">
-    <p class="text-primary text-sm font-medium tracking-wide uppercase">Self-hosted cloud control plane</p>
+  <!-- Hero -->
+  <section class="relative overflow-hidden py-14 text-center sm:py-20">
+    <div
+      class="pointer-events-none absolute inset-0 -z-10 opacity-[0.07]"
+      style="background-image:repeating-linear-gradient(45deg,#fff 0 1px,transparent 1px 30px),repeating-linear-gradient(-45deg,#fff 0 1px,transparent 1px 30px)"
+    >
+    </div>
+    <img
+      src={`${base}/trellis-lockup-dark.svg`}
+      alt="Trellis"
+      class="mx-auto h-16 w-auto sm:h-20"
+    />
+    <p class="text-primary mt-8 text-sm font-medium tracking-wide uppercase">
+      Self-hosted cloud control plane
+    </p>
     <h1 class="mx-auto mt-3 max-w-3xl text-4xl font-semibold tracking-tight sm:text-5xl">
       Declare what you want. A reconciler keeps reality matching it.
     </h1>
-    <p class="text-muted-foreground mx-auto mt-4 max-w-2xl">
-      <b>Posture → planner → Structure → reconcile loop</b> — manifest-driven, with no magic: every
-      action is explainable by the plan that authorized it. This is the interactive simulator and the
-      design that grows into the real thing.
+    <p class="text-muted-foreground mx-auto mt-5 max-w-2xl text-lg">
+      <b class="text-foreground">Posture → planner → Structure → reconcile loop</b> — manifest-driven,
+      with no magic: every action is explainable by the plan that authorized it.
     </p>
-    <div class="mt-7 flex justify-center gap-3">
+    <div class="mt-8 flex flex-wrap justify-center gap-3">
       <a
         href={`${base}/simulator`}
-        class="bg-primary text-primary-foreground rounded-md px-5 py-2.5 text-sm font-medium hover:opacity-90"
-        >Open the simulator</a
+        class="bg-primary text-primary-foreground rounded-md px-6 py-3 text-sm font-medium transition hover:opacity-90"
+        >Open the simulator →</a
       >
       <a
         href={`${base}/docs/overview`}
-        class="border-input hover:bg-accent rounded-md border px-5 py-2.5 text-sm font-medium"
+        class="border-input hover:bg-accent rounded-md border px-6 py-3 text-sm font-medium transition"
         >Read the docs</a
       >
     </div>
+    <p class="text-muted-foreground mt-5 text-xs">
+      Runs entirely in your browser · IndexedDB-backed · no backend
+    </p>
   </section>
 
-  <section class="mt-8 grid gap-4 md:grid-cols-3">
+  <!-- Pillars -->
+  <section class="grid gap-4 md:grid-cols-3">
     {
       pillars.map((p) => (
-        <div class="border-border/60 rounded-xl border p-5">
+        <div class="border-border/60 bg-card/40 rounded-xl border p-6">
           <h3 class="text-primary font-semibold">{p.title}</h3>
           <p class="text-muted-foreground mt-2 text-sm">{p.body}</p>
         </div>
@@ -63,15 +100,39 @@ const stress = [
     }
   </section>
 
-  <section class="mt-12">
-    <h2 class="text-xl font-semibold">What the simulator stress-tests</h2>
-    <div class="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+  <!-- Stress tests -->
+  <section class="mt-16">
+    <h2 class="text-center text-2xl font-semibold">What the simulator stress-tests</h2>
+    <p class="text-muted-foreground mx-auto mt-2 max-w-2xl text-center text-sm">
+      The cloud is simulated; the dynamics are real. Every behavior the loop exists to handle, made
+      tangible.
+    </p>
+    <div class="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
       {
         stress.map(([t, b]) => (
           <div class="bg-card/40 rounded-lg border p-4">
             <div class="text-sm font-medium">{t}</div>
             <p class="text-muted-foreground mt-1 text-sm">{b}</p>
           </div>
+        ))
+      }
+    </div>
+  </section>
+
+  <!-- Surfaces -->
+  <section class="mt-16">
+    <h2 class="text-center text-2xl font-semibold">Explore</h2>
+    <div class="mt-6 grid gap-4 md:grid-cols-3">
+      {
+        surfaces.map((s) => (
+          <a
+            href={s.href}
+            class="border-border/60 hover:border-primary/60 group bg-card/40 flex flex-col rounded-xl border p-6 transition"
+          >
+            <h3 class="font-semibold">{s.label}</h3>
+            <p class="text-muted-foreground mt-2 flex-1 text-sm">{s.body}</p>
+            <span class="text-primary mt-4 text-sm font-medium group-hover:underline">{s.cta} →</span>
+          </a>
         ))
       }
     </div>

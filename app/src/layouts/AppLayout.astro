@@ -1,14 +1,10 @@
 ---
 import "@/styles/global.css";
+import SiteNav from "@/components/sim/SiteNav.tsx";
 const { title = "Trellis", description = "Posture → planner → Structure → reconcile loop." } =
   Astro.props;
 const base = import.meta.env.BASE_URL.replace(/\/$/, "");
-const nav = [
-  { href: `${base}/`, label: "Home" },
-  { href: `${base}/simulator`, label: "Simulator" },
-  { href: `${base}/promotion`, label: "Promotion" },
-  { href: `${base}/docs/overview`, label: "Docs" },
-];
+const year = new Date().getFullYear();
 ---
 
 <!doctype html>
@@ -20,35 +16,24 @@ const nav = [
     <meta name="description" content={description} />
     <link rel="icon" href={`${base}/favicon.svg`} />
   </head>
-  <body class="min-h-screen">
-    <header
-      class="border-border/60 bg-background/80 sticky top-0 z-20 flex items-center gap-6 border-b px-5 py-3 backdrop-blur"
-    >
-      <a href={`${base}/`} class="flex items-center gap-2 font-semibold">
-        <span
-          class="grid size-6 place-items-center rounded-md"
-          style="background:linear-gradient(135deg,#c8a040,#6fbf8f)"
-        >
-          <span class="text-[13px] text-black">◇</span>
-        </span>
-        Trellis
-      </a>
-      <nav class="flex items-center gap-4 text-sm">
-        {
-          nav.map((n) => (
-            <a class="text-muted-foreground hover:text-foreground transition" href={n.href}>
-              {n.label}
-            </a>
-          ))
-        }
-      </nav>
-      <a
-        class="text-muted-foreground hover:text-foreground ml-auto text-sm"
-        href="https://github.com/hakkiki/trellis">GitHub</a
-      >
-    </header>
-    <main class="mx-auto max-w-7xl px-5 py-8">
+  <body class="flex min-h-screen flex-col">
+    <SiteNav client:load />
+    <main class="mx-auto w-full max-w-7xl flex-1 px-4 py-8 sm:px-5">
       <slot />
     </main>
+    <footer class="border-border/60 border-t">
+      <div
+        class="text-muted-foreground mx-auto flex max-w-7xl flex-col gap-2 px-5 py-6 text-xs sm:flex-row sm:items-center"
+      >
+        <span>Trellis — Posture → planner → Structure → reconcile loop.</span>
+        <span class="sm:ml-auto">
+          <a class="hover:text-foreground" href={`${base}/docs/overview`}>Docs</a>
+          <span class="mx-2">·</span>
+          <a class="hover:text-foreground" href="https://github.com/hakkiki/trellis">GitHub</a>
+          <span class="mx-2">·</span>
+          <span>© {year}</span>
+        </span>
+      </div>
+    </footer>
   </body>
 </html>
