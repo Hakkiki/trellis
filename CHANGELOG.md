@@ -7,6 +7,11 @@ The simulator deploys continuously from `main`, so entries are grouped by date r
 
 ### Added
 
+- **Use-case page ("Why Trellis")**: a genericized worked example — how a single shared service becomes a
+  company-wide single point of failure (a careful active-active upgrade with 100% blast radius), and how
+  per-division environments contain it without making teams operate their own cloud (platform curates the
+  catalog + governance; divisions declare a Posture; upgrades canary per-environment with meta-DR).
+  Linked from the docs sidebar and the landing "Explore" cards.
 - **FAQ**: a thorough, spec-grounded docs page that answers the hard questions in plain English — what
   problem Trellis solves and why; who it's for and explicitly not for; what fails and why (the TCB
   hazards and their mitigations); cross-region connectivity and healing; the security model; who manages
