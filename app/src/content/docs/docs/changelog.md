@@ -14,6 +14,15 @@ never overlapping, or the two loops fight. And you slice at the **cluster**, not
 namespace shares the cluster's control plane and upgrade fate. Includes the honest costs (cluster sprawl;
 the upgrade/API-compat seam where "infra only" blurs).
 
+## Bootstrap & footprint
+
+A new [Bootstrap & footprint page](/trellis/docs/bootstrap) covers the part everything hangs from: how
+Trellis gets installed the first time (a one-time, externally-rooted, dual-controlled ceremony — seed
+once, discover read-only, plan + prove, approve the minimal scoped write, then seal the root) and what it
+needs *standing* to run (workload identity, a delegated-admin position that's unprivileged for writes,
+STS-minted plan-scoped ephemeral credentials, and a small near-stateless footprint: compute + Git + the
+external audit + a lock table + a secrets store). Plus per-division bootstrap and meta-DR.
+
 ## Operating model
 
 A new [operating-model page](/trellis/docs/operating-model) covers the *how* of per-division platforms:
