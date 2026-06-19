@@ -7,6 +7,10 @@ The simulator deploys continuously from `main`, so entries are grouped by date r
 
 ### Added
 
+- **"Trellis and Kubernetes" section** (in the operating model): where the two control loops divide —
+  Trellis manages the cluster (version, nodes, add-ons), the in-cluster GitOps loop owns the workloads,
+  never overlapping; slice at the cluster, not the namespace; with the honest costs (cluster sprawl, the
+  upgrade/API-compat seam). The FAQ's Kubernetes answer links to it.
 - **Operating-model page**: the "how" companion to the use case — choosing a division's isolation grain
   (the org / account / VPC / namespace ladder, and why a namespace fails the blast-radius test),
   synchronous-only coupling as the healthy kind, and the key move: **slice the control plane too** (each

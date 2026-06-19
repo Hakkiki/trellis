@@ -6,6 +6,15 @@ description: Recent changes to the Trellis simulator, newest first.
 What's shipped to the live simulator, newest first. The footer shows the exact build
 (date · commit) currently deployed.
 
+## Trellis and Kubernetes
+
+The [operating model](/trellis/docs/operating-model#trellis-and-kubernetes-where-the-line-is) now spells
+out where Trellis ends and Kubernetes begins. Because k8s is itself a reconciler, the rule is: Trellis
+manages the **cluster** (version, nodes, add-ons) and the in-cluster GitOps loop owns the **workloads** —
+never overlapping, or the two loops fight. And you slice at the **cluster**, not the namespace, since a
+namespace shares the cluster's control plane and upgrade fate. Includes the honest costs (cluster sprawl;
+the upgrade/API-compat seam where "infra only" blurs).
+
 ## Operating model
 
 A new [operating-model page](/trellis/docs/operating-model) covers the *how* of per-division platforms:
