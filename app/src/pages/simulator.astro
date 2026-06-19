@@ -1,15 +1,19 @@
 ---
-import AppLayout from "@/layouts/AppLayout.astro";
+import ViewSwitcher from "@/components/ViewSwitcher.astro";
 import Simulator from "@/components/sim/Simulator.tsx";
+import AppLayout from "@/layouts/AppLayout.astro";
 ---
 
 <AppLayout title="Trellis — Simulator" description="Declare a posture, approve a plan, watch the reconciler heal.">
+  <ViewSwitcher active="simulator" />
   <div class="mb-6">
-    <h1 class="text-2xl font-semibold">Behavioral simulator</h1>
+    <h1 class="text-2xl font-semibold">One environment, up close</h1>
     <p class="text-muted-foreground mt-1 max-w-3xl text-sm">
-      The cloud is <b>simulated</b>; the dynamics are <b>real</b>. Declare a Posture → compile a plan
-      that is a proof → approve to mint a scoped credential → watch the reconcile loop converge and
-      self-heal. State persists in IndexedDB, so your session survives a reload.
+      Declare what you want — a <b>Posture</b> — approve the plan, and watch the reconcile loop build it
+      and keep it healthy. The cloud is <b>simulated</b>; the dynamics are <b>real</b> — applies take
+      time, nodes fail, bills drift. Break things and watch it heal. Your session saves in the browser.
+      New here? Open the guide below, or take the tour. To move a release across environments, switch to
+      the <b>Release pipeline</b> above.
     </p>
   </div>
   <Simulator client:only="react" />
