@@ -40,7 +40,7 @@ Two moves, and they compound:
    itself](/trellis/docs/operating-model).** Each division gets its own environment and its own copy of
    the loop. Only a few signed, pulled things stay shared — a vetted catalog, the org guardrails, and the
    external audit. One division's failure — or upgrade — **cannot reach another.**
-   ([See it: the same bad upgrade, contained vs. company-wide →](/trellis/blast-radius))
+   ([See it: the same bad upgrade, contained vs. company-wide →](/trellis/blast-radius/))
 
 Where most approaches stop at move 1 — GitOps and landing zones bolt governance onto a *still-shared*
 control plane — Trellis makes **containment the spine** and slices the control plane too, so the thing

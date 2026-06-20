@@ -38,9 +38,9 @@ export default defineConfig({
           items: [
             { label: "The case", slug: "docs/the-case" },
             { label: "Why Trellis — use case", slug: "docs/use-case" },
-            // Standalone page (not a docs entry), so use an absolute `link` —
-            // Starlight does not prepend the base path to sidebar `link`s.
-            { label: "Blast radius (demo)", link: "/trellis/blast-radius" },
+            // Standalone page (not a docs entry). Starlight prepends the base
+            // path to sidebar `link`s, so give it the base-relative path.
+            { label: "Blast radius (demo)", link: "/blast-radius/" },
           ],
         },
         {
