@@ -974,7 +974,8 @@ function OwnersPanel({
         (it calls <code className="text-[9px]">trellis release</code>) — Trellis <em>observes</em>{" "}
         the rollout, it does not trigger it. The <span className="text-foreground">simulate</span>{" "}
         buttons below stand in for that pipeline so you can watch a rollout, and a bad deploy
-        self-revert.
+        self-revert. It stays <span className="text-foreground">aware, not passive</span>, so it can
+        self-heal to the running version and not mistake a bad deploy for an infra fault.
       </p>
       {rollups.map((r) => {
         const color = stateColorVar(r.state);

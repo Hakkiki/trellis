@@ -1352,6 +1352,32 @@ publishes, the app consumes.
 > reading each environment's coordinates and resolving secrets through a Cell-bound identity — gated only
 > by the temporal handshake.
 
+### Aware, not passive — why the platform observes the rollout
+
+The platform publishes coordinates and then **watches** the rollout — it does not provision and walk away.
+Observation here is **load-bearing for the platform's own job**, not curiosity; a passive provisioner
+cannot meet the guarantees of the rest of this spec:
+
+- **Self-heal needs the live version.** "Keep N healthy replicas of the right thing" requires knowing what
+  the right thing *is*: a replacement or scale-up must come up on the **current** artifact (the runtime
+  holds it, but the reconciler must observe it), or it resurrects a blank/stale instance.
+- **The two loops must not collide.** Provisioning and delivery run concurrently; without awareness an
+  expand-contract transition (§10) can tear down capacity under a live rollout, or a rollout can land on
+  half-built infra. Awareness is what powers the temporal handshake (facet c) that serializes them.
+- **An app bug is not an infra fault.** A crashlooping release makes the App Cell *look* Degraded; a blind
+  reconciler would self-heal, fight the bad release, trip its breakers, and page the *platform* for the
+  *team's* bug. Knowing a rollout is in flight (the rollout state machine below) is exactly what lets the
+  reconciler stay out — the inner/outer separation **depends** on awareness.
+- **Admission is governed at the observed seam.** Invariant 27's admission control — the change-freeze, the
+  Criticality-permitted strategy, the scoped identity — holds only because the release transits the adapter
+  the platform watches; a platform blind to releases is an ungoverned write path into governed prod.
+- **The control plane is the honest map.** Releases are the most frequent, most outage-prone changes; a
+  platform blind to them has a hole in its State (§4) and audit (§14) exactly where incidents begin.
+
+The boundary stays **observe-and-govern, never trigger**: the platform is aware so it can do *its own* work
+and admit the write — not to own the deploy. Passive provisioning is IaC; a control plane that cannot see
+what is running is IaC with extra steps.
+
 ### The App Cell's release interface — what `app_target` is
 
 `app_target` is **not** a provider handle (an ECS service ARN, a Kubernetes namespace). Surfacing one
