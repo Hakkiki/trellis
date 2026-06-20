@@ -22,8 +22,8 @@ export interface ViewState {
   y: number;
 }
 
-export const MIN_SCALE = 0.4;
-export const MAX_SCALE = 12;
+export const MIN_SCALE = 0.2;
+export const MAX_SCALE = 40;
 
 export const clampScale = (s: number): number => Math.min(MAX_SCALE, Math.max(MIN_SCALE, s));
 
@@ -121,24 +121,39 @@ function attachPanZoom(viewport: HTMLElement, content: HTMLElement): PanZoom {
     state = { ...IDENTITY };
     apply();
   };
+  // Fit the content to the viewport and centre it (used on open + reset).
+  const fitToView = (): void => {
+    const r = viewport.getBoundingClientRect();
+    const cw = content.offsetWidth;
+    const ch = content.offsetHeight;
+    if (!cw || !ch || !r.width || !r.height) {
+      reset();
+      return;
+    }
+    const scale = clampScale(Math.min((r.width * 0.92) / cw, (r.height * 0.92) / ch));
+    state = { scale, x: (r.width - cw * scale) / 2, y: (r.height - ch * scale) / 2 };
+    apply();
+  };
 
   viewport.addEventListener("pointerdown", onPointerDown);
   viewport.addEventListener("pointermove", onPointerMove);
   viewport.addEventListener("pointerup", onPointerUp);
   viewport.addEventListener("pointercancel", onPointerUp);
   viewport.addEventListener("wheel", onWheel, { passive: false });
-  viewport.addEventListener("dblclick", reset);
+  viewport.addEventListener("dblclick", fitToView);
 
-  apply();
+  fitToView();
+  // Re-fit once layout settles (fonts/SVG metrics can land a frame late).
+  if (typeof requestAnimationFrame === "function") requestAnimationFrame(fitToView);
   return {
-    reset,
+    reset: fitToView,
     destroy(): void {
       viewport.removeEventListener("pointerdown", onPointerDown);
       viewport.removeEventListener("pointermove", onPointerMove);
       viewport.removeEventListener("pointerup", onPointerUp);
       viewport.removeEventListener("pointercancel", onPointerUp);
       viewport.removeEventListener("wheel", onWheel);
-      viewport.removeEventListener("dblclick", reset);
+      viewport.removeEventListener("dblclick", fitToView);
     },
   };
 }
@@ -243,9 +258,22 @@ function getOverlay(): Overlay {
 
   overlaySingleton = {
     open(svg, source, mode): void {
-      content.replaceChildren(svg);
-      svg.removeAttribute("height");
+      // Give the clone a definite intrinsic size from its viewBox and drop
+      // Mermaid's max-width cap, so CSS-transform zoom scales it without a
+      // ceiling (vector, stays crisp at any scale).
+      const vb = svg.getAttribute("viewBox");
+      const dims = vb ? vb.split(/[\s,]+/).map(Number) : null;
+      if (dims && dims.length === 4 && dims[2] > 0 && dims[3] > 0) {
+        svg.setAttribute("width", String(dims[2]));
+        svg.setAttribute("height", String(dims[3]));
+        svg.style.width = `${dims[2]}px`;
+        svg.style.height = `${dims[3]}px`;
+      } else {
+        svg.removeAttribute("height");
+      }
       svg.style.maxWidth = "none";
+      svg.style.maxHeight = "none";
+      content.replaceChildren(svg);
       codeEl.textContent = source;
       setMode(mode);
       root.hidden = false;
@@ -271,8 +299,8 @@ export function enhanceDiagram(pre: HTMLElement): void {
   const toolbar = document.createElement("div");
   toolbar.className = "diagram__toolbar";
   toolbar.innerHTML = `
-    <button type="button" data-act="expand" aria-label="Open full screen" title="Full screen">${ICON_EXPAND}</button>
-    <button type="button" data-act="code" aria-label="View source" title="View source">${ICON_CODE}</button>`;
+    <button type="button" data-act="code" aria-label="View source" title="View source">${ICON_CODE}</button>
+    <button type="button" data-act="expand" aria-label="Open full screen" title="Full screen">${ICON_EXPAND}</button>`;
 
   pre.parentNode?.insertBefore(figure, pre);
   figure.appendChild(toolbar);
