@@ -144,6 +144,8 @@ export default function Simulator() {
       e.declare(posture);
       if (s.applied) {
         e.approve();
+        // Restore the live running version(s) so a reload doesn't reset to v1.
+        if (s.deploy) e.restoreDeploy(s.deploy);
         setRunning(true);
       }
       refresh();
@@ -157,8 +159,20 @@ export default function Simulator() {
   React.useEffect(() => {
     if (!running) return;
     const iv = setInterval(() => {
-      engineRef.current?.tick();
+      const e = engineRef.current;
+      const settled = e?.tick() ?? false;
       refresh();
+      // A deploy settled this tick (running version advanced / rollout finished):
+      // persist so a reload restores the live running version, not v1.
+      if (settled && e) {
+        void saveSession({
+          posture: e.getPosture(),
+          applied: true,
+          audit: e.snapshot().audit,
+          savedAt: Date.now(),
+          deploy: e.deployState(),
+        });
+      }
     }, 650);
     return () => clearInterval(iv);
   }, [running, refresh]);
@@ -171,6 +185,7 @@ export default function Simulator() {
       applied,
       audit: e.snapshot().audit,
       savedAt: Date.now(),
+      deploy: e.deployState(),
     });
   }, []);
 

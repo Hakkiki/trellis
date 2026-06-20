@@ -5,6 +5,16 @@ The simulator deploys continuously from `main`, so entries are grouped by date r
 
 ## Unreleased
 
+### Fixed
+
+- **Simulator: `running` version now survives a reload.** A bug: after deploying (e.g. `running v2`), a
+  page refresh reset the Owners panel to `running v1` while the audit kept the deploys — the running
+  version wasn't persisted, so on reload `approve()` re-seeded v1. Now each Service's running version and
+  next-version counter persist to IndexedDB (saved on the tick a deploy settles) and restore on load, so
+  `running` reflects the live state across reloads — including holding the last-healthy version after a bad
+  deploy rolls back. (Matches the store's intent: the sim is a stateful control plane, not a toy that
+  resets on refresh.)
+
 ### Changed
 
 - **Simulator reframed to the observer model.** The rollout engine now *says* what the spec says: the
