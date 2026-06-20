@@ -20,9 +20,11 @@ import {
   type Plan,
   type Posture,
   type ProofRow,
+  parkClass,
   type Resilience,
   type ServiceSpec,
   servicesOf,
+  type Tier,
 } from "./model";
 
 const COMPUTE_COST: Record<string, number> = { small: 120, medium: 300, large: 700 };
@@ -439,10 +441,43 @@ export function resourceCost(r: DesiredResource): number {
   return LB_COST;
 }
 
-/** Estimated monthly cost of an arbitrary manifest (for the FinOps view). */
+/** Estimated monthly cost of an arbitrary manifest (for the FinOps view). This
+ *  is the *provisioned* cost — the deterministic ceiling budget feasibility
+ *  gates on (docs: Cost & parity, guardrail 6). */
 export function manifestCost(m: Manifest): number {
   let cost = 0;
   for (const r of Object.values(m.resources)) cost += resourceCost(r);
+  return cost;
+}
+
+// Illustrative duty-cycle savings per tier (docs: Cost & parity). A *clearly-
+// labelled estimate* of what a parkable resource bills once idle capacity is
+// parked — never the number budget feasibility gates on (that stays the
+// provisioned ceiling, `manifestCost`).
+const TIER_FACTOR: Record<Tier, number> = {
+  aggressive: 0.5,
+  balanced: 0.8,
+  conservative: 1.0,
+};
+
+/** Expected (duty-cycle-discounted) monthly cost of a manifest under a posture's
+ *  utilization tiers. The desired *shape* — hence the provisioned ceiling — is
+ *  unchanged; this is what an environment is expected to *bill* once idle
+ *  capacity is parked, so a more aggressive env bills less for the identical
+ *  shape. Fixed (load balancer) and lever-less (job/external) resources never
+ *  discount. */
+export function expectedCost(m: Manifest, tiers: { elasticity?: Tier; dormancy?: Tier }): number {
+  let cost = 0;
+  for (const r of Object.values(m.resources)) {
+    const cls = parkClass(r);
+    const factor =
+      cls === "elasticity"
+        ? TIER_FACTOR[tiers.elasticity ?? "conservative"]
+        : cls === "dormancy"
+          ? TIER_FACTOR[tiers.dormancy ?? "conservative"]
+          : 1;
+    cost += resourceCost(r) * factor;
+  }
   return cost;
 }
 

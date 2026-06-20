@@ -21,8 +21,19 @@ The simulator deploys continuously from `main`, so entries are grouped by date r
 - **Planner: the parity invariant (`parityCheck`).** A pure check that every environment shares the same
   desired *shape* — excluding the promoted version and the utilization tier — so a lower env that runs a
   *smaller* shape (fewer replicas, a dropped resource) is flagged, while a different release tag is not.
-  This is what keeps "more aggressive in dev" from silently decaying into "smaller in dev." Locked with
-  tests (park class assignment, Dormant-not-down, reconciler-holds-and-resumes, parity pass/fail).
+  This is what keeps "more aggressive in dev" from silently decaying into "smaller in dev."
+- **Fleet: parity of shape, savings from tiers.** The promotion cascade is now a **single shape** — dev,
+  staging, and prod share the same Criticality, resilience, regions, and provisioned budget ceiling, so a
+  lower environment is the *prod topology*, not a smaller stand-in. They differ only in the version they
+  run and their elasticity/dormancy tiers. The fleet snapshot carries a live **`parity`** signal, and a
+  new `expectedCost()` (a clearly-labelled, tier-discounted duty-cycle *estimate* — never the feasibility
+  ceiling) makes dev bill less than prod for the identical shape. `promotion.md` updated to match.
+- **Resume latency (cold start).** Waking a parked resource is data-consistent but **not instant** — it
+  warms through a `Converging` window before it is live, so guardrail 4's "the DB came back" path is a
+  tested path, not a free one.
+- **Tests** lock the lot: park-class assignment, Dormant-not-down (incl. paused quorum), reconciler holds
+  and resumes, fixed LB never parks, resume latency, parity pass/fail, and the fleet (parity holds + a
+  more aggressive env bills less for the same shape).
 
 ### Fixed
 

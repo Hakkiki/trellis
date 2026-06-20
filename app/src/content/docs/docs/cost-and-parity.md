@@ -145,12 +145,23 @@ The first slice — the two guardrails everything else depends on — is now in 
   environments (excluding the promoted version and the tier), so a lower env that runs a *smaller* shape
   — fewer replicas, a dropped resource — is flagged, while a different release tag is not.
 
+- **The fleet cascade is now a single shape.** dev, staging, and prod share the same Criticality,
+  resilience, and regions (the prod topology) and the same provisioned **budget ceiling** — they differ
+  only in the version they run and their elasticity/dormancy tiers. The fleet snapshot carries a live
+  **`parity`** signal (`parityCheck` over the deployed envs), so a lower env that ever ran a *smaller*
+  shape is flagged rather than accepted as a saving.
+- **Savings are visible via an expected-cost estimate.** `expectedCost()` discounts a parkable resource's
+  bill by its tier (a clearly-labelled duty-cycle estimate), so dev (aggressive) bills less than prod
+  (conservative) for the *identical* shape. Per guardrail 6 this is **never** the number feasibility gates
+  on — that stays the provisioned ceiling (`manifestCost`).
+- **Resume has latency** (guardrail 4): a woken resource warms through a cold-start window (`Converging`)
+  before it is live — data-consistent, but not free — and the path is tested.
+
 Still **not** modelled (honest follow-ups):
 
-- **Resume is immediate** — the cold-start / dropped-connection behaviour of guardrail 4 is named but not
-  yet simulated as a tested path.
-- **The live fleet cascade still varies Criticality** (dev C3 → prod C0), so it trades parity for cost the
-  *old* way; `parityCheck()` is the tool, but moving the cascade to a single shape (parity enforced, cost
-  taken only via the tiers) is a product change with budget implications, sequenced separately.
-- **Cost is still provisioned-max only** (the deterministic ceiling, guardrail 6) — there is no
-  duty-cycle savings estimate yet.
+- **No idle *trigger*** — environments don't auto-park on observed idleness; parking is an explicit
+  operator/autoscaler action (`engine.park()` / `wake()`). The expected-cost estimate stands in for the
+  duty cycle until an idleness model exists.
+- **Resume is benign-only** — the dropped-connection / cold-buffer *behaviour* of guardrail 4 is modelled
+  as latency, not yet as a failure path an app must survive.
+- **Denial-of-wallet guard** (guardrail 7) — resume is not yet rate-limited.

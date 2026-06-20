@@ -29,6 +29,7 @@ interface SimResource {
   exists: boolean;
   stale: boolean;
   dormant: boolean; // intentionally parked (scaled-to-zero / paused) to save cost
+  resumeIn: number; // ticks of cold-start remaining after a wake (0 = warm)
   broken: boolean; // root-cause failure that self-heal cannot fix
   costFactor: number; // billed ÷ planned — 1 normally; >1 is cost drift (§13)
   observedAtMs: number;
@@ -44,6 +45,11 @@ interface SimResource {
 const JOB_START = 1; // pending → running
 const JOB_RUN = 3; // running → succeeded
 const JOB_COOLDOWN = 4; // succeeded → pending again (cron)
+
+// Cold-start: ticks a parked resource takes to warm back up after a wake. The
+// resume is data-consistent (storage was retained) but not instant — guardrail
+// 4: the "DB came back" path is real and observable, not free.
+const RESUME_LATENCY = 3;
 
 export class SimCloud implements Provider {
   private applyLatency: number;
@@ -81,6 +87,9 @@ export class SimCloud implements Provider {
           if (!r.broken) r.nodesDown = 0;
         }
       }
+      // Burn down a cold-start: while resumeIn > 0 the resource reads as warming
+      // (Converging); when it hits 0 it is live again.
+      if (r.resumeIn > 0) r.resumeIn--;
       if (!r.stale) r.observedAtMs = this.nowMs;
     }
   }
@@ -124,6 +133,7 @@ export class SimCloud implements Provider {
         exists: false,
         stale: false,
         dormant: false,
+        resumeIn: 0,
         broken: false,
         costFactor: 1,
         observedAtMs: this.nowMs,
@@ -184,6 +194,7 @@ export class SimCloud implements Provider {
       exists: true,
       stale: false,
       dormant: false,
+      resumeIn: 0,
       broken: false,
       costFactor: 1,
       observedAtMs: this.nowMs,
@@ -236,6 +247,7 @@ export class SimCloud implements Provider {
       phase: r.lifecycle === "job" ? r.phase : undefined,
       quorum: stateful ? { healthy: r.nodesTotal - r.nodesDown, total: r.nodesTotal } : undefined,
       dormant: r.dormant || undefined,
+      resuming: r.resumeIn > 0 || undefined,
     };
   }
 
@@ -249,13 +261,15 @@ export class SimCloud implements Provider {
     if (r) r.dormant = true;
   }
 
-  /** Resume a parked resource. Durable state is intact, so it comes back as it
-   *  was — a real cold-start would add resume latency; here wake is immediate. */
+  /** Resume a parked resource. Durable state is intact, so it comes back as the
+   *  same shape (data-consistent) — but not instantly: it warms through a
+   *  cold-start window (RESUME_LATENCY) before it is live again. */
   wake(id: ResourceID) {
     const r = this.res.get(id);
-    if (r) {
+    if (r?.dormant) {
       r.dormant = false;
-      r.health = "Healthy";
+      r.resumeIn = RESUME_LATENCY;
+      r.health = "Healthy"; // data retained; the warm-up is the latency, not a fault
       r.nodesDown = 0;
     }
   }

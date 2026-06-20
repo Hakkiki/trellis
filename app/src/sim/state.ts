@@ -157,6 +157,10 @@ export function derive(
   // zero service reads Dormant, never Unavailable/Degraded — and never drift.
   if (o.dormant) return "Dormant";
 
+  // Warming back up after a park (cold start, docs: Cost & parity guardrail 4) —
+  // benign progress toward live, not drift. The reconciler holds while it warms.
+  if (o.resuming) return "Converging";
+
   const sync = classifySync(d, o, nowMs, stalenessBudgetMs);
 
   // A reconciler that has given up (circuit breaker tripped) reports Stalled

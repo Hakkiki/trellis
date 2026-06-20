@@ -779,6 +779,22 @@ describe("reconciler holds on Dormant (does not fight the lever)", () => {
     const after = e.snapshot().resources.find((r) => r.id === lb.id)!;
     expect(after.state).not.toBe("Dormant");
   });
+
+  it("resume has latency — a woken resource warms through Converging, then Converged", () => {
+    const e = converged();
+    const db = e.snapshot().resources.find((r) => r.kind === "managed-relational-db")!;
+    const stateOf = () => e.snapshot().resources.find((r) => r.id === db.id)!.state;
+    e.park(db.id);
+    e.tick();
+    expect(stateOf()).toBe("Dormant");
+
+    e.wake(db.id);
+    e.tick();
+    // Not instant — the cold-start window reads as benign progress, not down.
+    expect(stateOf()).toBe("Converging");
+    for (let i = 0; i < 10 && stateOf() !== "Converged"; i++) e.tick();
+    expect(stateOf()).toBe("Converged");
+  });
 });
 
 describe("parity invariant (docs: Cost & parity, guardrail 2)", () => {

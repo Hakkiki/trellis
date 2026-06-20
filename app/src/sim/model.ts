@@ -56,6 +56,7 @@ export interface Observation {
   phase?: JobPhase; // for Job workloads
   quorum?: { healthy: number; total: number }; // for Stateful workloads
   dormant?: boolean; // intentionally parked (scaled-to-zero / paused) — not down
+  resuming?: boolean; // warming back up after a park (cold start) — benign progress
 }
 
 // ---- Posture (what a human declares, spec §2) -----------------------------
