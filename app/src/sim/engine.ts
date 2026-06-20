@@ -19,10 +19,11 @@ import {
 } from "./model";
 import { manifestCost, resourceCost, plan as runPlanner, serviceSlug } from "./planner";
 import { Reconciler, type Status } from "./reconcile";
+import { type Bake, isTerminal, ReleaseRuntime, type RolloutState, type Strategy } from "./release";
 import { SimCloud } from "./sim";
 import { rollup, type State } from "./state";
 
-export type AuditClass = "Author" | "Converge" | "Observe" | "Break-glass" | "Gate";
+export type AuditClass = "Author" | "Converge" | "Observe" | "Break-glass" | "Gate" | "Release";
 
 export interface AuditEntry {
   tMs: number;
@@ -128,6 +129,9 @@ export interface ServiceRollup {
   state: State;
   monthlyCost: number; // planned spend attributed to this owner
   billedCost: number; // observed/billed spend attributed to this owner (§13)
+  version: string; // running version the runtime holds (§11 inner loop)
+  rollout: RolloutState | null; // active rollout state, null when settled
+  rolloutArtifact: string; // the version being rolled out, when active
 }
 
 export const DEFAULT_POSTURE: Posture = {
@@ -169,6 +173,11 @@ export class Engine {
   private statuses: Status[] = [];
   private prevState = new Map<ResourceID, State>();
   private audit: AuditEntry[] = [];
+  // The app-delivery inner loop (§11): a separate runtime holds each Service's
+  // running version, while the Reconciler above owns the Cell shape.
+  private releases = new ReleaseRuntime();
+  private nextVer = new Map<string, number>();
+  private bakes = new Map<string, Bake>();
 
   constructor(posture: Posture = DEFAULT_POSTURE) {
     this.posture = posture;
@@ -232,6 +241,13 @@ export class Engine {
     for (const r of Object.values(this.manifest.resources)) {
       if (r.lifecycle === "external") this.cloud.seedExternal(r);
     }
+    // Each Service's App Cell ships with an initial running version (§11). The
+    // runtime holds it; the reconciler authors capacity, never version.
+    for (const s of servicesOf(this.posture)) {
+      const sl = serviceSlug(s.name);
+      if (this.releases.currentVersion(sl) === "none") this.releases.seed(sl, "v1");
+      if (!this.nextVer.has(sl)) this.nextVer.set(sl, 1);
+    }
     this.log(
       "Gate",
       "approver",
@@ -263,7 +279,65 @@ export class Engine {
       // Loop down: still observe (the topology shows reality) but never converge.
       this.statuses = this.rec.observeStates(this.manifest, this.cloud.now());
     }
+    // The app-delivery inner loop runs at its own cadence, independent of the
+    // outer reconcile loop above (§11).
+    this.stepReleases();
     this.cloud.tick();
+  }
+
+  /** Advance each Service's rollout one tick. The gate-check handshake (§11)
+   *  holds releases during a change-freeze — they park in Blocked, not fail. */
+  private stepReleases() {
+    const freeze = this.rec.isChangeFreeze();
+    for (const s of servicesOf(this.posture)) {
+      const sl = serviceSlug(s.name);
+      this.releases.setHold(sl, freeze);
+      const before = this.releases.rollout(sl)?.state;
+      const after = this.releases.step(sl, this.bakes.get(sl) ?? (() => true));
+      if (after && before && after.state !== before && isTerminal(after.state)) {
+        if (after.state === "Healthy") {
+          this.log(
+            "Release",
+            "runtime",
+            "healthy",
+            `${s.name} ${after.artifact}`,
+            "promoted to 100% — running version advanced",
+          );
+        } else if (after.state === "RolledBack") {
+          this.log(
+            "Release",
+            "runtime",
+            "rolled-back",
+            `${s.name} ${after.artifact}`,
+            after.reason,
+          );
+        }
+      }
+    }
+  }
+
+  /** Ship a release into a Service's App Cell — the ungated inner loop (§11).
+   *  `broken` makes the bake fail, to show it self-reverts *below* the
+   *  reconciler: a bad deploy is the team's RolledBack, not the platform's
+   *  Stalled. Strategy follows Criticality (C0/C1 canary; else rolling). */
+  ship(slug: string, broken = false) {
+    if (!this.manifest) return;
+    const svc = servicesOf(this.posture).find((s) => serviceSlug(s.name) === slug);
+    if (!svc) return;
+    const strategy: Strategy =
+      svc.criticality === "C0" || svc.criticality === "C1" ? "canary" : "rolling";
+    const n = (this.nextVer.get(slug) ?? 1) + 1;
+    this.nextVer.set(slug, n);
+    const artifact = `v${n}`;
+    this.bakes.set(slug, broken ? () => false : () => true);
+    this.releases.release(slug, artifact, strategy, svc.criticality);
+    this.log(
+      "Release",
+      "team",
+      "ship",
+      `${svc.name} ${artifact}`,
+      `${strategy} rollout${broken ? " — bake will fail (self-reverts)" : ""}`,
+    );
   }
 
   private recordTransitions() {
@@ -517,6 +591,8 @@ export class Engine {
       const sl = serviceSlug(s.name);
       const own = resources.filter((r) => r.service === sl);
       const ownManaged = own.filter((r) => r.lifecycle === "service" || r.lifecycle === "stateful");
+      const ro = this.releases.rollout(sl);
+      const active = ro && !isTerminal(ro.state) ? ro : null;
       return {
         service: s.name,
         slug: sl,
@@ -524,6 +600,9 @@ export class Engine {
         state: rollup(ownManaged.map((r) => r.state)),
         monthlyCost: own.reduce((sum, r) => sum + r.monthlyCost, 0),
         billedCost: own.reduce((sum, r) => sum + r.billedCost, 0),
+        version: this.releases.currentVersion(sl),
+        rollout: active ? active.state : null,
+        rolloutArtifact: active ? active.artifact : "",
       };
     });
     return {

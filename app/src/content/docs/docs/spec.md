@@ -1250,6 +1250,379 @@ what a team's commit may declare. **Break-glass ratify = a commit** (the emergen
 Git); **rollback of intent = a revert commit**, and the reconciler plans the reverse transition (with the
 §10 stateful caveats for schema-affecting reverts).
 
+### Single-team authoring: one manifest, environments as values
+
+The federation above is the *org-scale* shape — desired state splits along **ownership boundaries**. For
+a single team owning one app there is one owner, hence **one manifest**, and dev/staging/prod live inside
+it. The split is never along environments:
+
+> **Separate manifests track ownership boundaries, never environments.** Split a manifest only when a
+> different principal must hold write access to a slice (security owning Governance away from a team; two
+> teams owning two apps). Within one owner's manifest, all of its environments live inline.
+
+Environments are **values along the Criticality cascade (§2)**, not files — the same environment-blind
+structure projected at three points on the dial. dev *is* prod at a lower Criticality. Authoring one file
+per environment splits on the wrong axis (the environments share an owner and an intent); the
+per-environment *Structure* is **compiled, never authored** — exactly as the per-region resources are
+compiled from a `regions:` list (§3), not hand-written.
+
+```yaml
+# trellis.yaml — one team, one app, the whole promotion story
+environment: payments              # Intent (the app, environment-blind)
+dock: gitlab/payments              # WHERE it attaches — the Frame scale (§8)
+inherits: org/payments-floor       # sealed Governance + budget envelope — narrow-only (Inv 6)
+
+services: [payments-api, internal-dashboard]
+governance: { services: [compute, managed-relational-db] }   # a NARROWING of the inherited floor — never a widening
+capabilities: { secrets: secrets-manager, dns: route53, traffic: alb }
+
+pipeline: [dev, staging, prod]     # ordered promotion path (§11 promotion)
+environments:                      # each is a posture overlay (§2 cascade) on the shared base
+  dev:     { criticality: C3, resilience: single,        regions: [us-east-1] }
+  staging: { criticality: C2, resilience: single,        regions: [us-east-1] }
+  prod:    { criticality: C0, resilience: active-active, regions: [us-east-1, eu-west-1], budget: 6000/mo }
+                                   # budget ≤ the inherited envelope; the planner rejects any excess
+```
+
+Everything above `environments:` is stated once; each environment is a few-line overlay. But *not*
+everything in the file is the team's to set: the **Governance floor and budget envelope are inherited and
+sealed** (`inherits:`). By Invariant 6 (monotonic tightening) the manifest may only **narrow** them — drop
+a permitted kind, set a budget *below* the envelope — never widen, and the planner enforces the
+composition at plan time, failing an attempted widening as loud as any governance denial. *One file to
+read, not one file that owns everything* — the federation resolution holds; a single owner simply reads
+its sealed floor inline rather than across repos.
+
+Independent gating and promotion do **not** come from file separation — they come from the
+**per-environment plan**: the planner compiles one plan+proof per environment, the gate fires on the
+change to *that environment's* compiled Structure, so editing the `dev:` overlay diffs only dev's plan and
+prod's gate sees nothing. And the promotion version each environment sits at (`dev@v5, staging@v4,
+prod@v3`) is **authored pipeline intent** — a pointer the delivery loop advances and *stores in its own
+ledger* — *distinct* from the **running version** the reconciler derives from reality (§4). Conflating
+them loses the difference between *intentionally held at v3*, *promotion to v4 failed*, and *rolled back*;
+the pointer is stored, not inferred (Invariant 28).
+
+### The platform↔app seam — consuming provisioned infrastructure
+
+Trellis provisions and owns the **substrate** (the Cells and their Weave, §3); it does **not** deploy
+application code. Two loops run at two cadences: the **reconcile loop** (slow, gated — converges the
+platform, §9) and the team's **app-delivery pipeline** (fast, ungated — ships releases into the App Cell).
+The seam between them is a published **outputs contract**, not shared state.
+
+> An app release is **not** a desired-state change to the Structure. Routing it through the Author gate
+> (§7) would both intolerably slow delivery and read as mass drift to the reconciler — tripping the
+> blast-radius breaker (§9). The release pipeline is not an Author; it operates *inside* the App Cell,
+> within the action kinds the Cell `accepts` (deploy/scale/observe, §7).
+
+The boundary is the **Cell (§3, §6).** Trellis owns the *shape* of the App Cell — replica count, size,
+multi-AZ, the Edge Cell in front and the Data Cell behind. The team owns *what runs inside* it — the
+release artifact, rollout strategy, app config. The App-Cell spec deliberately excludes the release
+version: **changing the running artifact is not drift.** The contract has three facets.
+
+**(a) Coordinates — the export.** For each environment, Trellis publishes the addressable handles a
+pipeline targets, derived from the converged Structure (an output, never authored):
+
+```
+trellis env coordinates payments-prod →
+  app_target:  <App-Cell deploy handle>      # where the release is shipped
+  edge_host:   <stable Edge-Cell hostname>   # the front door; regional fan-out owned by Trellis
+  data_ref:    <Data-Cell connection ref>    # a handle, never a credential value (§18)
+  generation:  <converged commit SHA>        # provenance the pipeline can assert against
+```
+
+Coordinates are recomputed from observed Structure, so they are **never stale and never committed** (the
+same derive-don't-store discipline as State, §4). The release artifact is environment-portable precisely
+because environment-specifics arrive through injected refs, not a rebuild — *what validated in staging is
+bit-for-bit what reaches prod* (§11 promotion). The pipeline is **blind to regions**: it targets the
+App-Cell handle and Trellis owns the fan-out across the environment's regions (§3 Weave), so one deploy
+step serves a single-region dev and a two-region prod unchanged.
+
+**(b) Workload identity — bound to the Cell.** The running app resolves `data_ref` (and other capability
+refs, §18) at runtime via its **own** scoped identity, which Trellis provisions and binds to the App Cell.
+The pipeline deploys the release *into* that identity; it never handles the credential. This is the
+workload side of *identity, not standing secrets* (§12): the control plane holds no standing app secrets,
+the app holds no long-lived keys, and the secret value is dereferenced just-in-time from the
+Governance-controlled secrets battery (§18).
+
+**(c) Gate-check — the temporal handshake.** The one coupling between the two loops. Before shipping into
+an environment the pipeline asks whether it is clear:
+
+```
+trellis env gate-check payments-prod → { clear | hold, reason }
+```
+
+It returns `hold` when a posture transition is in flight on that environment (an expand-contract topology
+change, §10) or a change-freeze window is active (§9). Symmetrically, the reconciler honors
+app-delivery-in-progress as a change-freeze input, so a topology transition does not stomp a rollout.
+
+Critically, **enforcement is at the admission point, not the check.** The `gate-check` call is the
+cooperative fast path; the *guarantee* is that the workload identity (facet b) can write to the App Cell
+**only through the release adapter**, and the adapter itself refuses while a hold is in effect. So a
+pipeline that skips the check, a *second* pipeline, or a hand-run `kubectl` cannot land mid-transition —
+the bypass is foreclosed by credential scope (Invariant 4), not by everyone agreeing to call the check
+first (Invariant 27). This is the **sole** synchronization point; everything else is one-way — Trellis
+publishes, the app consumes.
+
+> **The seam, in one line:** Trellis compiles intent into a provisioned Structure and *publishes its
+> coordinates*; the team's pipeline promotes an immutable release through the environment pipeline (§11),
+> reading each environment's coordinates and resolving secrets through a Cell-bound identity — gated only
+> by the temporal handshake.
+
+### The App Cell's release interface — what `app_target` is
+
+`app_target` is **not** a provider handle (an ECS service ARN, a Kubernetes namespace). Surfacing one
+would couple every team's pipeline to a provider and a runtime, breaking provider-neutrality (§15) — the
+same reason a `Kind` names what a resource is *for*, never a provider type (§3). It is a stable, opaque
+**deploy endpoint honoring a release contract:** the pipeline submits an immutable artifact and a rollout
+intent; a Trellis **release adapter** — the runtime capability (§11 capabilities) bound to the App Cell —
+translates that into the concrete provider action.
+
+```
+trellis release payments-prod --artifact <oci-digest> --strategy canary
+trellis release status payments-prod   → { progressing | healthy | rolled-back, detail }
+```
+
+The currency is an **immutable, content-addressed artifact** (an OCI image digest; for a non-container
+runtime, an equivalent content ref) — the same artifact promoted bit-for-bit across environments (§11
+promotion). The pipeline never names the runtime; swapping the substrate (Fargate → EKS, or AWS → another
+provider) changes the adapter, not the pipeline.
+
+**Two nested loops.** Trellis's reconcile loop (§9) converges the App Cell's *shape* — N replicas of size
+S, multi-AZ, isolation — toward the posture. *Inside* that shape, the runtime converges the *running
+version* toward the team's latest submitted artifact. Trellis owns the outer loop (capacity, gated); the
+team triggers the inner (which version, ungated); the orchestrator running the inner loop is itself
+infrastructure Trellis provisioned and reconciles. Moving the running artifact is the inner loop, and is
+**not drift** on the outer.
+
+**The cascade reaches delivery.** Both the *substrate isolation* and the *permitted rollout strategies*
+are Criticality-derived (§2), not free:
+
+| | C0 | C3 |
+|---|---|---|
+| substrate isolation | dedicated runtime (isolate-per-service, §6) | shared runtime, namespace-isolated (colocate) |
+| rollout strategy | canary / blue-green **required** | rolling permitted |
+
+A C0 environment cannot ship a big-bang rolling replace, and a C3 internal tool is not made to pay for
+blue-green — the same dial that sizes the Cell bounds how releases enter it.
+
+**Health is team-defined, at a different altitude than infra health.** The runtime gates a canary on a
+**readiness contract the team declares** (a probe / health endpoint) — application liveness, which only
+the team can define. This is distinct from the §4 infra Health the reconciler derives over the Cell: the
+team's probe says *is this version serving correctly*; Trellis's Health says *is the Cell alive and
+sized*. A failed readiness check **rolls back the inner loop** (the team's release) without touching the
+outer (the Cell shape).
+
+**Two rollbacks, two owners.** A bad *release* (the artifact is broken) is the team's to revert —
+re-submit the prior digest, fast and ungated. A bad *Cell shape* (the posture was wrong) is an infra
+rollback — a revert commit, gated, reconciled (§11 loop closure). The interface keeps them separable: a
+deploy rolls back in seconds without a plan, and a posture mistake never masquerades as a deploy problem.
+
+> **v1 realization (non-normative).** On AWS (§19), the App-Cell substrate is a container runtime
+> (Fargate/ECS or EKS) chosen as a capability; `app_target` resolves to a release adapter over it, and the
+> artifact is an ECR image digest. The contract above is what the pipeline codes to — this is merely how
+> it is met today.
+
+### Multiple Services in one environment — addressing, isolation, promotion
+
+An environment owns one or more **Services** (§6); the Service — not the environment — is the unit that is
+sized, isolated, and **deployed**. Each Service carries its own Criticality and compiles to its own
+Edge/App/Data cells per region (`payments-api-app-us-east-1`, `internal-dashboard-app-us-east-1`, …), so a
+single environment routinely mixes criticalities: a C0 `payments-api` beside a C3 `internal-dashboard`.
+
+**Criticality is a function of (Service × environment), via the §2 cascade.** The environment overlay
+sets a default; a Service overrides it *within* an environment. This is what lets dev run everything cheap
+while prod runs the revenue path hot and the internal tool cold — the overlay is still a few lines, now
+able to carry per-Service overrides:
+
+```yaml
+environments:
+  dev:
+    criticality: C3                            # default — every Service cheap in dev
+    regions: [us-east-1]
+  prod:
+    criticality: C0                            # default — prod is serious
+    regions: [us-east-1, eu-west-1]
+    resilience: active-active
+    budget: 8000/mo                            # shared across all Services (§5 bound)
+    services:
+      internal-dashboard: { criticality: C3 }  # override down: internal tool stays cold in prod
+```
+
+Neither Service nor environment alone fixes Criticality. The shared budget is environment-level; the
+planner allocates it across each Service's floor (§5), and per-Service isolation follows each Service's
+Criticality (C0 → dedicated substrate, C3 → colocated, §6) — the same dial that governs the release
+substrate (above). So within one prod environment, `payments-api` lands on isolated, multi-AZ,
+active-active capacity while `internal-dashboard` colocates on shared, single-region capacity.
+
+**The seam is keyed by (environment, Service).** Coordinates and releases address a Service, because the
+App Cell is per-Service:
+
+```
+trellis coordinates payments-prod/payments-api  → app_target, edge_host, data_ref, generation
+trellis release     payments-prod/payments-api  --artifact <digest> --strategy canary
+```
+
+**Services promote independently.** They are different apps with different cadences — that is *why* they
+are separate Services. The `pipeline: [dev, staging, prod]` path is shared, but each Service walks it on
+its own (`payments-api@prod=v7, internal-dashboard@prod=v3`); there is no environment-wide lockstep. A
+release targets one Service; the others are untouched. (Posture changes, by contrast, re-plan the whole
+environment — its Services share one budget and one Structure, §5.)
+
+**Service discovery rides the same export, gated by Weave.** A Service's coordinates include the
+`edge_host` of each *peer Service it is authorized to reach* — the inter-Cell adjacency Governance permits
+(§7). `payments-api` learns `internal-dashboard`'s address only if the contract allows that edge; an
+unpermitted pair simply does not appear, so reachability is governed at plan time (§3 Weave), not patched
+into the network afterward.
+
+### The release rollout — a derived, terminal state machine
+
+A release is the **inner loop** (above): the runtime converging the App Cell's *running version* toward
+the team's latest submitted artifact. It is the workload-altitude analogue of §4's **Job mode** — a finite
+**terminal progression**, not converge-and-hold — and, like every State in Trellis, it is **derived, not
+stored** (§4): recomputed from what is observed, never written down as ground truth.
+
+```
+rolloutState = derive(target, observed, control)
+  target   = { artifact digest, strategy, readiness contract }     # what the team submitted
+  observed = { version split across replicas, readiness, canary metrics }
+  control  = { gate-check: clear | hold, abort, supersede }         # the inner loop's control facet
+```
+
+The states — the salient cells of that progression:
+
+| State | Kind | Meaning |
+|---|---|---|
+| **Pending** | transient | accepted; not yet started (queued, or awaiting gate-check) |
+| **Blocked** | hold | gate-check returned `hold` — a posture transition (§10) or change-freeze (§9) is in flight; **waiting, not failed** |
+| **Progressing** | transient | the new version is being introduced per strategy (canary step / blue-green warm / rolling) |
+| **Verifying** | transient | the bake: readiness contract + canary metric gate evaluated against the new version |
+| **Healthy** | terminal ✓ | new version at 100%, prior retired — the rollout succeeded |
+| **RolledBack** | terminal | a gate failed or an abort fired; restored to the prior version |
+| **Superseded** | terminal | a newer release arrived mid-flight; this one is abandoned (**latest-wins**) |
+
+```mermaid
+stateDiagram-v2
+    [*] --> Pending: trellis release
+    Pending --> Blocked: gate-check hold
+    Blocked --> Progressing: clear
+    Pending --> Progressing: clear + scheduled
+    Progressing --> Verifying: new replicas up
+    Verifying --> Progressing: step passed, advance
+    Verifying --> Healthy: final step passed
+    Verifying --> RolledBack: readiness gate failed
+    Progressing --> RolledBack: abort or hard failure
+    Pending --> Superseded: newer release
+    Blocked --> Superseded: newer release
+    Progressing --> Superseded: newer release
+    Healthy --> [*]
+    RolledBack --> [*]
+    Superseded --> [*]
+```
+
+**The canary is the Progressing↔Verifying cycle.** Each step raises the new version's share, then bakes; a
+passed bake advances to the next step, the final bake promotes to Healthy, and a failed bake at *any* step
+exits to RolledBack. Rolling and blue-green are the degenerate one-step cases (the release interface above
+sets which strategies a Criticality permits).
+
+**A failed rollout self-reverts — it never reaches the outer loop.** RolledBack restores the last-healthy
+version, so the App Cell returns to **Converged** (§4) on the *prior* artifact. The outer reconciler
+therefore never observes sustained Degraded, and its self-heal / flap breaker (§9) does not engage: a bad
+deploy is the team's RolledBack, not the platform's Stalled. This is the boundary that lets the fast inner
+loop fail safely *below* the slow gated outer loop — the verification gate must conclude within its bake
+budget precisely so failure is contained there.
+
+**Success hands the version to the steady state.** On Healthy, the runtime's current-version pointer
+becomes vN (the runtime holds the running version; Trellis authors capacity, not version — above), and the
+Service returns to converge-and-hold on vN: subsequent self-heals and scale-ups bring up vN, not the old
+artifact. `trellis release status` reports the live state above; `{ progressing | healthy | rolled-back }`
+is its three-way summary.
+
+### Worked example — promoting one Service through dev → staging → prod
+
+Everything above, as a single trace. The Service is `payments-api` (C0 in prod, C3 in dev); its sibling
+`internal-dashboard` rides along untouched, to show promotion is per-Service.
+
+**Act 1 — author the substrate (gated, infrequent).** The team commits `trellis.yaml`. CI runs the
+planner, which compiles **one plan+proof per environment** (§5) — dev at C3, staging at C2, prod at C0
+with `internal-dashboard` overridden down. Review + merge = approve (§7); the reconciler pulls and
+provisions each environment's Structure (§9). Coordinates now resolve:
+
+```
+trellis coordinates payments-dev/payments-api  → app_target=…dev,  edge_host=…dev,  data_ref=…dev
+trellis coordinates payments-prod/payments-api → app_target=…prod, edge_host=…prod, data_ref=…prod
+```
+
+**Act 2 — build once (ungated).** A push to `src/` builds an image; the pipeline captures the immutable
+digest `sha256:abc` — this is **v7**, promoted unchanged the rest of the way (§11 promotion).
+
+**Act 3 — dev and staging (the fast loop).** dev is C3, so rolling is permitted:
+
+```
+trellis release payments-dev/payments-api     --artifact sha256:abc --strategy rolling
+  gate-check clear → Pending → Progressing → Verifying → Healthy     payments-api@dev = v7
+trellis release payments-staging/payments-api --artifact sha256:abc --strategy rolling
+  → Healthy                                                          payments-api@staging = v7
+```
+
+**Act 4 — prod, held by the handshake.** prod is C0, so the release interface requires canary. But a
+posture migration is in flight on prod (an earlier commit raised it to active-active; the reconciler is
+mid expand-contract bringing up `eu-west-1`, §10). The release is submitted and **parks**:
+
+```
+trellis release payments-prod/payments-api --artifact sha256:abc --strategy canary
+  gate-check hold — transition in flight → Blocked      (waiting, not failed)
+```
+
+When the reconciler finishes the migration, gate-check clears and the rollout proceeds — the **sole**
+coupling between the two loops, doing its one job.
+
+**Act 5 — a failed bake, contained below the outer loop.** The canary opens at 10%; the bake evaluates the
+new version — and the error rate spikes in `eu-west-1`, the region staging (single-region C2) never
+exercised. The metric gate fails, and the rollout self-reverts:
+
+```
+  Blocked → Progressing (10%) → Verifying → RolledBack
+  self-revert to v6 (last-healthy) → App Cell Converged on v6
+```
+
+The reconciler **never engages**: the App Cell returns to Converged on the prior artifact, so there is no
+sustained Degraded, no self-heal, no flap breaker, no page to platform on-call. The bad deploy is the
+team's `RolledBack`, owned in their pipeline — not the platform's `Stalled`.
+
+```mermaid
+sequenceDiagram
+    participant P as Pipeline
+    participant T as Trellis gate-check
+    participant R as Release adapter + Runtime
+    participant X as Reconciler outer loop
+    Note over X: posture migration in flight, expanding eu-west-1
+    P->>T: release payments-prod/payments-api v7, canary
+    T-->>P: hold, transition in flight
+    Note over P: rollout Blocked, waiting not failed
+    X->>X: migration converges
+    P->>T: gate-check
+    T-->>P: clear
+    P->>R: canary v7 at 10 percent
+    R-->>P: Verifying, bake
+    R-->>P: metric gate failed in eu-west-1
+    R->>R: self-revert to v6 last-healthy
+    Note over R,X: App Cell Converged on v6, outer loop never engages
+    R-->>P: RolledBack
+```
+
+**Act 6 — fix forward.** The team ships **v8** (`sha256:def`) with the region-specific fix; the canary
+passes every step to Healthy. The runtime's current-version pointer advances to v8 and the Service returns
+to converge-and-hold (§4) on v8 — subsequent self-heals and scale-ups bring up v8.
+
+| | dev | staging | prod |
+|---|---|---|---|
+| start | v6 | v6 | v6 |
+| after Act 3 | **v7** | **v7** | v6 |
+| after Act 5 (rollback) | v7 | v7 | v6 *(held safe)* |
+| after Act 6 | v7 | v7 | **v8** |
+
+`internal-dashboard` sat at its own version throughout: Services promote on their own cadence, never in
+environment lockstep.
+
 ---
 
 ## 12. Bootstrap and root of trust
@@ -1490,7 +1863,7 @@ The non-negotiable rules a builder must preserve. A violation is a defect, not a
 platform could cause the very catastrophe it exists to prevent (the inversion stress test, §21).
 **20–26 are the manifest-substrate hardening set** — each closes a seam between the five jobs the word
 "Git" does in this spec (store, generation, gate, promotion/rollback, meta-DR source); the raw findings
-are in the Git red-team bundle (§21).
+are in the Git red-team bundle (§21). **27–30 extend the set to the app-delivery seam (§11).**
 
 1. **Determinism.** A plan is a pure function of *(manifest generation + a pinned provider-state snapshot +
    a pinned pricing version)*. Same pinned inputs → same plan. Determinism is scoped to the snapshot, not
@@ -1633,6 +2006,35 @@ are in the Git red-team bundle (§21).
     possible without passing the gate. The "bit-for-bit what you validated reaches prod" guarantee covers
     the **base artifact only** — per-environment **posture overrides are desired state**, diffed and proved
     at *each* hop; an override change may not ride a version bump unproved.
+27. **The fast loop is approval-ungated, never admission-ungoverned.** App delivery skips the human gate
+    for cadence (§11), but every release transits the same admission control as a gated change: the
+    workload's identity can write to its App Cell **only through the release adapter**, which enforces the
+    temporal handshake (transition / change-freeze holds, §9–§10) and the Criticality-permitted rollout
+    strategy. A write that bypasses the adapter is precluded by credential scope (Invariant 4) and, if
+    achieved, is drift the reconciler corrects. Speed is bought by skipping *approval*, never by skipping
+    *governance* — the ungated path is the one most able to become the hole that defeats the whole model,
+    so it is the one held to admission control by construction, not convention.
+28. **Promotion is authored intent; green below the target Criticality is not proof.** The version an
+    environment is promoted to is **stored pipeline intent** (a pointer the delivery loop advances), never
+    inferred from the running version (the derived §4 State) — so *held*, *failed*, and *rolled-back* stay
+    distinguishable. And above a Criticality threshold a promotion gate must **name what the prior stage
+    could not validate** — the prod-only resilience behaviors (active-active, cross-region,
+    quorum-under-partition) a lower-Criticality stage structurally lacks — so staging-green never
+    auto-implies prod-safe. The residual is honest: those behaviors are fully exercised only in prod; the
+    discipline is progressive canary (Invariant 11) plus named unknowns, not a safety claim.
+29. **Data changes are expand-contract and decoupled from the code release.** A schema or data migration
+    rides its **own reversible, backward-compatible** step under the §10 data-protection caveats — the
+    running code tolerates both schema versions across the rollout — never a destructive in-place change
+    inside a canary. Because data is only *partially* reversible (PITR / backup, not undo), a migration is
+    gated by Data Protection, not waved through on the fast loop: the artifact promotes bit-for-bit while
+    the schema advances on its own gated cadence.
+30. **The catalog is the extension point; widening is routine, not heroic.** A new capability kind is
+    added to the **signed catalog** (§18) on its own gated-but-ordinary cadence and self-served from it
+    within the Governance floor — never an ad-hoc per-team whitelist widening (which Invariant 6 forbids
+    anyway). Catalog velocity is a **watched signal** (like cost, Invariant 19): if every new dependency
+    waits on the platform team, teams route around the platform into shadow infra — re-centralizing
+    friction the way Invariant 19 guards against re-centralizing cost. The residual is honest: curating the
+    catalog is ongoing platform work, owned and measured.
 
 ---
 
@@ -1788,6 +2190,21 @@ Other resolutions:
   generation is a coordinated vector**, Git having no cross-repo atomicity (24); the manifest substrate is
   **never on the liveness or recovery-blocking path** (25); and promotion is **ordered and override-proved**
   (26). The raw scored findings are retained off-site in the red-team bundle.
+- **App-delivery seam inversion (fifth pass)** — inverting the §11 seam ("how would the *ungated*
+  delivery path become the hole that defeats the whole governance model?") surfaced five kill-paths,
+  folded in as **Invariants 27–30** plus two in-text corrections. The **bypass** (deploy around the
+  handshake) → Invariant 27 (admission-governed even when approval-ungated); **promotion provenance**
+  (derived-vs-stored, and staging-green ≠ prod-safe) → Invariant 28; **schema/data migration on the fast
+  path** → Invariant 29 (expand-contract, Data-Protection-gated); the **tiny-catalog bottleneck** →
+  Invariant 30 (the catalog is the routine extension point, velocity a watched signal). Two findings were
+  **defects, not residuals**, and were corrected in place: the single-manifest example showed Governance
+  and budget as team-authored — corrected to **inherited and sealed under Invariant 6** — and `gate-check`
+  was written as an advisory pipeline step — corrected to **adapter-enforced admission**. The honest
+  residuals (prod-only behaviors validate only in prod; data is only partially reversible; catalog
+  curation is ongoing work) are **named in the invariants, not solved**. (Two earlier seam hazards — the
+  image-version ownership and a bad deploy tripping the platform's flap breaker — were already closed in
+  the §11 rollout state machine: the runtime holds the version while Trellis authors capacity, and a
+  failed rollout self-reverts *below* the outer loop.)
 
 ---
 

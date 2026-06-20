@@ -147,6 +147,52 @@ describe("planner", () => {
   });
 });
 
+describe("release inner loop wired into the engine (§11)", () => {
+  function ready(): Engine {
+    const e = new Engine(DEFAULT_POSTURE);
+    e.declare(DEFAULT_POSTURE);
+    e.approve();
+    for (let i = 0; i < 40 && !e.snapshot().converged; i++) e.tick();
+    return e;
+  }
+  const rollupFor = (e: Engine, slug: string) =>
+    e.snapshot().serviceRollups.find((r) => r.slug === slug)!;
+
+  it("a good release advances the running version; the env stays converged", () => {
+    const e = ready();
+    expect(e.snapshot().converged).toBe(true);
+    e.ship("payments-api");
+    expect(rollupFor(e, "payments-api").rollout).not.toBeNull(); // rolling out
+    for (let i = 0; i < 15 && rollupFor(e, "payments-api").rollout; i++) e.tick();
+    const r = rollupFor(e, "payments-api");
+    expect(r.rollout).toBeNull(); // settled
+    expect(r.version).toBe("v2"); // advanced
+    expect(e.snapshot().converged).toBe(true); // outer loop undisturbed
+  });
+
+  it("a broken release self-reverts; the version holds and the env never has an incident", () => {
+    const e = ready();
+    e.ship("payments-api", true);
+    for (let i = 0; i < 15 && rollupFor(e, "payments-api").rollout; i++) e.tick();
+    expect(rollupFor(e, "payments-api").version).toBe("v1"); // unchanged — held safe
+    expect(e.snapshot().converged).toBe(true); // never the platform's Stalled
+    const audit = e.snapshot().audit;
+    expect(audit.some((a) => a.cls === "Release" && a.verb === "rolled-back")).toBe(true);
+    expect(audit.some((a) => a.verb === "STALLED")).toBe(false);
+  });
+
+  it("a change-freeze parks the rollout in Blocked — the temporal handshake", () => {
+    const e = ready();
+    e.setChangeFreeze(true);
+    e.ship("payments-api");
+    e.tick();
+    expect(rollupFor(e, "payments-api").rollout).toBe("Blocked");
+    e.setChangeFreeze(false);
+    for (let i = 0; i < 15 && rollupFor(e, "payments-api").rollout; i++) e.tick();
+    expect(rollupFor(e, "payments-api").version).toBe("v2"); // proceeds once clear
+  });
+});
+
 describe("engine end-to-end", () => {
   it("declare → approve → converge", () => {
     const e = new Engine(DEFAULT_POSTURE);

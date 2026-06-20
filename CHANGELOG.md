@@ -125,6 +125,86 @@ The simulator deploys continuously from `main`, so entries are grouped by date r
   incident surface now shows the reconciler's reasoning *before* an override, so the most dangerous
   triggers are decided on evidence, not panic.
 
+- **Release inner loop wired into the live engine + UI.** `Engine` now drives a `ReleaseRuntime` each
+  `tick()` alongside the reconcile loop: an `Engine.ship(slug, broken)` ships a release into a Service's
+  App Cell (strategy by Criticality — C0/C1 canary, else rolling), the gate-check handshake holds rollouts
+  during a change-freeze (Blocked), and the running version + active rollout state surface per Service in
+  the snapshot (`ServiceRollup.version` / `.rollout`). The Owners panel gains **Ship** / **Ship ✗**
+  controls and a live rollout badge; a new `Release` audit class records ship / healthy / rolled-back.
+  Three engine tests lock it: a good release advances the version with the env undisturbed, a broken
+  release self-reverts (version holds, no `STALLED`, env stays converged), and a change-freeze parks the
+  rollout in Blocked. The §11 inner/outer separation now runs in the actual simulator, not just a unit
+  test.
+
+- **Simulator models the release inner loop (`sim/release.ts`).** Teaches the engine the §11 rollout
+  state machine — `Pending → Blocked → Progressing ⇄ Verifying → {Healthy | RolledBack | Superseded}` —
+  as a `ReleaseRuntime` that holds each Service's running version while the existing `Reconciler` owns the
+  Cell *shape*. Models canary steps, Criticality-bounded strategies (Invariant 27: C0 cannot big-bang
+  roll), the gate-check hold (Blocked), and latest-wins supersede. A new test (`sim/release.test.ts`, 9
+  cases) **proves the inner/outer-loop separation holds in code**: a failed rollout self-reverts to the
+  last-healthy version and the reconciled App Cell stays `Converged` with the flap breaker never engaging
+  — a bad deploy is the team's `RolledBack`, not the platform's `Stalled`. Verifies in code what spec
+  §11 + Invariants 20–22 assert.
+
+- **Spec §11 — the platform↔app seam + single-team authoring.** Two additions to *Manifest lifecycle and
+  promotion*. (1) **One manifest, environments as values:** for a single team owning one app there is one
+  manifest, with dev/staging/prod as inline posture overlays on a shared environment-blind base —
+  separate manifests track *ownership boundaries, never environments*, and the per-environment Structure
+  is compiled, not authored. Independent gating comes from the per-environment plan, not file separation.
+  (2) **The platform↔app seam:** how a team's CI/CD pipeline consumes provisioned infra — the
+  **coordinates** export (`trellis env coordinates`, derived not committed), **workload identity** bound
+  to the App Cell (the app resolves secret refs via its own scoped identity, never handling the value),
+  and the **gate-check** temporal handshake (`trellis env gate-check`) as the sole coupling between the
+  fast app-delivery loop and the slow gated reconcile loop. Closes the previously-implicit gap between a
+  converged Structure and the deploy targets a pipeline needs.
+
+- **Spec §11 — the App Cell's release interface (what `app_target` is).** Deepens the seam: `app_target`
+  is a provider-neutral **deploy contract** (`trellis release …`), not an ECS/k8s handle — a release
+  adapter (a runtime capability) realizes it. Establishes **two nested loops** (Trellis converges Cell
+  *shape*; the runtime converges the running *version*; moving the artifact is not drift), the Criticality
+  cascade reaching delivery (substrate isolation + permitted rollout strategy per C-level), **team-defined
+  readiness** distinct from infra Health, and **two rollbacks/two owners** (release revert vs. posture
+  revert). Includes a non-normative AWS v1 realization (Fargate/ECS or EKS, ECR digests).
+
+- **Spec §11 — multiple Services in one environment.** Scopes the seam to a Service: the Service (not the
+  environment) is the unit sized, isolated, and deployed. Criticality is a function of **(Service ×
+  environment)** via the §2 cascade (environment default → per-Service override — e.g. `internal-dashboard`
+  stays C3 even in a C0 prod), so isolation and release substrate differ per Service within one
+  environment. Coordinates and releases are **keyed by (environment, Service)** (`trellis release
+  payments-prod/payments-api …`); Services **promote independently** (no environment lockstep) while a
+  posture change re-plans the whole environment against its shared budget. Service discovery rides the same
+  export, gated by Weave adjacency (§7).
+
+- **Spec §11 — the release rollout state machine (the inner loop formalized).** Models a release as the
+  workload-altitude analogue of §4's Job mode — a finite, **derived-not-stored** terminal progression:
+  `Pending → Blocked → Progressing ⇄ Verifying → {Healthy | RolledBack | Superseded}`, with a Mermaid
+  state diagram. The canary is the Progressing⇄Verifying cycle; **latest-wins** supersedes in-flight
+  rollouts. Key boundary made explicit: a failed rollout **self-reverts to the last-healthy version below
+  the outer loop**, so the App Cell returns to Converged on the prior artifact and the reconciler's
+  self-heal/flap breaker (§9) never engages — a bad deploy is the team's RolledBack, not the platform's
+  Stalled. On Healthy, the runtime's current-version pointer advances and the Service returns to
+  converge-and-hold.
+
+- **Spec §11 — worked end-to-end example.** A single trace promoting `payments-api` v7 through
+  dev → staging → prod that exercises the whole seam: per-environment plans → provision → coordinates →
+  build-once → per-Service release. The prod release **parks in `Blocked`** while a posture migration
+  expands `eu-west-1` (the temporal handshake), then a **failed canary bake self-reverts to `RolledBack`**
+  below the outer loop (the reconciler never engages), and the team **fixes forward to v8**. Includes a
+  Mermaid sequence diagram of the prod arc and a per-environment version table; `internal-dashboard` rides
+  along untouched to show per-Service promotion.
+
+- **Spec §11/§17/§21 — fifth inversion pass on the app-delivery seam (red team).** Applied Munger
+  inversion to the new seam and hardened the findings into **Invariants 27–30**: (27) the fast loop is
+  approval-ungated but **admission-governed** — the workload identity can write only through the release
+  adapter, which enforces the handshake (closes the bypass/TOCTOU hole); (28) **promotion is authored
+  intent**, not derived, and staging-green below the target Criticality is not prod-proof; (29) **data
+  changes are expand-contract and Data-Protection-gated**, decoupled from the code release; (30) **the
+  catalog is the routine extension point**, with catalog velocity a watched signal against shadow-infra
+  re-centralization. Also corrected two defects in the §11 prose: the single-manifest example now shows
+  Governance/budget as **inherited and sealed** (`inherits:`, narrow-only under Invariant 6) rather than
+  team-authored, and `gate-check` is now **adapter-enforced admission** rather than an advisory pipeline
+  step. Recorded as the fifth pass in §21 with honest residuals named.
+
 - **Roles & responsibilities — a day in the life.** A new page mapping the nine personas (Platform Owner,
   Security/Governance author, Division/Product lead, Platform Operator, Service/Eng teams, Break-glass
   responders, Auditor, FinOps, External vendor) to the model: each one's mandate, what it owns, what it
