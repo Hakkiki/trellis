@@ -29,6 +29,12 @@ The simulator deploys continuously from `main`, so entries are grouped by date r
 
 ### Changed
 
+- **FAQ entries rewritten to the plain-English, read-aloud bar.** The two newest answers — "Why not just
+  chat with an AI agent to provision infrastructure just-in-time?" and "Can different divisions run on
+  different clouds?" — were rewritten in active voice, with the throat-clearing ("the honest reply," "the
+  short answer," "point by point," "this isn't hypothetical") removed and the em-dash-heavy phrasing cut
+  back into short sentences that read cleanly out loud. Same argument and links; cleaner delivery.
+
 - **Roles page rewritten for clarity and plain English.** The "day in the life of a change" section now
   states outright that Git is the front door of the control plane, not a way around it: the engineer
   authors in Git, the planner and reconciler are the control plane, the PR does nothing on its own, and
