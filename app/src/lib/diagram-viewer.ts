@@ -299,8 +299,8 @@ export function enhanceDiagram(pre: HTMLElement): void {
   const toolbar = document.createElement("div");
   toolbar.className = "diagram__toolbar";
   toolbar.innerHTML = `
-    <button type="button" data-act="code" aria-label="View source" title="View source">${ICON_CODE}</button>
-    <button type="button" data-act="expand" aria-label="Open full screen" title="Full screen">${ICON_EXPAND}</button>`;
+    <button type="button" data-act="expand" aria-label="Open full screen" title="Full screen">${ICON_EXPAND}</button>
+    <button type="button" data-act="code" aria-label="View source" title="View source">${ICON_CODE}</button>`;
 
   pre.parentNode?.insertBefore(figure, pre);
   figure.appendChild(toolbar);

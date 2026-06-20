@@ -50,16 +50,17 @@
   right: 0.6rem;
   z-index: 2;
   display: flex;
-  flex-direction: row;
+  flex-direction: column; /* stacked, like map zoom controls */
   align-items: center;
   gap: 0.4rem;
   opacity: 0.55;
   transition: opacity 0.15s ease;
 }
-/* Inline toolbar buttons are icon-only: identical squares. */
+/* Inline toolbar buttons are icon-only: identical, centred squares. */
 .diagram__toolbar button {
   width: 2rem;
   height: 2rem;
+  margin: 0; /* defeat any inherited markdown-flow spacing */
   padding: 0;
   justify-content: center;
 }
