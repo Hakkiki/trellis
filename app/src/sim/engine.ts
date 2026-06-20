@@ -132,6 +132,7 @@ export interface ServiceRollup {
   version: string; // running version the runtime holds (§11 inner loop)
   rollout: RolloutState | null; // active rollout state, null when settled
   rolloutArtifact: string; // the version being rolled out, when active
+  rolloutShare: number; // % of traffic the rollout currently carries (canary step)
 }
 
 export const DEFAULT_POSTURE: Posture = {
@@ -267,10 +268,13 @@ export class Engine {
     return true;
   }
 
-  /** One reconcile pass + advance the simulated cloud (and any self-upgrade). */
-  tick() {
+  /** One reconcile pass + advance the simulated cloud (and any self-upgrade).
+   *  Returns true when a deploy settled this tick (the running version changed
+   *  or a rollout finished) — the UI persists on those, so a reload restores the
+   *  live running version, not a stale v1. */
+  tick(): boolean {
     this.cp.tick();
-    if (!this.manifest) return;
+    if (!this.manifest) return false;
     // A bad self-upgrade can brick the reconciler — the one change that disables
     // the thing that would heal (§16). The workload loop is then down: the cloud
     // still drifts, but nothing reconciles it until a re-bootstrap.
@@ -284,21 +288,24 @@ export class Engine {
     // The app-delivery inner loop runs at its own cadence, independent of the
     // outer reconcile loop above (§11). The team's tool drives it; here the sim
     // ticks it on the team's behalf, and Trellis observes the resulting state.
-    this.observeTeamRollouts();
+    const settled = this.observeTeamRollouts();
     this.cloud.tick();
+    return settled;
   }
 
   /** Advance each Service's team rollout one tick (the team's tool drives;
    *  Trellis observes). The gate-check handshake (§11) holds a rollout during a
    *  change-freeze — it parks in Blocked, not fail. */
-  private observeTeamRollouts() {
+  private observeTeamRollouts(): boolean {
     const freeze = this.rec.isChangeFreeze();
+    let settled = false;
     for (const s of servicesOf(this.posture)) {
       const sl = serviceSlug(s.name);
       this.teamRollout.setHold(sl, freeze);
       const before = this.teamRollout.rollout(sl)?.state;
       const after = this.teamRollout.step(sl, this.bakes.get(sl) ?? (() => true));
       if (after && before && after.state !== before && isTerminal(after.state)) {
+        settled = true;
         if (after.state === "Healthy") {
           this.log(
             "Release",
@@ -318,6 +325,28 @@ export class Engine {
         }
       }
     }
+    return settled;
+  }
+
+  /** The persistable deploy state — each Service's running version + its next
+   *  version counter — so a reload restores the live `running vN`, not v1. */
+  deployState(): { versions: Record<string, string>; nextVer: Record<string, number> } {
+    const versions: Record<string, string> = {};
+    const nextVer: Record<string, number> = {};
+    for (const s of servicesOf(this.posture)) {
+      const sl = serviceSlug(s.name);
+      versions[sl] = this.teamRollout.currentVersion(sl);
+      nextVer[sl] = this.nextVer.get(sl) ?? 1;
+    }
+    return { versions, nextVer };
+  }
+
+  /** Restore the deploy state after a reload (overrides the v1 seeded by approve). */
+  restoreDeploy(state: { versions: Record<string, string>; nextVer: Record<string, number> }) {
+    for (const [sl, v] of Object.entries(state.versions ?? {})) {
+      if (v && v !== "none") this.teamRollout.seed(sl, v);
+    }
+    for (const [sl, n] of Object.entries(state.nextVer ?? {})) this.nextVer.set(sl, n);
   }
 
   /** The team ships a release into its App Cell — the ungated inner loop (§11),
@@ -608,6 +637,7 @@ export class Engine {
         version: this.teamRollout.currentVersion(sl),
         rollout: active ? active.state : null,
         rolloutArtifact: active ? active.artifact : "",
+        rolloutShare: active ? active.share : 0,
       };
     });
     return {

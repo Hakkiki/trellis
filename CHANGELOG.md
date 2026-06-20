@@ -5,8 +5,21 @@ The simulator deploys continuously from `main`, so entries are grouped by date r
 
 ## Unreleased
 
+### Fixed
+
+- **Simulator: `running` version now survives a reload.** A bug: after deploying (e.g. `running v2`), a
+  page refresh reset the Owners panel to `running v1` while the audit kept the deploys — the running
+  version wasn't persisted, so on reload `approve()` re-seeded v1. Now each Service's running version and
+  next-version counter persist to IndexedDB (saved on the tick a deploy settles) and restore on load, so
+  `running` reflects the live state across reloads — including holding the last-healthy version after a bad
+  deploy rolls back. (Matches the store's intent: the sim is a stateful control plane, not a toy that
+  resets on refresh.)
+
 ### Changed
 
+- **Owners panel: the rollout badge now shows canary progress.** It read `▶ Progressing v2`, which looked
+  stuck as the state oscillated `Progressing ⇄ Verifying`. It now appends the traffic share — `▶ Progressing
+  v2 · 10%` → `· 50%` → `· 100%` — so a canary reads as forward progress (`ServiceRollup.rolloutShare`).
 - **Simulator reframed to the observer model.** The rollout engine now *says* what the spec says: the
   class that holds a Service's running version and drives its canary is `TeamRollout` (it stands in for the
   team's own Argo/Flagger/Spinnaker), and the Engine **observes** it rather than running it

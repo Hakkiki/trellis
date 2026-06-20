@@ -17,6 +17,9 @@ export interface PersistedSession {
   applied: boolean;
   audit: AuditEntry[];
   savedAt: number;
+  // Per-Service running version + next-version counter, so a reload restores the
+  // live `running vN` rather than resetting to v1. Optional (legacy sessions).
+  deploy?: { versions: Record<string, string>; nextVer: Record<string, number> };
 }
 
 let dbp: Promise<IDBPDatabase> | null = null;
