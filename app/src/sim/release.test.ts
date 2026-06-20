@@ -1,15 +1,15 @@
 import { describe, expect, it } from "vitest";
 import type { Manifest } from "./model";
 import { allConverged, Reconciler, type Status } from "./reconcile";
-import { type Bake, ReleaseRuntime } from "./release";
+import { type Bake, TeamRollout } from "./release";
 import { SimCloud } from "./sim";
 
 const ok: Bake = () => true;
 const fail: Bake = () => false;
 
-describe("release rollout — the inner loop (§11)", () => {
+describe("team rollout — the inner loop (§11)", () => {
   it("canary advances Pending → Progressing ⇄ Verifying → Healthy and hands the version to steady state", () => {
-    const rt = new ReleaseRuntime({ "payments-api": "v6" });
+    const rt = new TeamRollout({ "payments-api": "v6" });
     rt.release("payments-api", "v7", "canary", "C0");
     const r = rt.run("payments-api", ok);
     expect(r?.state).toBe("Healthy");
@@ -18,14 +18,14 @@ describe("release rollout — the inner loop (§11)", () => {
   });
 
   it("rolling is the one-step case", () => {
-    const rt = new ReleaseRuntime({ s: "v1" });
+    const rt = new TeamRollout({ s: "v1" });
     rt.release("s", "v2", "rolling", "C3");
     expect(rt.run("s", ok)?.state).toBe("Healthy");
     expect(rt.currentVersion("s")).toBe("v2");
   });
 
   it("a failed bake self-reverts to the last-healthy version (RolledBack)", () => {
-    const rt = new ReleaseRuntime({ "payments-api": "v6" });
+    const rt = new TeamRollout({ "payments-api": "v6" });
     rt.release("payments-api", "v7", "canary", "C0");
     const r = rt.run("payments-api", fail);
     expect(r?.state).toBe("RolledBack");
@@ -33,7 +33,7 @@ describe("release rollout — the inner loop (§11)", () => {
   });
 
   it("a bake that fails only at a later canary step still reverts to the prior version", () => {
-    const rt = new ReleaseRuntime({ s: "v1" });
+    const rt = new TeamRollout({ s: "v1" });
     rt.release("s", "v2", "canary", "C0");
     // pass at 10%, fail once the canary widens to 50%
     const r = rt.run("s", (_a, share) => share < 50);
@@ -42,7 +42,7 @@ describe("release rollout — the inner loop (§11)", () => {
   });
 
   it("gate-check hold parks the rollout in Blocked, not failed", () => {
-    const rt = new ReleaseRuntime({ s: "v1" });
+    const rt = new TeamRollout({ s: "v1" });
     rt.setHold("s", true);
     rt.release("s", "v2", "rolling", "C3");
     expect(rt.step("s", ok)?.state).toBe("Blocked");
@@ -53,7 +53,7 @@ describe("release rollout — the inner loop (§11)", () => {
   });
 
   it("latest-wins: a newer release supersedes the in-flight one", () => {
-    const rt = new ReleaseRuntime({ s: "v1" });
+    const rt = new TeamRollout({ s: "v1" });
     const first = rt.release("s", "v2", "canary", "C0");
     rt.step("s", ok); // Pending → Progressing
     rt.release("s", "v3", "canary", "C0");
@@ -62,7 +62,7 @@ describe("release rollout — the inner loop (§11)", () => {
   });
 
   it("Criticality bounds the strategy (Invariant 27): C0 cannot big-bang roll", () => {
-    const rt = new ReleaseRuntime();
+    const rt = new TeamRollout();
     expect(() => rt.release("s", "v1", "rolling", "C0")).toThrow(/not permitted/);
     expect(() => rt.release("s", "v1", "rolling", "C3")).not.toThrow();
   });
@@ -107,7 +107,7 @@ describe("inner/outer separation — a bad deploy is the team's RolledBack, not 
     expect(allConverged(converge(c, rec, m))).toBe(true);
 
     // Inner loop: a release whose bake fails at every step.
-    const rt = new ReleaseRuntime({ "payments-api": "v6" });
+    const rt = new TeamRollout({ "payments-api": "v6" });
     rt.release("payments-api", "v7", "canary", "C0");
     expect(rt.run("payments-api", fail)?.state).toBe("RolledBack");
     expect(rt.currentVersion("payments-api")).toBe("v6");
@@ -130,7 +130,7 @@ describe("inner/outer separation — a bad deploy is the team's RolledBack, not 
     const m = appCell(1);
     converge(c, rec, m);
 
-    const rt = new ReleaseRuntime({ "payments-api": "v6" });
+    const rt = new TeamRollout({ "payments-api": "v6" });
     rt.release("payments-api", "v7", "canary", "C0");
     expect(rt.run("payments-api", ok)?.state).toBe("Healthy");
     expect(rt.currentVersion("payments-api")).toBe("v7");

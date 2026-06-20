@@ -19,7 +19,7 @@ import {
 } from "./model";
 import { manifestCost, resourceCost, plan as runPlanner, serviceSlug } from "./planner";
 import { Reconciler, type Status } from "./reconcile";
-import { type Bake, isTerminal, ReleaseRuntime, type RolloutState, type Strategy } from "./release";
+import { type Bake, isTerminal, type RolloutState, type Strategy, TeamRollout } from "./release";
 import { SimCloud } from "./sim";
 import { rollup, type State } from "./state";
 
@@ -173,9 +173,11 @@ export class Engine {
   private statuses: Status[] = [];
   private prevState = new Map<ResourceID, State>();
   private audit: AuditEntry[] = [];
-  // The app-delivery inner loop (§11): a separate runtime holds each Service's
-  // running version, while the Reconciler above owns the Cell shape.
-  private releases = new ReleaseRuntime();
+  // The app-delivery inner loop (§11): the team's rollout tool holds each
+  // Service's running version and drives its canary; the Reconciler above owns
+  // the Cell shape. Trellis (this Engine) observes the rollout, it does not run
+  // it — in the simulator one process plays both the team's tool and Trellis.
+  private teamRollout = new TeamRollout();
   private nextVer = new Map<string, number>();
   private bakes = new Map<string, Bake>();
 
@@ -245,7 +247,7 @@ export class Engine {
     // runtime holds it; the reconciler authors capacity, never version.
     for (const s of servicesOf(this.posture)) {
       const sl = serviceSlug(s.name);
-      if (this.releases.currentVersion(sl) === "none") this.releases.seed(sl, "v1");
+      if (this.teamRollout.currentVersion(sl) === "none") this.teamRollout.seed(sl, "v1");
       if (!this.nextVer.has(sl)) this.nextVer.set(sl, 1);
     }
     this.log(
@@ -280,25 +282,27 @@ export class Engine {
       this.statuses = this.rec.observeStates(this.manifest, this.cloud.now());
     }
     // The app-delivery inner loop runs at its own cadence, independent of the
-    // outer reconcile loop above (§11).
-    this.stepReleases();
+    // outer reconcile loop above (§11). The team's tool drives it; here the sim
+    // ticks it on the team's behalf, and Trellis observes the resulting state.
+    this.observeTeamRollouts();
     this.cloud.tick();
   }
 
-  /** Advance each Service's rollout one tick. The gate-check handshake (§11)
-   *  holds releases during a change-freeze — they park in Blocked, not fail. */
-  private stepReleases() {
+  /** Advance each Service's team rollout one tick (the team's tool drives;
+   *  Trellis observes). The gate-check handshake (§11) holds a rollout during a
+   *  change-freeze — it parks in Blocked, not fail. */
+  private observeTeamRollouts() {
     const freeze = this.rec.isChangeFreeze();
     for (const s of servicesOf(this.posture)) {
       const sl = serviceSlug(s.name);
-      this.releases.setHold(sl, freeze);
-      const before = this.releases.rollout(sl)?.state;
-      const after = this.releases.step(sl, this.bakes.get(sl) ?? (() => true));
+      this.teamRollout.setHold(sl, freeze);
+      const before = this.teamRollout.rollout(sl)?.state;
+      const after = this.teamRollout.step(sl, this.bakes.get(sl) ?? (() => true));
       if (after && before && after.state !== before && isTerminal(after.state)) {
         if (after.state === "Healthy") {
           this.log(
             "Release",
-            "runtime",
+            "team-tool",
             "healthy",
             `${s.name} ${after.artifact}`,
             "promoted to 100% — running version advanced",
@@ -306,7 +310,7 @@ export class Engine {
         } else if (after.state === "RolledBack") {
           this.log(
             "Release",
-            "runtime",
+            "team-tool",
             "rolled-back",
             `${s.name} ${after.artifact}`,
             after.reason,
@@ -316,10 +320,11 @@ export class Engine {
     }
   }
 
-  /** Ship a release into a Service's App Cell — the ungated inner loop (§11).
-   *  `broken` makes the bake fail, to show it self-reverts *below* the
-   *  reconciler: a bad deploy is the team's RolledBack, not the platform's
-   *  Stalled. Strategy follows Criticality (C0/C1 canary; else rolling). */
+  /** The team ships a release into its App Cell — the ungated inner loop (§11),
+   *  driven by the team's tool; Trellis observes. `broken` makes the team's bake
+   *  fail, to show the rollout self-reverts *below* the reconciler: a bad deploy
+   *  is the team's RolledBack, not the platform's Stalled. Strategy follows
+   *  Criticality (C0/C1 canary; else rolling). */
   ship(slug: string, broken = false) {
     if (!this.manifest) return;
     const svc = servicesOf(this.posture).find((s) => serviceSlug(s.name) === slug);
@@ -330,7 +335,7 @@ export class Engine {
     this.nextVer.set(slug, n);
     const artifact = `v${n}`;
     this.bakes.set(slug, broken ? () => false : () => true);
-    this.releases.release(slug, artifact, strategy, svc.criticality);
+    this.teamRollout.release(slug, artifact, strategy, svc.criticality);
     this.log(
       "Release",
       "team",
@@ -591,7 +596,7 @@ export class Engine {
       const sl = serviceSlug(s.name);
       const own = resources.filter((r) => r.service === sl);
       const ownManaged = own.filter((r) => r.lifecycle === "service" || r.lifecycle === "stateful");
-      const ro = this.releases.rollout(sl);
+      const ro = this.teamRollout.rollout(sl);
       const active = ro && !isTerminal(ro.state) ? ro : null;
       return {
         service: s.name,
@@ -600,7 +605,7 @@ export class Engine {
         state: rollup(ownManaged.map((r) => r.state)),
         monthlyCost: own.reduce((sum, r) => sum + r.monthlyCost, 0),
         billedCost: own.reduce((sum, r) => sum + r.billedCost, 0),
-        version: this.releases.currentVersion(sl),
+        version: this.teamRollout.currentVersion(sl),
         rollout: active ? active.state : null,
         rolloutArtifact: active ? active.artifact : "",
       };

@@ -1,9 +1,11 @@
-// The release rollout — the inner loop (spec §11). A team converges its App
-// Cell's *running version* toward the latest submitted artifact: the
-// workload-altitude analogue of §4's Job mode, a finite, derived terminal
-// progression. The runtime holds the version; the reconciler (the outer loop)
-// authors capacity, never version — so a failed rollout self-reverts *below*
-// the reconciler and never trips its flap breaker (Invariants 27–29).
+// The team's rollout tool — the inner loop (spec §11). This object stands in
+// for the team's own CI/CD rollout tool (Argo Rollouts / Flagger / Spinnaker):
+// it *drives* the canary toward the team's latest artifact and holds the running
+// version. Trellis does not run this — it observes its state (see Engine). It is
+// the workload-altitude analogue of §4's Job mode: a finite, derived terminal
+// progression. The reconciler (the outer loop) authors capacity, never version —
+// so a failed rollout self-reverts *below* it and never trips its flap breaker
+// (Invariants 27–29).
 
 import type { Criticality } from "./model";
 
@@ -54,7 +56,7 @@ function stepsFor(strategy: Strategy): number[] {
   return strategy === "canary" ? [10, 50, 100] : [100];
 }
 
-export class ReleaseRuntime {
+export class TeamRollout {
   private versions = new Map<string, string>();
   private active = new Map<string, Rollout>();
   private held = new Set<string>();

@@ -1227,7 +1227,7 @@ gate — §7.)
 | **The human gate** (approve), rigor-scaled (Inv 18) | PR review + **merge**; below the blast-radius floor, a standing human-authored auto-merge policy |
 | Reconciler converges to desired | reconciler **pulls** the merged manifest |
 
-*Propose (PR) → planner posts plan+proof → human reviews → merge = approve → reconciler applies.* Below a posture-set blast-radius floor the "human reviews" step is a standing, human-authored auto-merge policy evaluated fresh per plan (Invariant 18); above it, per-plan review, with an independent second at high blast radius. Two
+*Propose (PR) → planner posts plan+proof → human reviews → merge = approve → reconciler applies.* Below a posture-set blast-radius floor, the "human reviews" step becomes a standing, human-authored auto-merge policy, evaluated fresh per plan (Invariant 18). Above the floor it is per-plan review — with an independent second at high blast radius. Two
 caveats: the reconciler **pulls** (not CI-push), and **secrets never live in Git** — the manifest
 *references* a secret (in the secrets-store battery, Governance-controlled); the value is never committed.
 
@@ -1288,14 +1288,14 @@ environments:                      # each is a posture overlay (§2 cascade) on 
 Everything above `environments:` is stated once; each environment is a few-line overlay. But *not*
 everything in the file is the team's to set: the **Governance floor and budget envelope are inherited and
 sealed** (`inherits:`). By Invariant 6 (monotonic tightening) the manifest may only **narrow** them — drop
-a permitted kind, set a budget *below* the envelope — never widen, and the planner enforces the
-composition at plan time, failing an attempted widening as loud as any governance denial. *One file to
+a permitted kind, set a budget *below* the envelope — never widen. The planner enforces the composition at
+plan time, failing an attempted widening as loud as any governance denial. *One file to
 read, not one file that owns everything* — the federation resolution holds; a single owner simply reads
 its sealed floor inline rather than across repos.
 
 Independent gating and promotion do **not** come from file separation — they come from the
-**per-environment plan**: the planner compiles one plan+proof per environment, the gate fires on the
-change to *that environment's* compiled Structure, so editing the `dev:` overlay diffs only dev's plan and
+**per-environment plan**: the planner compiles one plan+proof per environment, and the gate fires on the
+change to *that environment's* compiled Structure. Editing the `dev:` overlay diffs only dev's plan, so
 prod's gate sees nothing. And the promotion version each environment sits at (`dev@v5, staging@v4,
 prod@v3`) is **authored pipeline intent** — a pointer the delivery loop advances and *stores in its own
 ledger* — *distinct* from the **running version** the reconciler derives from reality (§4). Conflating

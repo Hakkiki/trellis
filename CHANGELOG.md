@@ -5,6 +5,18 @@ The simulator deploys continuously from `main`, so entries are grouped by date r
 
 ## Unreleased
 
+### Changed
+
+- **Simulator reframed to the observer model.** The rollout engine now *says* what the spec says: the
+  class that holds a Service's running version and drives its canary is `TeamRollout` (it stands in for the
+  team's own Argo/Flagger/Spinnaker), and the Engine **observes** it rather than running it
+  (`observeTeamRollouts`, audit actor `team-tool`). Behaviour is unchanged — the inner/outer separation
+  still holds (a bad deploy is the team's `RolledBack`, the reconciler never engages); only the naming and
+  comments now match the "team drives, Trellis observes" model.
+- **§11 prose pass.** Split three run-on sentences the checker flagged (the auto-merge caveat, the
+  sealed-floor narrowing, the per-environment gate) into shorter clauses that read cleanly aloud; no
+  meaning change.
+
 ### Added
 
 - **Spec §11 — the deploy bridge (observer model, trust handshake, CI/CD-agnostic).** Realigns the seam to
