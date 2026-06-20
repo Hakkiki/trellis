@@ -967,6 +967,16 @@ function OwnersPanel({
         State and spend attribute to each owning Service (§6). Billed-vs-planned is a live signal —
         a breach pages on-call and, by posture, blocks provisioning (§13).
       </p>
+      <p className="text-muted-foreground border-border/40 rounded border border-dashed p-1.5 leading-relaxed">
+        <span className="text-foreground font-medium">
+          Releases come from each team's own CI/CD pipeline
+        </span>{" "}
+        (it calls <code className="text-[9px]">trellis release</code>) — Trellis <em>observes</em>{" "}
+        the rollout, it does not trigger it. The <span className="text-foreground">simulate</span>{" "}
+        buttons below stand in for that pipeline so you can watch a rollout, and a bad deploy
+        self-revert. It stays <span className="text-foreground">aware, not passive</span>, so it can
+        self-heal to the running version and not mistake a bad deploy for an infra fault.
+      </p>
       {rollups.map((r) => {
         const color = stateColorVar(r.state);
         const drifted = r.billedCost > r.monthlyCost;
@@ -1008,9 +1018,11 @@ function OwnersPanel({
                 />
               </div>
             </button>
-            {/* App-delivery inner loop (§11): ship a release into this Service's
-                App Cell. Ship ✗ fails the bake to show it self-reverts below
-                the reconciler — a bad deploy is RolledBack, not Stalled. */}
+            {/* App-delivery inner loop (§11). In the real product the team's
+                own CI/CD pipeline calls `trellis release` and Trellis observes
+                the rollout; these buttons stand in for that pipeline. Deploy ✗
+                fails the bake to show a bad deploy self-reverts below the
+                reconciler — RolledBack, not the platform's Stalled. */}
             <div className="flex items-center justify-between gap-2 px-0.5 text-[10px]">
               <span className="text-muted-foreground tabular-nums">
                 running {r.version}
@@ -1026,22 +1038,25 @@ function OwnersPanel({
                   </span>
                 )}
               </span>
-              <span className="flex gap-1">
+              <span className="flex items-center gap-1">
+                <span className="text-muted-foreground/60 italic">simulate</span>
                 <button
                   type="button"
                   disabled={r.rollout != null}
                   onClick={() => onShip(r.slug, false)}
+                  title="Stand in for the team's CI/CD pipeline shipping a good release"
                   className="border-border/60 hover:bg-accent rounded border px-1.5 py-0.5 disabled:opacity-40"
                 >
-                  Ship
+                  Deploy
                 </button>
                 <button
                   type="button"
                   disabled={r.rollout != null}
                   onClick={() => onShip(r.slug, true)}
+                  title="A broken release — its bake fails and the rollout self-reverts"
                   className="border-border/60 text-destructive hover:bg-accent rounded border px-1.5 py-0.5 disabled:opacity-40"
                 >
-                  Ship&nbsp;✗
+                  Deploy&nbsp;✗
                 </button>
               </span>
             </div>

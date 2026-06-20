@@ -7,6 +7,15 @@ The simulator deploys continuously from `main`, so entries are grouped by date r
 
 ### Fixed
 
+- **Owners panel is honest about who ships.** The release controls were labelled "Ship", which implied
+  teams deploy *from the Trellis UI* — backwards. They are now an explicit **simulate · Deploy / Deploy ✗**,
+  with a caption making the real flow plain: releases run through each team's **own CI/CD pipeline** (it
+  calls `trellis release`); Trellis **observes** the rollout, it does not trigger it — the buttons stand in
+  for that pipeline so you can watch a rollout (and a bad deploy self-revert). Spec §11 gains a matching
+  rationale — **"Aware, not passive — why the platform observes the rollout"** — arguing why observation is
+  load-bearing (self-heal to the live version, keep the two loops from colliding, tell an app bug from an
+  infra fault, govern admission, stay the honest map): *observe-and-govern, never trigger.*
+
 - **Diagram viewer, verified in a real browser.** Fixes found by driving headless Chromium against the
   built site (`scripts/verify-viewer.mjs`): the full-screen overlay now **fits and centres** the diagram
   on open (it had opened at natural size in the top-left corner); the cloned SVG is given an explicit
