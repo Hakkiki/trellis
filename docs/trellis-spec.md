@@ -1435,6 +1435,9 @@ down to the boundary; share only what is signed, versioned, and pulled.**
 The non-negotiable rules a builder must preserve. A violation is a defect, not a tradeoff. Invariants
 1–10 fix the model; **11–19 are the inversion-hardened set** — each forecloses a specific way the
 platform could cause the very catastrophe it exists to prevent (the inversion stress test, §21).
+**20–26 are the manifest-substrate hardening set** — each closes a seam between the five jobs the word
+"Git" does in this spec (store, generation, gate, promotion/rollback, meta-DR source); the raw findings
+are in the Git red-team bundle (§21).
 
 1. **Determinism.** A plan is a pure function of *(manifest generation + a pinned provider-state snapshot +
    a pinned pricing version)*. Same pinned inputs → same plan. Determinism is scoped to the snapshot, not
@@ -1534,6 +1537,49 @@ platform could cause the very catastrophe it exists to prevent (the inversion st
     planes back into one god-write SPOF to save money — by keeping the sliced model cheaper than the SPOF
     it replaces and making the temptation **visible, not silent**. Cost pressure is a watched signal,
     never an excuse to rebuild the single point of failure.
+20. **The proof binds the merged generation, not the proposal.** The plan+proof is computed and
+    **re-validated against the post-merge tree** that actually becomes the generation — never only
+    against the proposed PR head. Merges keep the gated tree and the realized tree identical
+    (up-to-date-before-merge / linear history); concurrent or non-commutative changes are **re-planned and
+    re-gated**, never silently combined. The reconciler converges only to a generation that carries a proof
+    *for that exact tree*. (Forecloses the merge-vs-proof TOCTOU: "merge = approve" must not let a tree no
+    human proved become the desired state.)
+21. **Approval is attested in-band; the reconciler verifies gate-passage, not just authorship.** The
+    reconciler pulls **Git objects**, not the forge's PR/review state — so a signed commit proves the
+    *author*, never that *the gate was passed*. A generation is trusted only on a **cryptographic
+    attestation binding its SHA to a completed gate** (approval + passing proof of Invariant 20),
+    verifiable **without** trusting forge configuration. "merge = approval" is forge mechanism; the
+    in-band attestation is what the convergence loop actually checks.
+22. **The gate guards itself — its configuration is declared and reconciled.** The merge gate's protection
+    posture — branch protection, required checks, commit authority (CODEOWNERS), signed-commit
+    enforcement, no-force-push, history retention — is **itself declared desired state and reconciled**,
+    not hand-configured outside the loop. Drift on the gate's own config is **high-Criticality** and fails
+    loud. The non-loosenable floor (Invariant 14) is *enforced by the loop*, not merely asserted; the
+    protector is not exempt from being protected.
+23. **Generations are immutable, retained, and collision-resistant.** A gated generation SHA is
+    **immutable** and **retained for as long as it is a reachable known-good or meta-DR target** — never
+    orphaned by force-push, history rewrite, or GC (the meta-DR target of §12 must still exist). The object
+    format is **collision-resistant** (SHA-256) and objects are **signed**. Because secrets are *referenced,
+    never committed* (§11, §18), a leak is a **rotate-the-secret + audit** event — **never** a
+    history-rewrite, which would break this immutability.
+24. **A federated generation is a coordinated vector, not a single SHA.** When desired state is per-domain
+    (Invariant 12), Git provides **no cross-repo atomicity** — so a cross-domain change is an **ordered,
+    jointly-proved set** of per-repo generations, with cross-domain references pinning immutable per-repo
+    SHAs (Invariant 12 transitivity) and **rollback reverting the set, not one repo**. The inter-domain
+    inconsistency window is a **planned, reversible transition** (§10) — bounded and gated, never assumed
+    instantaneous.
+25. **The manifest substrate is never on the liveness or recovery-blocking path.** The reconciler **pins a
+    specific generation per cycle** and advances deliberately — it never tracks a moving ref (a branch HEAD
+    is a floating reference, forbidden by Invariant 12). An **emergency action** (break-glass, rollback)
+    **never blocks on the manifest store being healthy** — it acts out-of-band and is *repaid* into Git when
+    reachable (§11). For meta-DR the manifest store **and its host** are **out-of-band** (Invariant 13):
+    reachable and operable with the recovered system fully down, and **never co-located inside the blast
+    radius being recovered**.
+26. **Promotion is ordered, and overrides are proved.** Promotion advances an immutable, validated version
+    reference through an **enforced environment order** (dev → staging → prod); skipping a stage is not
+    possible without passing the gate. The "bit-for-bit what you validated reaches prod" guarantee covers
+    the **base artifact only** — per-environment **posture overrides are desired state**, diffed and proved
+    at *each* hop; an override change may not ride a version bump unproved.
 
 ---
 
@@ -1680,6 +1726,15 @@ Other resolutions:
   into **Invariant 18** (rigor scales to blast radius; the proof must be legible), and **economic
   re-centralization** into **Invariant 19** (the control plane is cheap by construction and its cost is a
   first-class signal). Both foreclose the failure by design while naming the discipline that remains.
+- **Git-substrate red-team (fourth pass)** — a focused stress-test of the **five jobs the word "Git" does**
+  (store, generation, gate, promotion/rollback, meta-DR source) surfaced ten findings in the *seams between
+  the roles*, folded in as **Invariants 20–26**: the proof must bind the **merged** generation, not the
+  proposal (20); the reconciler must verify **gate-passage by in-band attestation**, since "approval" is a
+  forge fact it cannot read in Git (21); the **gate's own configuration is reconciled**, not hand-held
+  outside the loop (22); generations are **immutable, retained, collision-resistant** (23); a **federated
+  generation is a coordinated vector**, Git having no cross-repo atomicity (24); the manifest substrate is
+  **never on the liveness or recovery-blocking path** (25); and promotion is **ordered and override-proved**
+  (26). The raw scored findings are retained off-site in the red-team bundle.
 
 ---
 

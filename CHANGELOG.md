@@ -44,6 +44,17 @@ The simulator deploys continuously from `main`, so entries are grouped by date r
   `scripts/validate-mermaid.mjs` (real Mermaid parse under jsdom) wired into `npm run check`, so CI and
   the pre-push hook now fail on any unparseable diagram.
 
+- **Invariants 20–26 — the manifest-substrate hardening set (Git red-team).** A focused fourth red-team
+  pass (`docs/trellis-redteam-git.md`) stress-tested the **five jobs the word "Git" does** in the spec
+  (desired-state store, generation/provenance, the merge gate, promotion/rollback, meta-DR source) and
+  found ten leaks in the *seams between the roles*. Folded into seven new invariants: the proof must bind
+  the **merged** generation, not the proposal (20); the reconciler must verify **gate-passage by an in-band
+  attestation** because "approval" is a forge fact it cannot read in Git (21); the **gate's own config is
+  reconciled**, not hand-held outside the loop (22); generations are **immutable, retained,
+  collision-resistant** (23); a **federated generation is a coordinated vector**, Git having no cross-repo
+  atomicity (24); the manifest substrate is **never on the liveness or recovery-blocking path** (25); and
+  promotion is **ordered and override-proved** (26).
+
 - **Roles & responsibilities — a day in the life.** A new page mapping the nine personas (Platform Owner,
   Security/Governance author, Division/Product lead, Platform Operator, Service/Eng teams, Break-glass
   responders, Auditor, FinOps, External vendor) to the model: each one's mandate, what it owns, what it
