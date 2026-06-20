@@ -16,6 +16,7 @@ provenance and brand. Carry it into a fresh repository and build from it.
 |---|---|---|
 | `trellis-spec.md` | **The build-ready specification.** Self-contained — needs nothing else. | Building. Start at the overview, then §17 Invariants → §18 Architecture → §20 Build sequence. |
 | `trellis-redteam.md` | An eight-reviewer adversarial critique. | The known risks and trade-offs, and why decisions went the way they did. |
+| `trellis-breakglass-redteam.md` | A focused inversion red-team of the **break-glass trigger** — the one transition Trellis never derives. | Why break-glass feels mysterious, the six sensations that open the glass, and how the trigger (not the machinery) gets abused. |
 | `trellis-brainstorm.md` | The original discovery-ordered design brainstorm. | Rationale / provenance — **superseded by the spec for building.** |
 | `buildability.md` | A candid "can this really be built?" assessment. | A reality check before you commit — what's proven, where it could fail, and how to de-risk it. |
 | `logo/` | SVG marks, lockups (light/dark), favicon. | Brand. |

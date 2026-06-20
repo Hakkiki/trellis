@@ -98,6 +98,16 @@ The simulator deploys continuously from `main`, so entries are grouped by date r
   `git reset --hard` over uncommitted work — an irreversible destructive action with no plan, approval, or
   recovery, which is exactly the failure mode the action model forecloses.
 
+- **Break-glass triggers — inversion red-team.** A new doc
+  ([`docs/trellis-breakglass-redteam.md`](docs/trellis-breakglass-redteam.md)) reasons about the one state
+  transition Trellis never derives: `Converged → Frozen` has no `f(desired, observed, health)` behind it —
+  it's a human judgment, which is *why* break-glass feels mysterious. It names the **six sensations** that
+  make an operator reach for the glass (and shows only three are clean triggers — the rest have cheaper
+  correct responses), then runs **Munger inversion** on the trigger itself (B1–B7): the machinery is
+  well-defended, but the *decision* to open the glass is the unguarded surface — economic trigger-inflation
+  (B1), fog-of-war misreads (B6), and the missing trigger taxonomy (B7). Three proposed §7/§13 additions,
+  no change to the machinery.
+
 - **Roles & responsibilities — a day in the life.** A new page mapping the nine personas (Platform Owner,
   Security/Governance author, Division/Product lead, Platform Operator, Service/Eng teams, Break-glass
   responders, Auditor, FinOps, External vendor) to the model: each one's mandate, what it owns, what it
