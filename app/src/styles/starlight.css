@@ -154,7 +154,7 @@ body.diagram-overlay-open {
   box-sizing: border-box;
   transform-origin: 0 0;
   will-change: transform;
-  padding: 1.5rem;
+  padding: 0.5rem;
 }
 .diagram-overlay__content svg {
   display: block;

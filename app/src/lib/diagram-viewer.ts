@@ -137,9 +137,13 @@ function attachPanZoom(viewport: HTMLElement, content: HTMLElement): PanZoom {
       reset();
       return;
     }
-    const scale = clampScale(Math.min((r.width * 0.92) / cw, (r.height * 0.92) / ch));
+    const scale = clampScale(Math.min((r.width * 0.99) / cw, (r.height * 0.99) / ch));
     state = { scale, x: (r.width - cw * scale) / 2, y: (r.height - ch * scale) / 2 };
     apply();
+  };
+  // Re-centre on rotate / resize — but never clobber an in-progress gesture.
+  const onResize = (): void => {
+    if (pointers.size === 0) fitToView();
   };
 
   viewport.addEventListener("pointerdown", onPointerDown);
@@ -148,6 +152,8 @@ function attachPanZoom(viewport: HTMLElement, content: HTMLElement): PanZoom {
   viewport.addEventListener("pointercancel", onPointerUp);
   viewport.addEventListener("wheel", onWheel, { passive: false });
   viewport.addEventListener("dblclick", fitToView);
+  window.addEventListener("resize", onResize);
+  window.addEventListener("orientationchange", onResize);
 
   fitToView();
   // Re-fit once layout settles (fonts/SVG metrics can land a frame late).
@@ -161,6 +167,8 @@ function attachPanZoom(viewport: HTMLElement, content: HTMLElement): PanZoom {
       viewport.removeEventListener("pointercancel", onPointerUp);
       viewport.removeEventListener("wheel", onWheel);
       viewport.removeEventListener("dblclick", fitToView);
+      window.removeEventListener("resize", onResize);
+      window.removeEventListener("orientationchange", onResize);
     },
   };
 }
