@@ -48,6 +48,7 @@ export interface ResourceView {
   costDrifted: boolean; // billed > planned — cost drift
   security: SecurityTier; // trust/exposure posture — tints the security view (§7)
   detail?: string; // e.g. quorum "2/3 nodes" for stateful clusters
+  reconcilerReason?: string; // the loop's current belief about this resource (§13)
 }
 
 /** Security-posture projection (spec §7): where a resource sits in the trust
@@ -83,6 +84,7 @@ export interface Incident {
   region: string;
   service: string;
   cell: CellKind;
+  reconcilerReason?: string; // the loop's belief — shown before an override (§13)
 }
 
 export interface EngineSnapshot {
@@ -102,8 +104,14 @@ export interface EngineSnapshot {
   budgetPolicy: BudgetPolicy;
   converged: boolean;
   appliedGen: number;
+  // Break-glass debt: resources Frozen by an override, surfaced on the §13
+  // incident surface so the debt is loud (not a silent un-healed hole).
+  frozenDebts: Incident[];
   changeFreeze: boolean;
   blastTripped: boolean;
+  // Break-glass *rate* is a first-class gate-health signal (§7): a frequently
+  // opened glass diagnoses a miscalibrated gate, not a heroic operator.
+  breakGlassSignal: { recent: number; noisy: boolean };
   regionRollups: { region: string; state: State }[];
   serviceRollups: ServiceRollup[];
   envRollup: State;
@@ -139,6 +147,11 @@ export const DEFAULT_POSTURE: Posture = {
   ],
   budgetPolicy: "alert",
 };
+
+// Break-glass rate signal (§7): how many freezes within the trailing window
+// before the glass is judged "too often" — a gate-health alarm, not heroism.
+const BREAK_GLASS_WINDOW_MS = 60_000;
+const BREAK_GLASS_NOISY = 3;
 
 export class Engine {
   private cloud = new SimCloud({ applyLatency: 2 });
@@ -456,6 +469,7 @@ export class Engine {
             costDrifted: this.cloud.billedFactor(r.id) > 1,
             security: securityTier(r.cell, r.lifecycle, weakIsolation, complianceCovered),
             detail: byId.get(r.id)?.detail,
+            reconcilerReason: byId.get(r.id)?.reason,
           };
         })
       : [];
@@ -465,9 +479,15 @@ export class Engine {
     const budgetPolicy: BudgetPolicy = this.posture.budgetPolicy ?? "alert";
     const budgetBreach = billedNow > budget;
     const phase: Phase = this.manifest ? "applied" : this.plan ? "planned" : "empty";
-    const incidents: Incident[] = resources
-      .filter((r) => r.state === "Stalled")
-      .map((r) => ({ id: r.id, region: r.region, service: r.service, cell: r.cell }));
+    const toIncident = (r: ResourceView): Incident => ({
+      id: r.id,
+      region: r.region,
+      service: r.service,
+      cell: r.cell,
+      reconcilerReason: r.reconcilerReason,
+    });
+    const incidents: Incident[] = resources.filter((r) => r.state === "Stalled").map(toIncident);
+    const frozenDebts: Incident[] = resources.filter((r) => r.state === "Frozen").map(toIncident);
 
     // Frame roll-up (§4): a region's state is the worst-of the resources it
     // contains; we manage Service + Stateful workloads (Jobs/External excluded).
@@ -481,6 +501,16 @@ export class Engine {
     }));
     const envRollup = rollup(regionRollups.map((r) => r.state));
     const envNote = environmentNote(this.posture.resilience, regionRollups);
+
+    // Break-glass rate as a gate-health signal (§7): count freezes inside the
+    // trailing window from the (persisted) audit log — survives reload, no extra
+    // state. Re-bootstrap is "Break-glass" too, so match the freeze verb only.
+    const recentBreakGlass = this.audit.filter(
+      (a) =>
+        a.cls === "Break-glass" &&
+        a.verb === "freeze" &&
+        this.cloud.now() - a.tMs <= BREAK_GLASS_WINDOW_MS,
+    ).length;
 
     // Ownership roll-up (§6): state + spend attribute to each owning Service.
     const serviceRollups: ServiceRollup[] = servicesOf(this.posture).map((s) => {
@@ -513,8 +543,10 @@ export class Engine {
       budgetPolicy,
       converged: resources.length > 0 && resources.every(isSettled),
       appliedGen: this.appliedGen,
+      frozenDebts,
       changeFreeze: this.rec.isChangeFreeze(),
       blastTripped: this.rec.blastTripped(),
+      breakGlassSignal: { recent: recentBreakGlass, noisy: recentBreakGlass >= BREAK_GLASS_NOISY },
       regionRollups,
       serviceRollups,
       envRollup,

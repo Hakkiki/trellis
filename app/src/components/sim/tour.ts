@@ -39,14 +39,20 @@ const STEPS: { sel: string; title: string; description: string }[] = [
       "Fail a node, drift a config, take out a region, or spike a cost. Then watch the loop self-heal — or, when it genuinely can't, trip a breaker and raise an incident instead of flailing.",
   },
   {
+    sel: "#tour-breakglass",
+    title: "6 · Break glass — on evidence",
+    description:
+      "Break-glass is the one move the loop never derives — it's your judgment. Before you override, this reads back what the loop believes about the selected resource, so you decide on evidence, not panic. A freeze owes a debt that shows on the incident surface until you Ratify it; open the glass too often and the surface flags the gate, not you.",
+  },
+  {
     sel: "#tour-owners",
-    title: "6 · Follow the ownership",
+    title: "7 · Follow the ownership",
     description:
       "Spend and health roll up to each owning service and on to the environment. This is the read-side of the ownership tree — who owns what, and what it costs.",
   },
   {
     sel: "#tour-controlplane",
-    title: "7 · The loop manages itself",
+    title: "8 · The loop manages itself",
     description:
       "The control plane is just another Criticality-0 environment. Propose a self-upgrade, clear the highest gate (dual-control), and — if it goes bad — recover with a re-bootstrap.",
   },

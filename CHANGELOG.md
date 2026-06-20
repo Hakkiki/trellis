@@ -98,6 +98,33 @@ The simulator deploys continuously from `main`, so entries are grouped by date r
   `git reset --hard` over uncommitted work — an irreversible destructive action with no plan, approval, or
   recovery, which is exactly the failure mode the action model forecloses.
 
+- **The simulator now demonstrates the break-glass trigger discipline.** Two engine-driven additions make
+  the spec's new §7/§13 claims visible in the model: (§13) the break-glass control now surfaces *the loop's
+  current belief about the selected resource* — its State and the reconciler's own reason (e.g. "drift:
+  unauthored change, correcting") plus the generation it's converging toward — so the operator decides on
+  evidence, not panic, and can tell "the loop is fighting me" from "the loop is right"; (§7) **break-glass
+  *rate* is now a first-class gate-health signal** — computed from the persisted audit log (survives
+  reload, no extra state). The **§13 incident surface** is now the single home for the override loop: it
+  rolls up Stalled and Frozen (break-glass debt) resources, each row showing the loop's belief and the
+  right action (Resolve root cause / Ratify the debt), and it carries the break-glass *rate* banner —
+  "check the gate, not the operator" — since the spec routes that signal *via* §13. So an override is
+  decided on evidence, the Frozen debt is loud (never a silent un-healed hole), and a miscalibrated gate
+  is visible. A new **guided-tour step** walks break-glass → debt → ratify. Locked by four engine tests.
+
+- **Break-glass triggers — inversion red-team.** A new doc
+  ([`docs/trellis-breakglass-redteam.md`](docs/trellis-breakglass-redteam.md)) reasons about the one state
+  transition Trellis never derives: `Converged → Frozen` has no `f(desired, observed, health)` behind it —
+  it's a human judgment, which is *why* break-glass feels mysterious. It names the **six sensations** that
+  make an operator reach for the glass (and shows only three are clean triggers — the rest have cheaper
+  correct responses), then runs **Munger inversion** on the trigger itself (B1–B7): the machinery is
+  well-defended, but the *decision* to open the glass is the unguarded surface — economic trigger-inflation
+  (B1), fog-of-war misreads (B6), and the missing trigger taxonomy (B7). The three trigger gaps are now
+  **folded into the spec** (§7 + §13) — no change to the break-glass machinery: §7 gains the six-sensation
+  trigger table (only three sensations should open the glass; the rest route to scope-freeze /
+  observe-only / liveness escalation) and makes break-glass *rate* a first-class gate-health signal; §13's
+  incident surface now shows the reconciler's reasoning *before* an override, so the most dangerous
+  triggers are decided on evidence, not panic.
+
 - **Roles & responsibilities — a day in the life.** A new page mapping the nine personas (Platform Owner,
   Security/Governance author, Division/Product lead, Platform Operator, Service/Eng teams, Break-glass
   responders, Auditor, FinOps, External vendor) to the model: each one's mandate, what it owns, what it
