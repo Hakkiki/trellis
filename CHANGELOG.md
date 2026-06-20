@@ -5,6 +5,14 @@ The simulator deploys continuously from `main`, so entries are grouped by date r
 
 ## Unreleased
 
+### Fixed
+
+- **Cost & parity: stop saying "re-optimization."** The Status section described the remaining gap as
+  "continuous re-optimization," which smuggles optimization back in as the goal — the exact framing the
+  page repudiates. The loop's job is to **hold cost-effectiveness** (regulate the cost/value ratio toward
+  a moving setpoint), not to re-run an optimizer on a timer; re-optimizing every tick would reintroduce
+  the over-optimization trap. Reworded the two offending spots.
+
 ### Added
 
 - **Engine: a demand-driven utilization loop + cold-resume + denial-of-wallet guard.** The remaining

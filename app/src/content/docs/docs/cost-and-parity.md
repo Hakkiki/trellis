@@ -44,8 +44,8 @@ idea, not the finished one:
 - the elasticity/dormancy tiers are fixed **by environment** (dev = aggressive), not driven by observed
   demand — a label is not a loop;
 - the only continuously cost-aware thing in the model, **cost-drift detection** (§13, billed vs planned),
-  *observes and flags* but never **re-optimizes**: it sees that you've left the setpoint, it does not
-  track the setpoint as it moves.
+  *observes and flags* but never **regulates**: it sees that you've drifted off the setpoint, but it
+  neither corrects toward it nor tracks the setpoint as it moves.
 
 Making this honest is a model change, not a tuning pass. Cost-effectiveness becomes a **reconciled
 property**: (1) a **value/outcome term** in the loop so "effective" has a denominator; (2) the cost
@@ -215,11 +215,14 @@ The first slice — the two guardrails everything else depends on — is now in 
 
 Still **not** modelled (honest follow-ups):
 
-- **Cost is not yet a *fully* reconciled property** — the demand-driven tiers above are the first half;
+- **The loop does not yet *hold* cost-effectiveness** — the demand-driven tiers above are the first half;
   the rest of [Cost-effectiveness, not cost optimization](#cost-effectiveness-not-cost-optimization)
-  remains: the objective still solves **once** (no continuous re-optimization), there is **no value /
-  outcome term** so "effective" still lacks a denominator, and the cost setpoint (budget) is still a
-  **static** number rather than a live Posture input that moves with business drivers.
+  remains. It can't **measure** effectiveness (no value/outcome term, so the ratio has no denominator),
+  the cost setpoint (budget) is a **static** number rather than a live Posture input that moves with
+  business drivers, and nothing **regulates** the levers to keep the cost/value ratio in band as that
+  setpoint and demand move. The control action is to *stay effective as things move* — **not** to re-run
+  an optimizer on a timer; chasing the cheapest point every tick would just reintroduce the
+  over-optimization trap (strip the slack, brittle to the next disturbance).
 - **The idle signal is exogenous** — `setIdle()` is injected, not derived from modelled traffic/SLOs; a
   real demand model (and the value term it feeds) is the next step.
 - **Resume-as-failure is coarse** — a cold resume degrades the resource itself; it doesn't yet model the
