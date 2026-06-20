@@ -29,6 +29,10 @@ The simulator deploys continuously from `main`, so entries are grouped by date r
 
 ### Changed
 
+- **FAQ: dropped the redundant "Who is this for?" heading.** It sat directly under the "Who it's for"
+  section heading and repeated it. The audience paragraph now hangs straight off the section, with "Who is
+  it *not* for?" kept as the contrast.
+
 - **FAQ entries rewritten to the plain-English, read-aloud bar.** The two newest answers — "Why not just
   chat with an AI agent to provision infrastructure just-in-time?" and "Can different divisions run on
   different clouds?" — were rewritten in active voice, with the throat-clearing ("the honest reply," "the

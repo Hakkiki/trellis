@@ -81,8 +81,6 @@ and reconcile — not in place of them.*
 
 ## Who it's for
 
-### Who is this for?
-
 Platform and infrastructure teams (platform engineering, SRE, cloud/DevOps) running a multi-team cloud
 org who want **declared, proof-carrying, self-healing infrastructure** with real delegation and
 governance. It assumes a customer-owned management account and a hierarchical org (org → accounts →
