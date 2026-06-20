@@ -48,6 +48,7 @@ export interface ResourceView {
   costDrifted: boolean; // billed > planned — cost drift
   security: SecurityTier; // trust/exposure posture — tints the security view (§7)
   detail?: string; // e.g. quorum "2/3 nodes" for stateful clusters
+  reconcilerReason?: string; // the loop's current belief about this resource (§13)
 }
 
 /** Security-posture projection (spec §7): where a resource sits in the trust
@@ -104,6 +105,9 @@ export interface EngineSnapshot {
   appliedGen: number;
   changeFreeze: boolean;
   blastTripped: boolean;
+  // Break-glass *rate* is a first-class gate-health signal (§7): a frequently
+  // opened glass diagnoses a miscalibrated gate, not a heroic operator.
+  breakGlassSignal: { recent: number; noisy: boolean };
   regionRollups: { region: string; state: State }[];
   serviceRollups: ServiceRollup[];
   envRollup: State;
@@ -139,6 +143,11 @@ export const DEFAULT_POSTURE: Posture = {
   ],
   budgetPolicy: "alert",
 };
+
+// Break-glass rate signal (§7): how many freezes within the trailing window
+// before the glass is judged "too often" — a gate-health alarm, not heroism.
+const BREAK_GLASS_WINDOW_MS = 60_000;
+const BREAK_GLASS_NOISY = 3;
 
 export class Engine {
   private cloud = new SimCloud({ applyLatency: 2 });
@@ -456,6 +465,7 @@ export class Engine {
             costDrifted: this.cloud.billedFactor(r.id) > 1,
             security: securityTier(r.cell, r.lifecycle, weakIsolation, complianceCovered),
             detail: byId.get(r.id)?.detail,
+            reconcilerReason: byId.get(r.id)?.reason,
           };
         })
       : [];
@@ -481,6 +491,16 @@ export class Engine {
     }));
     const envRollup = rollup(regionRollups.map((r) => r.state));
     const envNote = environmentNote(this.posture.resilience, regionRollups);
+
+    // Break-glass rate as a gate-health signal (§7): count freezes inside the
+    // trailing window from the (persisted) audit log — survives reload, no extra
+    // state. Re-bootstrap is "Break-glass" too, so match the freeze verb only.
+    const recentBreakGlass = this.audit.filter(
+      (a) =>
+        a.cls === "Break-glass" &&
+        a.verb === "freeze" &&
+        this.cloud.now() - a.tMs <= BREAK_GLASS_WINDOW_MS,
+    ).length;
 
     // Ownership roll-up (§6): state + spend attribute to each owning Service.
     const serviceRollups: ServiceRollup[] = servicesOf(this.posture).map((s) => {
@@ -515,6 +535,7 @@ export class Engine {
       appliedGen: this.appliedGen,
       changeFreeze: this.rec.isChangeFreeze(),
       blastTripped: this.rec.blastTripped(),
+      breakGlassSignal: { recent: recentBreakGlass, noisy: recentBreakGlass >= BREAK_GLASS_NOISY },
       regionRollups,
       serviceRollups,
       envRollup,

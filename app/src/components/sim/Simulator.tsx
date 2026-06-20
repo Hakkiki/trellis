@@ -552,6 +552,32 @@ export default function Simulator() {
                   }
                 />
               </CardContent>
+              {sel && (
+                <div className="border-border/60 mx-6 mb-4 rounded-md border border-dashed px-3 py-2 text-[11px] leading-relaxed">
+                  {frozenIds.has(sel.id) ? (
+                    <p className="text-muted-foreground">
+                      <span className="font-medium text-[var(--state-frozen)]">
+                        Frozen by break-glass
+                      </span>{" "}
+                      — reconciliation suspended, debt owed. Ratify to repay through the Author gate
+                      (§7).
+                    </p>
+                  ) : (
+                    <p className="text-muted-foreground">
+                      <span className="text-foreground font-medium">Before you break glass</span> —
+                      the loop believes{" "}
+                      <span
+                        className="rounded px-1 py-0.5 text-[9px]"
+                        style={{ background: stateColorVar(sel.state), color: "#15110d" }}
+                      >
+                        {sel.state}
+                      </span>{" "}
+                      {sel.reconcilerReason ? `(${sel.reconcilerReason}) ` : ""}converging toward
+                      gen {snap?.appliedGen}. Decide on evidence, not panic (§13).
+                    </p>
+                  )}
+                </div>
+              )}
             </Card>
           )}
 
@@ -627,6 +653,25 @@ export default function Simulator() {
                     </Button>
                   ) : null;
                 })()}
+              </CardContent>
+            </Card>
+          )}
+
+          {phase === "applied" && snap?.breakGlassSignal.noisy && (
+            <Card className="border-[var(--state-stalled)]">
+              <CardContent className="flex items-start gap-3 pt-6 text-sm">
+                <ShieldAlert className="size-5 shrink-0 text-[var(--state-stalled)]" />
+                <div className="flex-1">
+                  <div className="font-semibold text-[var(--state-stalled)]">
+                    Break-glass is frequent — check the gate, not the operator
+                  </div>
+                  <p className="text-muted-foreground">
+                    {snap.breakGlassSignal.recent} break-glass opens in the recent window. The rate
+                    is a gate-health signal (§7): a frequently-opened glass diagnoses a
+                    miscalibrated gate — make normal Authoring fast (Inv 18) so the emergency path
+                    stays rare.
+                  </p>
+                </div>
               </CardContent>
             </Card>
           )}

@@ -552,3 +552,57 @@ describe("stateful clusters (quorum)", () => {
     expect(e.snapshot().converged).toBe(true);
   });
 });
+
+describe("break-glass trigger discipline (§7/§13)", () => {
+  function converged() {
+    const e = new Engine(DEFAULT_POSTURE);
+    e.declare(DEFAULT_POSTURE);
+    e.approve();
+    for (let i = 0; i < 30 && !e.snapshot().converged; i++) e.tick();
+    return e;
+  }
+
+  it("surfaces the reconciler's reasoning per resource, so a break-glass is decided on evidence", () => {
+    const e = converged();
+    const app = e.snapshot().resources.find((r) => r.lifecycle === "service" && r.cell === "app")!;
+    // Converged: the loop's belief is shown and benign.
+    expect(e.snapshot().resources.find((r) => r.id === app.id)!.reconcilerReason).toMatch(
+      /matches spec/,
+    );
+    // Drift the resource: the surfaced reasoning now explains the loop is correcting it —
+    // the evidence that distinguishes "the loop is fighting me" from "the loop is right".
+    e.injectDrift(app.id);
+    e.tick();
+    const reason = e.snapshot().resources.find((r) => r.id === app.id)!.reconcilerReason!;
+    expect(reason).toMatch(/drift/i);
+  });
+
+  it("treats break-glass rate as a gate-health signal — frequent opens go noisy", () => {
+    const e = converged();
+    const services = e.snapshot().resources.filter((r) => r.lifecycle === "service");
+    expect(e.snapshot().breakGlassSignal.noisy).toBe(false);
+
+    e.breakGlass(services[0].id);
+    e.breakGlass(services[1].id);
+    expect(e.snapshot().breakGlassSignal.recent).toBe(2);
+    expect(e.snapshot().breakGlassSignal.noisy).toBe(false); // below the threshold
+
+    e.breakGlass(services[2].id);
+    const sig = e.snapshot().breakGlassSignal;
+    expect(sig.recent).toBe(3);
+    expect(sig.noisy).toBe(true); // a frequently-opened glass diagnoses the gate
+  });
+
+  it("the rate signal decays — old opens fall out of the trailing window", () => {
+    const e = converged();
+    const services = e.snapshot().resources.filter((r) => r.lifecycle === "service");
+    e.breakGlass(services[0].id);
+    e.breakGlass(services[1].id);
+    e.breakGlass(services[2].id);
+    expect(e.snapshot().breakGlassSignal.noisy).toBe(true);
+    // Advance well past the 60s trailing window; the signal quiets on its own.
+    for (let i = 0; i < 70; i++) e.tick();
+    expect(e.snapshot().breakGlassSignal.recent).toBe(0);
+    expect(e.snapshot().breakGlassSignal.noisy).toBe(false);
+  });
+});

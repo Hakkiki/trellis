@@ -98,6 +98,15 @@ The simulator deploys continuously from `main`, so entries are grouped by date r
   `git reset --hard` over uncommitted work — an irreversible destructive action with no plan, approval, or
   recovery, which is exactly the failure mode the action model forecloses.
 
+- **The simulator now demonstrates the break-glass trigger discipline.** Two engine-driven additions make
+  the spec's new §7/§13 claims visible in the model: (§13) the break-glass control now surfaces *the loop's
+  current belief about the selected resource* — its State and the reconciler's own reason (e.g. "drift:
+  unauthored change, correcting") plus the generation it's converging toward — so the operator decides on
+  evidence, not panic, and can tell "the loop is fighting me" from "the loop is right"; (§7) **break-glass
+  *rate* is now a first-class gate-health signal** — computed from the persisted audit log (survives
+  reload, no extra state), it raises a "check the gate, not the operator" card when the glass is opened too
+  often in the trailing window, and decays on its own. Locked by three new engine tests.
+
 - **Break-glass triggers — inversion red-team.** A new doc
   ([`docs/trellis-breakglass-redteam.md`](docs/trellis-breakglass-redteam.md)) reasons about the one state
   transition Trellis never derives: `Converged → Frozen` has no `f(desired, observed, health)` behind it —
