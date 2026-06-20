@@ -71,13 +71,13 @@ confident operator turning a routine change into an outage, with nothing in its 
 This already happens. Here is a coding agent, mid-session, destroying work it had a direct hand on and
 noticing only afterward:
 
-![A coding agent's chat message reading: "I made a mistake — I ran git reset --hard with the responsive/pinch fixes still uncommitted on the working tree, which discarded them. Let me verify what's actually on disk and re-apply."](../../../assets/agent-git-reset-hard.jpeg)
+![Two messages from a coding agent. First: "I made a mistake — I ran git reset --hard with the responsive/pinch fixes still uncommitted on the working tree, which discarded them. Let me verify what's actually on disk and re-apply." After checking disk state, second: "Confirmed — disk is back at the #41 state; my changes were lost. Let me branch first (so it can't happen again), then re-apply the responsive + pinch-guard fixes."](../../../assets/agent-git-reset-hard.jpeg)
 
-*The agent ran `git reset --hard` over uncommitted work and wiped it out. No plan, no approval, no proof.
-Its recovery plan was "let me verify what's on disk and re-apply," which is hope, not a gate. Move that same
-hand from a working tree to a cloud organization and you have the outage. The point is not "don't use
-agents." It is that an agent's reach over live state belongs behind declare, prove, and reconcile — not in
-place of them.*
+*The agent ran `git reset --hard` over uncommitted work and wiped it out. It checked, confirmed the changes
+were gone, and fell back to re-applying them from memory. No plan, no approval, no proof, and nothing to
+roll back to. Move that same hand from a working tree to a cloud organization and you have the outage. The
+point is not "don't use agents." It is that an agent's reach over live state belongs behind declare, prove,
+and reconcile — not in place of them.*
 
 ## Who it's for
 
