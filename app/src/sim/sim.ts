@@ -28,6 +28,8 @@ interface SimResource {
   convergeIn: number; // ticks until target becomes observed
   exists: boolean;
   stale: boolean;
+  dormant: boolean; // intentionally parked (scaled-to-zero / paused) to save cost
+  resumeIn: number; // ticks of cold-start remaining after a wake (0 = warm)
   broken: boolean; // root-cause failure that self-heal cannot fix
   costFactor: number; // billed ÷ planned — 1 normally; >1 is cost drift (§13)
   observedAtMs: number;
@@ -43,6 +45,11 @@ interface SimResource {
 const JOB_START = 1; // pending → running
 const JOB_RUN = 3; // running → succeeded
 const JOB_COOLDOWN = 4; // succeeded → pending again (cron)
+
+// Cold-start: ticks a parked resource takes to warm back up after a wake. The
+// resume is data-consistent (storage was retained) but not instant — guardrail
+// 4: the "DB came back" path is real and observable, not free.
+const RESUME_LATENCY = 3;
 
 export class SimCloud implements Provider {
   private applyLatency: number;
@@ -80,6 +87,9 @@ export class SimCloud implements Provider {
           if (!r.broken) r.nodesDown = 0;
         }
       }
+      // Burn down a cold-start: while resumeIn > 0 the resource reads as warming
+      // (Converging); when it hits 0 it is live again.
+      if (r.resumeIn > 0) r.resumeIn--;
       if (!r.stale) r.observedAtMs = this.nowMs;
     }
   }
@@ -122,6 +132,8 @@ export class SimCloud implements Provider {
         convergeIn: 0,
         exists: false,
         stale: false,
+        dormant: false,
+        resumeIn: 0,
         broken: false,
         costFactor: 1,
         observedAtMs: this.nowMs,
@@ -181,6 +193,8 @@ export class SimCloud implements Provider {
       convergeIn: 0,
       exists: true,
       stale: false,
+      dormant: false,
+      resumeIn: 0,
       broken: false,
       costFactor: 1,
       observedAtMs: this.nowMs,
@@ -212,13 +226,17 @@ export class SimCloud implements Provider {
 
   private toObservation(id: ResourceID, r: SimResource): Observation {
     const stateful = r.lifecycle === "stateful";
-    const health: Health = !r.exists
-      ? "Unknown"
-      : stateful
-        ? r.nodesDown > 0
-          ? "Degraded"
-          : "Healthy"
-        : r.health;
+    // A parked resource is intentionally suspended, not unhealthy — report it
+    // Healthy so the dormant flag (not a degraded reading) carries the meaning.
+    const health: Health = r.dormant
+      ? "Healthy"
+      : !r.exists
+        ? "Unknown"
+        : stateful
+          ? r.nodesDown > 0
+            ? "Degraded"
+            : "Healthy"
+          : r.health;
     return {
       id,
       exists: r.exists,
@@ -228,7 +246,32 @@ export class SimCloud implements Provider {
       observedAtMs: r.observedAtMs,
       phase: r.lifecycle === "job" ? r.phase : undefined,
       quorum: stateful ? { healthy: r.nodesTotal - r.nodesDown, total: r.nodesTotal } : undefined,
+      dormant: r.dormant || undefined,
+      resuming: r.resumeIn > 0 || undefined,
     };
+  }
+
+  // ---- Utilization levers: park idle capacity, resume on demand ------------
+
+  /** Park a resource: scale-to-zero (elasticity) or pause (dormancy). Durable
+   *  state is retained — this suspends compute, it does not delete (docs: Cost
+   *  & parity). The reconciler reads the result as Dormant, not down. */
+  park(id: ResourceID) {
+    const r = this.res.get(id);
+    if (r) r.dormant = true;
+  }
+
+  /** Resume a parked resource. Durable state is intact, so it comes back as the
+   *  same shape (data-consistent) — but not instantly: it warms through a
+   *  cold-start window (RESUME_LATENCY) before it is live again. */
+  wake(id: ResourceID) {
+    const r = this.res.get(id);
+    if (r?.dormant) {
+      r.dormant = false;
+      r.resumeIn = RESUME_LATENCY;
+      r.health = "Healthy"; // data retained; the warm-up is the latency, not a fault
+      r.nodesDown = 0;
+    }
   }
 
   // ---- Fault injection (sim-only; the dynamics the loop must survive) ------

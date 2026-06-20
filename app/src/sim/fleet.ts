@@ -6,8 +6,14 @@
 // observed state. "What you validated is what shipped."
 
 import { type AuditClass, type AuditEntry, type ResourceView, securityTier } from "./engine";
-import type { Criticality, Manifest, Posture, Resilience } from "./model";
-import { manifestCost, resourceCost, plan as runPlanner } from "./planner";
+import type { Criticality, Manifest, Posture, Resilience, Tier } from "./model";
+import {
+  expectedCost,
+  type ParityResult,
+  parityCheck,
+  resourceCost,
+  plan as runPlanner,
+} from "./planner";
 import { Reconciler, type Status } from "./reconcile";
 import { SimCloud } from "./sim";
 
@@ -20,32 +26,45 @@ interface EnvDef {
   resilience: Resilience;
   regions: string[];
   budget: number;
+  // Utilization tiers (docs: Cost & parity): lower environments park idle
+  // capacity more aggressively to save cost, without changing the shape.
+  elasticity: Tier;
+  dormancy: Tier;
 }
+
+// Parity of *shape*: every environment is the same Criticality, resilience, and
+// regions (docs: Cost & parity), so what you validate in a lower env is the
+// prod topology — not a smaller stand-in. The provisioned ceiling (budget) is
+// therefore identical too; environments differ only in how aggressively they
+// park idle capacity (the utilization tiers) and the version they run.
+const SHAPE = {
+  criticality: "C0" as Criticality,
+  resilience: "active-active" as Resilience,
+  regions: ["us-east-1", "eu-west-1"],
+  budget: 12000,
+};
 
 const ENV_DEFS: EnvDef[] = [
   {
     id: "dev",
     label: "dev",
-    criticality: "C3",
-    resilience: "single",
-    regions: ["us-east-1"],
-    budget: 3000,
+    ...SHAPE,
+    elasticity: "aggressive",
+    dormancy: "aggressive",
   },
   {
     id: "staging",
     label: "staging",
-    criticality: "C2",
-    resilience: "active-passive",
-    regions: ["us-east-1", "eu-west-1"],
-    budget: 6000,
+    ...SHAPE,
+    elasticity: "balanced",
+    dormancy: "balanced",
   },
   {
     id: "prod",
     label: "prod",
-    criticality: "C0",
-    resilience: "active-active",
-    regions: ["us-east-1", "eu-west-1"],
-    budget: 12000,
+    ...SHAPE,
+    elasticity: "conservative",
+    dormancy: "conservative",
   },
 ];
 
@@ -84,6 +103,10 @@ export interface FleetSnapshot {
   latestVersion: number;
   envs: EnvView[];
   audit: AuditEntry[];
+  // Parity invariant across the deployed environments (docs: Cost & parity):
+  // every env must share the same desired shape — a lower env running a smaller
+  // shape is flagged here, not silently accepted as a cost saving.
+  parity: ParityResult;
 }
 
 const ORDER: EnvId[] = ["dev", "staging", "prod"];
@@ -91,7 +114,8 @@ const ORDER: EnvId[] = ["dev", "staging", "prod"];
 /** A workload is settled per its lifecycle (jobs cycle; services/externals converge). */
 function settled(state: string, lifecycle: string): boolean {
   if (lifecycle === "job") return state !== "Failed";
-  return state === "Converged";
+  // Parked capacity (docs: Cost & parity) is a good steady state.
+  return state === "Converged" || state === "Dormant";
 }
 
 export class Fleet {
@@ -159,6 +183,8 @@ export class Fleet {
       optimize: "minimize-cost",
       compliance: this.base.compliance,
       governanceServices: ["load-balancer", "compute", "managed-relational-db"],
+      elasticity: env.def.elasticity,
+      dormancy: env.def.dormancy,
     };
     this.gen += 1;
     const p = runPlanner(posture, this.gen);
@@ -270,18 +296,27 @@ export class Fleet {
         resources,
         converged: resources.length > 0 && resources.every((r) => settled(r.state, r.lifecycle)),
         drifted: resources.some((r) => r.state === "Drifted"),
-        costNow: env.manifest ? manifestCost(env.manifest) : 0,
+        // Expected (tier-discounted) spend: same shape everywhere, but a more
+        // aggressive env bills less for it (docs: Cost & parity).
+        costNow: env.manifest ? Math.round(expectedCost(env.manifest, env.def)) : 0,
         budget: env.def.budget,
         canPromote: promoteTo > env.deployedVersion,
         promoteTo: promoteTo > env.deployedVersion ? promoteTo : null,
       };
     });
+    // Parity invariant across whatever is deployed: same desired shape in every
+    // environment (docs: Cost & parity, guardrail 2).
+    const deployed = ORDER.map((id) => this.envs[id]).filter(
+      (e): e is Env & { manifest: Manifest } => e.manifest !== null,
+    );
+    const parity = parityCheck(deployed.map((e) => ({ id: e.def.id, manifest: e.manifest })));
     return {
       tMs: this.envs.dev.cloud.now(),
       base: this.base,
       latestVersion: this.latestVersion,
       envs,
       audit: this.audit.slice(-60),
+      parity,
     };
   }
 

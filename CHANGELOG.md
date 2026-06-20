@@ -5,6 +5,36 @@ The simulator deploys continuously from `main`, so entries are grouped by date r
 
 ## Unreleased
 
+### Added
+
+- **Engine: elasticity / dormancy levers + a first-class `Dormant` state.** The first slice of the
+  [Cost & parity](https://hakkiki.github.io/trellis/docs/cost-and-parity) model lands in the simulator.
+  `Posture` gains `elasticity` and `dormancy` tiers (`aggressive · balanced · conservative`), the fleet
+  cascade varies them by environment (dev aggressive → prod conservative), and `parkClass()` assigns each
+  resource its lever from the same state-bearing test the security tier uses (`cell === "data" ||
+  lifecycle === "stateful"`). A new **`Dormant` state** (via `engine.park()` / `wake()`, modelled in the
+  sim) is derived *before* any health/quorum reading, so a paused DB (quorum 0) or scaled-to-zero service
+  reads **parked, not down** — and the reconciler **holds** on it: never wakes it, never treats it as
+  drift, never trips the blast-radius breaker. A load balancer is elasticity-class but never parks; jobs
+  and external dependencies have no lever. Parked capacity counts as settled, so it doesn't break
+  convergence.
+- **Planner: the parity invariant (`parityCheck`).** A pure check that every environment shares the same
+  desired *shape* — excluding the promoted version and the utilization tier — so a lower env that runs a
+  *smaller* shape (fewer replicas, a dropped resource) is flagged, while a different release tag is not.
+  This is what keeps "more aggressive in dev" from silently decaying into "smaller in dev."
+- **Fleet: parity of shape, savings from tiers.** The promotion cascade is now a **single shape** — dev,
+  staging, and prod share the same Criticality, resilience, regions, and provisioned budget ceiling, so a
+  lower environment is the *prod topology*, not a smaller stand-in. They differ only in the version they
+  run and their elasticity/dormancy tiers. The fleet snapshot carries a live **`parity`** signal, and a
+  new `expectedCost()` (a clearly-labelled, tier-discounted duty-cycle *estimate* — never the feasibility
+  ceiling) makes dev bill less than prod for the identical shape. `promotion.md` updated to match.
+- **Resume latency (cold start).** Waking a parked resource is data-consistent but **not instant** — it
+  warms through a `Converging` window before it is live, so guardrail 4's "the DB came back" path is a
+  tested path, not a free one.
+- **Tests** lock the lot: park-class assignment, Dormant-not-down (incl. paused quorum), reconciler holds
+  and resumes, fixed LB never parks, resume latency, parity pass/fail, and the fleet (parity holds + a
+  more aggressive env bills less for the same shape).
+
 ### Fixed
 
 - **Simulator: `running` version now survives a reload.** A bug: after deploying (e.g. `running v2`), a

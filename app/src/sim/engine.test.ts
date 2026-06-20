@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { DEFAULT_POSTURE, Engine, securityTier } from "./engine";
 import type { DesiredResource, Manifest, Observation, Posture } from "./model";
-import { plan } from "./planner";
+import { parkable, parkClass } from "./model";
+import { parityCheck, plan } from "./planner";
 import { allConverged, Reconciler, type Status } from "./reconcile";
 import { SimCloud } from "./sim";
 import { derive, rollup } from "./state";
@@ -668,5 +669,192 @@ describe("break-glass trigger discipline (§7/§13)", () => {
     for (let i = 0; i < 70; i++) e.tick();
     expect(e.snapshot().breakGlassSignal.recent).toBe(0);
     expect(e.snapshot().breakGlassSignal.noisy).toBe(false);
+  });
+});
+
+// ---- Cost & parity: elasticity / dormancy ---------------------------------
+
+function res(over: Partial<DesiredResource>): DesiredResource {
+  return {
+    id: "r",
+    kind: "compute",
+    spec: {},
+    generation: 1,
+    lifecycle: "service",
+    service: "s",
+    region: "us-east-1",
+    cell: "app",
+    ...over,
+  };
+}
+
+describe("park class (docs: Cost & parity)", () => {
+  it("assigns the lever from the same state-bearing test the security tier uses", () => {
+    // Stateless compute → elasticity; a load balancer is elasticity-class but
+    // never parks; state-bearing (data cell / stateful) → dormancy.
+    expect(parkClass(res({ cell: "app", kind: "compute" }))).toBe("elasticity");
+    expect(parkClass(res({ cell: "edge", kind: "load-balancer" }))).toBe("fixed");
+    expect(parkClass(res({ cell: "data", kind: "managed-relational-db" }))).toBe("dormancy");
+    expect(parkClass(res({ cell: "data", kind: "stream-broker", lifecycle: "stateful" }))).toBe(
+      "dormancy",
+    );
+    // Jobs and external dependencies have no utilization lever.
+    expect(parkClass(res({ lifecycle: "job", kind: "batch-job" }))).toBe("none");
+    expect(parkClass(res({ lifecycle: "external", kind: "external-saas", cell: "edge" }))).toBe(
+      "none",
+    );
+  });
+  it("only elasticity/dormancy resources are parkable", () => {
+    expect(parkable(res({ cell: "app", kind: "compute" }))).toBe(true);
+    expect(parkable(res({ cell: "data", kind: "managed-relational-db" }))).toBe(true);
+    expect(parkable(res({ cell: "edge", kind: "load-balancer" }))).toBe(false);
+    expect(parkable(res({ lifecycle: "job", kind: "batch-job" }))).toBe(false);
+  });
+});
+
+describe("Dormant state — parked is not down, not drift", () => {
+  it("a parked observation derives Dormant, before any health/quorum reading", () => {
+    const compute = res({ id: "x", spec: { a: "1" } });
+    // Scaled-to-zero compute: Dormant, not Unknown/Degraded.
+    expect(derive(compute, obs({ spec: { a: "1" }, dormant: true }), "Settled", 1000, 0)).toBe(
+      "Dormant",
+    );
+    // A paused stateful cluster reports quorum 0 — still Dormant, not Unavailable.
+    const broker = res({ id: "b", kind: "stream-broker", lifecycle: "stateful", cell: "data" });
+    expect(
+      derive(broker, obs({ dormant: true, quorum: { healthy: 0, total: 3 } }), "Settled", 1000, 0),
+    ).toBe("Dormant");
+  });
+  it("break-glass still dominates a parked resource", () => {
+    const d = res({ id: "x", spec: { a: "1" } });
+    expect(derive(d, obs({ spec: { a: "1" }, dormant: true }), "Frozen", 1000, 0)).toBe("Frozen");
+  });
+});
+
+describe("reconciler holds on Dormant (does not fight the lever)", () => {
+  function converged() {
+    const e = new Engine(DEFAULT_POSTURE);
+    e.declare(DEFAULT_POSTURE);
+    e.approve();
+    for (let i = 0; i < 30 && !e.snapshot().converged; i++) e.tick();
+    return e;
+  }
+
+  it("parks elasticity + dormancy resources; the loop holds and the env stays settled", () => {
+    const e = converged();
+    expect(e.snapshot().converged).toBe(true);
+    const app = e.snapshot().resources.find((r) => r.cell === "app" && r.lifecycle === "service")!;
+    const db = e.snapshot().resources.find((r) => r.kind === "managed-relational-db")!;
+
+    e.park(app.id);
+    e.park(db.id);
+    e.tick();
+
+    const find = (id: string) => e.snapshot().resources.find((r) => r.id === id)!;
+    expect(find(app.id).state).toBe("Dormant");
+    expect(find(db.id).state).toBe("Dormant");
+    // The reconciler's belief is "parked", not drift/degraded.
+    expect(find(app.id).reconcilerReason).toMatch(/dormant|parked/i);
+    // Parked capacity does not break convergence.
+    expect(e.snapshot().converged).toBe(true);
+
+    // The loop never wakes it: it stays Dormant across many passes.
+    for (let i = 0; i < 8; i++) e.tick();
+    expect(find(app.id).state).toBe("Dormant");
+    expect(find(db.id).state).toBe("Dormant");
+
+    // Resume on demand → it comes back as the same shape, converged.
+    e.wake(app.id);
+    e.wake(db.id);
+    for (let i = 0; i < 10 && find(app.id).state !== "Converged"; i++) e.tick();
+    expect(find(app.id).state).toBe("Converged");
+    expect(find(db.id).state).toBe("Converged");
+  });
+
+  it("a fixed resource (load balancer) never parks", () => {
+    const e = converged();
+    const lb = e.snapshot().resources.find((r) => r.kind === "load-balancer")!;
+    e.park(lb.id); // no-op — elasticity class, but never zero
+    e.tick();
+    const after = e.snapshot().resources.find((r) => r.id === lb.id)!;
+    expect(after.state).not.toBe("Dormant");
+  });
+
+  it("resume has latency — a woken resource warms through Converging, then Converged", () => {
+    const e = converged();
+    const db = e.snapshot().resources.find((r) => r.kind === "managed-relational-db")!;
+    const stateOf = () => e.snapshot().resources.find((r) => r.id === db.id)!.state;
+    e.park(db.id);
+    e.tick();
+    expect(stateOf()).toBe("Dormant");
+
+    e.wake(db.id);
+    e.tick();
+    // Not instant — the cold-start window reads as benign progress, not down.
+    expect(stateOf()).toBe("Converging");
+    for (let i = 0; i < 10 && stateOf() !== "Converged"; i++) e.tick();
+    expect(stateOf()).toBe("Converged");
+  });
+});
+
+describe("parity invariant (docs: Cost & parity, guardrail 2)", () => {
+  it("identical shapes pass; a shrunk lower environment is flagged", () => {
+    const a = plan(DEFAULT_POSTURE, 1).manifest;
+    const b = plan(DEFAULT_POSTURE, 1).manifest;
+    expect(
+      parityCheck([
+        { id: "prod", manifest: a },
+        { id: "dev", manifest: b },
+      ]).ok,
+    ).toBe(true);
+
+    // Drop a resource from the lower env (a smaller shape) → violation.
+    const shrunk: Manifest = { generation: b.generation, resources: { ...b.resources } };
+    delete shrunk.resources[Object.keys(shrunk.resources)[0]];
+    const dropped = parityCheck([
+      { id: "prod", manifest: a },
+      { id: "dev", manifest: shrunk },
+    ]);
+    expect(dropped.ok).toBe(false);
+    expect(dropped.violations.length).toBeGreaterThan(0);
+  });
+
+  it("shrinking replicas in a lower env is a parity violation", () => {
+    const a = plan(DEFAULT_POSTURE, 1).manifest;
+    const b = plan(DEFAULT_POSTURE, 1).manifest;
+    const appId = Object.values(b.resources).find((r) => r.cell === "app")!.id;
+    const smaller: Manifest = {
+      generation: b.generation,
+      resources: {
+        ...b.resources,
+        [appId]: { ...b.resources[appId], spec: { ...b.resources[appId].spec, replicas: "1" } },
+      },
+    };
+    expect(
+      parityCheck([
+        { id: "prod", manifest: a },
+        { id: "dev", manifest: smaller },
+      ]).ok,
+    ).toBe(false);
+  });
+
+  it("a different promoted version (release tag) does NOT break parity", () => {
+    const a = plan(DEFAULT_POSTURE, 1).manifest;
+    const b = plan(DEFAULT_POSTURE, 1).manifest;
+    const tagged: Manifest = {
+      generation: b.generation,
+      resources: Object.fromEntries(
+        Object.entries(b.resources).map(([k, r]) => [
+          k,
+          { ...r, spec: { ...r.spec, release: "v9" } },
+        ]),
+      ),
+    };
+    expect(
+      parityCheck([
+        { id: "prod", manifest: a },
+        { id: "dev", manifest: tagged },
+      ]).ok,
+    ).toBe(true);
   });
 });

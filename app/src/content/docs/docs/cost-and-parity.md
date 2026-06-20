@@ -130,16 +130,38 @@ backfires — see the [inversion stress test](/trellis/docs/hardening) for the h
    can trigger; resume must be rate-limited so a prober or attacker can't run up the bill on an aggressive
    environment.
 
-## Status: what the engine does NOT do yet
+## Status: what the engine implements
 
-This page documents the **position and its guardrails**. The simulator does **not** yet implement it:
+The first slice — the two guardrails everything else depends on — is now in the simulator:
 
-- `Posture` has no `elasticity` / `dormancy` fields, and the fleet cascade does not vary them by
-  environment.
-- The reconcile/health model has **no `Dormant` state** (guardrail 1) and the planner enforces **no
-  parity invariant** (guardrail 2).
-- The cost model still costs provisioned-max only; there is no duty-cycle estimate.
+- **`Posture` carries `elasticity` and `dormancy` tiers**, and the fleet cascade varies them by
+  environment (dev `aggressive` → staging `balanced` → prod `conservative`); `parkClass()` assigns each
+  resource its lever from the same `sensitive = cell === "data" || lifecycle === "stateful"` test.
+- **First-class `Dormant` state** (guardrail 1): a parked resource (`engine.park()` / `wake()`) derives
+  `Dormant` — *before* any health/quorum reading, so a paused DB (quorum 0) or a scaled-to-zero service
+  reads parked, not down. The reconciler **holds** on `Dormant`: it never wakes it, never counts it as
+  drift, and never trips the blast-radius breaker on it. Parked capacity is a settled steady state.
+- **The parity invariant** (guardrail 2): `parityCheck()` compares the desired *shape* across
+  environments (excluding the promoted version and the tier), so a lower env that runs a *smaller* shape
+  — fewer replicas, a dropped resource — is flagged, while a different release tag is not.
 
-Implementing those — first-class `Dormant` in `state.ts`/`reconcile.ts`, the parity invariant in the
-planner, and the two `Posture` tiers with their per-environment cascade — is a **separate, sequenced
-change**, deliberately not bundled with this position so the model can be agreed before the engine moves.
+- **The fleet cascade is now a single shape.** dev, staging, and prod share the same Criticality,
+  resilience, and regions (the prod topology) and the same provisioned **budget ceiling** — they differ
+  only in the version they run and their elasticity/dormancy tiers. The fleet snapshot carries a live
+  **`parity`** signal (`parityCheck` over the deployed envs), so a lower env that ever ran a *smaller*
+  shape is flagged rather than accepted as a saving.
+- **Savings are visible via an expected-cost estimate.** `expectedCost()` discounts a parkable resource's
+  bill by its tier (a clearly-labelled duty-cycle estimate), so dev (aggressive) bills less than prod
+  (conservative) for the *identical* shape. Per guardrail 6 this is **never** the number feasibility gates
+  on — that stays the provisioned ceiling (`manifestCost`).
+- **Resume has latency** (guardrail 4): a woken resource warms through a cold-start window (`Converging`)
+  before it is live — data-consistent, but not free — and the path is tested.
+
+Still **not** modelled (honest follow-ups):
+
+- **No idle *trigger*** — environments don't auto-park on observed idleness; parking is an explicit
+  operator/autoscaler action (`engine.park()` / `wake()`). The expected-cost estimate stands in for the
+  duty cycle until an idleness model exists.
+- **Resume is benign-only** — the dropped-connection / cold-buffer *behaviour* of guardrail 4 is modelled
+  as latency, not yet as a failure path an app must survive.
+- **Denial-of-wallet guard** (guardrail 7) — resume is not yet rate-limited.
