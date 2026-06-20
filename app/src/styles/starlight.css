@@ -150,13 +150,17 @@ body.diagram-overlay-open {
   position: absolute;
   top: 0;
   left: 0;
+  width: 100%;
+  box-sizing: border-box;
   transform-origin: 0 0;
   will-change: transform;
   padding: 1.5rem;
 }
 .diagram-overlay__content svg {
-  max-width: none;
+  display: block;
+  width: 100%;
   height: auto;
+  max-width: none;
 }
 .diagram-overlay__code {
   position: absolute;

@@ -74,7 +74,14 @@ function attachPanZoom(viewport: HTMLElement, content: HTMLElement): PanZoom {
   };
 
   const onPointerDown = (e: PointerEvent): void => {
-    viewport.setPointerCapture(e.pointerId);
+    // Capture so a finger sliding off the viewport keeps driving the gesture.
+    // Guard: throws on some synthetic/edge pointer ids — must not abort tracking
+    // (a thrown capture here would silently break pinch-to-zoom).
+    try {
+      viewport.setPointerCapture(e.pointerId);
+    } catch {
+      /* non-capturable pointer; tracking still works */
+    }
     pointers.set(e.pointerId, local(e.clientX, e.clientY));
     if (pointers.size === 2) {
       const c = centroid();
@@ -164,6 +171,21 @@ function attachPanZoom(viewport: HTMLElement, content: HTMLElement): PanZoom {
 
 interface Overlay {
   open(svg: SVGElement, source: string, mode: "diagram" | "code"): void;
+}
+
+/**
+ * Make the SVG fill its container responsively: keep the viewBox for aspect
+ * ratio but drop the width/height and the `max-width` that Mermaid bakes in from
+ * the *inline* (small / mobile) container — otherwise full screen stays capped to
+ * that small size. The pan/zoom transform then scales from a full-width base.
+ */
+function makeResponsive(svg: SVGElement): void {
+  svg.removeAttribute("width");
+  svg.removeAttribute("height");
+  svg.style.maxWidth = "none";
+  svg.style.maxHeight = "none";
+  svg.style.width = "100%";
+  svg.style.height = "auto";
 }
 
 function icon(path: string): string {
@@ -258,21 +280,7 @@ function getOverlay(): Overlay {
 
   overlaySingleton = {
     open(svg, source, mode): void {
-      // Give the clone a definite intrinsic size from its viewBox and drop
-      // Mermaid's max-width cap, so CSS-transform zoom scales it without a
-      // ceiling (vector, stays crisp at any scale).
-      const vb = svg.getAttribute("viewBox");
-      const dims = vb ? vb.split(/[\s,]+/).map(Number) : null;
-      if (dims && dims.length === 4 && dims[2] > 0 && dims[3] > 0) {
-        svg.setAttribute("width", String(dims[2]));
-        svg.setAttribute("height", String(dims[3]));
-        svg.style.width = `${dims[2]}px`;
-        svg.style.height = `${dims[3]}px`;
-      } else {
-        svg.removeAttribute("height");
-      }
-      svg.style.maxWidth = "none";
-      svg.style.maxHeight = "none";
+      makeResponsive(svg);
       content.replaceChildren(svg);
       codeEl.textContent = source;
       setMode(mode);
