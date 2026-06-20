@@ -858,3 +858,80 @@ describe("parity invariant (docs: Cost & parity, guardrail 2)", () => {
     ).toBe(true);
   });
 });
+
+describe("utilization control loop (idle trigger, cold resume, wallet guard)", () => {
+  function ready(over: Partial<Posture> = {}) {
+    const posture: Posture = { ...DEFAULT_POSTURE, ...over };
+    const e = new Engine(posture);
+    e.declare(posture);
+    e.approve();
+    for (let i = 0; i < 30 && !e.snapshot().converged; i++) e.tick();
+    return e;
+  }
+  const aggressive = (): Posture => ({
+    ...DEFAULT_POSTURE,
+    elasticity: "aggressive",
+    dormancy: "aggressive",
+  });
+  const stateOf = (e: Engine, id: string) => e.snapshot().resources.find((r) => r.id === id)!.state;
+
+  it("an aggressive env auto-parks on observed idleness and resumes on demand", () => {
+    const e = ready(aggressive());
+    const app = e.snapshot().resources.find((r) => r.cell === "app" && r.lifecycle === "service")!;
+
+    // Demand goes away → the autoscaler parks it once idle past the tier threshold.
+    e.setIdle(app.id, true);
+    for (let i = 0; i < 6 && stateOf(e, app.id) !== "Dormant"; i++) e.tick();
+    expect(stateOf(e, app.id)).toBe("Dormant");
+
+    // Demand returns → it resumes on its own (no operator action).
+    e.setIdle(app.id, false);
+    for (let i = 0; i < 10 && stateOf(e, app.id) !== "Converged"; i++) e.tick();
+    expect(stateOf(e, app.id)).toBe("Converged");
+  });
+
+  it("a conservative env never auto-parks, however long it sits idle", () => {
+    const e = ready(); // DEFAULT_POSTURE is conservative
+    const app = e.snapshot().resources.find((r) => r.cell === "app" && r.lifecycle === "service")!;
+    e.setIdle(app.id, true);
+    for (let i = 0; i < 12; i++) e.tick();
+    expect(stateOf(e, app.id)).not.toBe("Dormant"); // warm floor
+  });
+
+  it("a cold resume comes back Degraded and the loop self-heals it (guardrail 4)", () => {
+    const e = ready();
+    const db = e.snapshot().resources.find((r) => r.kind === "managed-relational-db")!;
+    e.park(db.id);
+    e.tick();
+    expect(stateOf(e, db.id)).toBe("Dormant");
+
+    e.coldResume(db.id); // dropped connections / cold buffers
+    e.tick();
+    expect(stateOf(e, db.id)).toBe("Degraded"); // not a free wake — a failure path
+    for (let i = 0; i < 10 && stateOf(e, db.id) !== "Converged"; i++) e.tick();
+    expect(stateOf(e, db.id)).toBe("Converged"); // the loop recovers it
+  });
+
+  it("the denial-of-wallet guard trips on resume thrash and pins warm (guardrail 7)", () => {
+    const e = ready(aggressive());
+    const db = e.snapshot().resources.find((r) => r.kind === "managed-relational-db")!;
+
+    // Thrash: park/resume repeatedly in a tight window.
+    for (let i = 0; i < 5; i++) {
+      e.park(db.id);
+      e.wake(db.id);
+    }
+    expect(e.snapshot().walletGuard).toContain(db.id);
+
+    // Pinned warm: even sustained idleness no longer parks it (churn > warm floor).
+    e.setIdle(db.id, true);
+    for (let i = 0; i < 8; i++) e.tick();
+    expect(stateOf(e, db.id)).not.toBe("Dormant");
+
+    // Resolving the incident lets it park again.
+    e.resolveWalletGuard(db.id);
+    expect(e.snapshot().walletGuard).not.toContain(db.id);
+    for (let i = 0; i < 8 && stateOf(e, db.id) !== "Dormant"; i++) e.tick();
+    expect(stateOf(e, db.id)).toBe("Dormant");
+  });
+});
