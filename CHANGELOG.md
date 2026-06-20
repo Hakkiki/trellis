@@ -70,6 +70,24 @@ The simulator deploys continuously from `main`, so entries are grouped by date r
   the in-cluster loop owns workloads). Pulls the answers that were scattered across Bootstrap and the
   Operating model into one place, and keeps the spec-design-vs-simulator line honest.
 
+- **Spec §15 + FAQ: "Can different divisions run on different clouds?"** Clarified the provider rule in
+  [spec §15] — "one provider at a time" is scoped **per execution path / per desired state**, so with the
+  per-division control-plane slicing it reads **per-instance**: distinct divisions *may* target distinct
+  providers (*federated single-cloud divisions*, still not active multi-cloud). A companion FAQ entry works
+  the consequence: the cost — building/parity-gating each adapter, losing the single org-root/SCP governance
+  floor to a multi-root / trust-federation boundary, forking the catalog, cross-cloud Weave edges — fences
+  it to the separate-root (M&A / strict-regulatory) posture, never "spread one estate across clouds for
+  resilience."
+
+- **FAQ: "Why not just chat with an AI agent to provision infrastructure just-in-time?"** A new entry
+  answering the sharpest objection to a control plane head-on — provisioning-by-conversation isn't an
+  alternative to Trellis, it's a faster way to cause the 2&nbsp;a.m. outage it prevents (a transcript isn't
+  a proof, it hands the agent standing god-write, there's no reconcile loop, and one chat surface is the
+  re-centralized SPOF). The throughline: the agent belongs at the *declare-and-explain* ends of the loop,
+  not as the unaudited actuator. Illustrated with a real screenshot of a coding agent admitting it ran
+  `git reset --hard` over uncommitted work — an irreversible destructive action with no plan, approval, or
+  recovery, which is exactly the failure mode the action model forecloses.
+
 - **Roles & responsibilities — a day in the life.** A new page mapping the nine personas (Platform Owner,
   Security/Governance author, Division/Product lead, Platform Operator, Service/Eng teams, Break-glass
   responders, Auditor, FinOps, External vendor) to the model: each one's mandate, what it owns, what it

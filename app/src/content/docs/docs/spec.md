@@ -1349,6 +1349,14 @@ lowest-common-denominator trap anyway. The strategy is **abstract with a contrac
 > execution path of the same desired state, brought to parity by the same agreement discipline that keeps
 > the reconciler honest.)
 
+"One provider at a time" is scoped **per execution path / per desired state** — not company-wide. Because
+the control plane is sliced per division (§16, each instance carries its own desired state), the rule is a
+**per-instance** property: every instance executes exactly one provider richly, but distinct divisions *may*
+target distinct providers. That is **federated single-cloud divisions**, still not active multi-cloud (no
+single desired state spans providers). It is only coherent in the **separate-root** posture — heterogeneous
+clouds give up the single org-root/SCP governance floor for a multi-root / trust-federation boundary — so it
+belongs to the strict-regulatory / M&A case, never to "spread one estate across clouds for resilience."
+
 ### The contract is capability-intent, not resource-type
 
 This avoids the lowest-common-denominator trap:
