@@ -7,6 +7,16 @@ The simulator deploys continuously from `main`, so entries are grouped by date r
 
 ### Added
 
+- **Cost & parity: "cost-effectiveness, not cost optimization."** A new framing section on the
+  [Cost & parity](https://hakkiki.github.io/trellis/docs/cost-and-parity) page argues cost is a property
+  **held continuously**, not a saving banked once — the same reason a desired state needs a reconcile
+  loop, applied to spend. Optimization is open-loop (solve once); effectiveness is closed-loop (track a
+  moving setpoint, reject disturbances). "Effective" needs a denominator (value/outcome), and the optimum
+  *moves* with business drivers — over-optimizing even eats the slack you need to respond. The section is
+  explicit that the page's current levers are the **static, plan-time** version, and names the honest
+  reconciled model (a value term in the loop, a moving cost setpoint in Posture, demand-driven tiers) as
+  the biggest open follow-up.
+
 - **Engine: elasticity / dormancy levers + a first-class `Dormant` state.** The first slice of the
   [Cost & parity](https://hakkiki.github.io/trellis/docs/cost-and-parity) model lands in the simulator.
   `Posture` gains `elasticity` and `dormancy` tiers (`aggressive · balanced · conservative`), the fleet

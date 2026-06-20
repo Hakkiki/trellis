@@ -1,13 +1,57 @@
 ---
 title: "Cost & parity — elasticity and dormancy"
-description: How Trellis lets dev and staging save money without losing prod parity — two utilization levers (elasticity for stateless, dormancy for stateful), the AWS service split, and the guardrails that keep determinism and consistency intact.
+description: Why cost is cost-effectiveness (a continuously reconciled property), not a one-time optimization — and how Trellis lets dev and staging cost less without losing prod parity, via two utilization levers (elasticity for stateless, dormancy for stateful), the AWS service split, and the guardrails that keep determinism and consistency intact.
 ---
 
-> **Applied decision & guidance** — extends and applies the [specification](/trellis/docs/spec) (the source of truth); not itself normative. The model below is a **documented position**; the engine support it implies is scoped follow-up, not yet built — see [Status](#status-what-the-engine-does-not-do-yet).
+> **Applied decision & guidance** — extends and applies the [specification](/trellis/docs/spec) (the source of truth); not itself normative. The first engine slice is built; what is and isn't — see [Status](#status-what-the-engine-implements).
 
 The business always wants to shut down unused compute and run dev cheaper than prod. Engineers always
 need to test against a **prod-like** environment. These pull in opposite directions only if you save
 money by making lower environments **smaller**. Trellis takes a different position.
+
+## Cost-effectiveness, not cost optimization
+
+"Cost optimization" is a verb sold as a noun. You can *run* an optimization; you cannot *be* optimized and
+walk away. Spend drifts off the moment demand, prices, or business priorities move — and they never stop
+moving — so an "optimized" environment is unoptimized by next week. Selling the operation as a delivered
+state is the marketing sin. Trellis is in the business of **cost-effectiveness: a property held
+continuously, not a saving banked once.**
+
+This is the same argument Trellis makes about everything else. A desired state decays; that is *why* there
+is a reconcile loop and not just a planner. Cost is no exception — it is one more property the loop must
+**hold against drift**, with disturbances (demand spikes, price changes, a new business driver) that never
+quit. Optimization is **open-loop** — solve once, leave. Effectiveness is **closed-loop** — track a moving
+setpoint, reject disturbances. Open-loop control of a system with disturbances is *guaranteed* to drift
+off; that drift is exactly what "we optimized your spend 30%" quietly becomes.
+
+**Effective needs a denominator.** Effective relative to *what?* — value delivered: SLOs, throughput,
+revenue. Pure cost *minimization* is seductive because it drops the denominator (cheaper is always
+"better" if you never say better *at what*), and that is precisely why it is wrong. Put the denominator
+back and the optimum **moves**: on Black Friday the cost-effective act is to spend *more*, immediately. A
+system tuned to minimize cost gets that catastrophically backwards. Cost-effectiveness is a ratio you hold
+while *both* terms move under you — non-stationary by nature, never "done."
+
+**Over-optimization eats the slack you need to respond.** The headroom you cut to look optimal is the same
+option-value that absorbs the next business driver. Optimize hard enough and you *lower* effectiveness,
+because you optimized away the ability to react. Effectiveness has to price in the option to move.
+
+### What this means for the engine today — honestly
+
+The levers in the rest of this page are, right now, the **static, plan-time** version — the floor of the
+idea, not the finished one:
+
+- the planner's `minimize-cost` objective solves **once**, at plan time;
+- the elasticity/dormancy tiers are fixed **by environment** (dev = aggressive), not driven by observed
+  demand — a label is not a loop;
+- the only continuously cost-aware thing in the model, **cost-drift detection** (§13, billed vs planned),
+  *observes and flags* but never **re-optimizes**: it sees that you've left the setpoint, it does not
+  track the setpoint as it moves.
+
+Making this honest is a model change, not a tuning pass. Cost-effectiveness becomes a **reconciled
+property**: (1) a **value/outcome term** in the loop so "effective" has a denominator; (2) the cost
+setpoint treated as a **live Posture input** that moves with business drivers, not a static budget; and
+(3) the tiers driven by **observed demand**, not an env label. Until then, read "savings" on this page as
+the *plan-time estimate* it is.
 
 ## The position: parity of *shape*, savings from *utilization*
 
@@ -159,9 +203,14 @@ The first slice — the two guardrails everything else depends on — is now in 
 
 Still **not** modelled (honest follow-ups):
 
+- **Cost is still plan-time, not a reconciled property** — the biggest gap, and the one
+  [Cost-effectiveness, not cost optimization](#cost-effectiveness-not-cost-optimization) calls out: the
+  objective solves once, the tiers are fixed by env, and cost-drift detection observes without
+  re-optimizing. The honest version is a closed loop with a value/outcome term, a moving cost setpoint in
+  Posture, and demand-driven tiers.
 - **No idle *trigger*** — environments don't auto-park on observed idleness; parking is an explicit
   operator/autoscaler action (`engine.park()` / `wake()`). The expected-cost estimate stands in for the
-  duty cycle until an idleness model exists.
+  duty cycle until an idleness model exists. (This is the demand-driven half of the gap above.)
 - **Resume is benign-only** — the dropped-connection / cold-buffer *behaviour* of guardrail 4 is modelled
   as latency, not yet as a failure path an app must survive.
 - **Denial-of-wallet guard** (guardrail 7) — resume is not yet rate-limited.
