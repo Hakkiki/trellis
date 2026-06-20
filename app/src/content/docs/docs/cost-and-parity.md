@@ -130,16 +130,27 @@ backfires — see the [inversion stress test](/trellis/docs/hardening) for the h
    can trigger; resume must be rate-limited so a prober or attacker can't run up the bill on an aggressive
    environment.
 
-## Status: what the engine does NOT do yet
+## Status: what the engine implements
 
-This page documents the **position and its guardrails**. The simulator does **not** yet implement it:
+The first slice — the two guardrails everything else depends on — is now in the simulator:
 
-- `Posture` has no `elasticity` / `dormancy` fields, and the fleet cascade does not vary them by
-  environment.
-- The reconcile/health model has **no `Dormant` state** (guardrail 1) and the planner enforces **no
-  parity invariant** (guardrail 2).
-- The cost model still costs provisioned-max only; there is no duty-cycle estimate.
+- **`Posture` carries `elasticity` and `dormancy` tiers**, and the fleet cascade varies them by
+  environment (dev `aggressive` → staging `balanced` → prod `conservative`); `parkClass()` assigns each
+  resource its lever from the same `sensitive = cell === "data" || lifecycle === "stateful"` test.
+- **First-class `Dormant` state** (guardrail 1): a parked resource (`engine.park()` / `wake()`) derives
+  `Dormant` — *before* any health/quorum reading, so a paused DB (quorum 0) or a scaled-to-zero service
+  reads parked, not down. The reconciler **holds** on `Dormant`: it never wakes it, never counts it as
+  drift, and never trips the blast-radius breaker on it. Parked capacity is a settled steady state.
+- **The parity invariant** (guardrail 2): `parityCheck()` compares the desired *shape* across
+  environments (excluding the promoted version and the tier), so a lower env that runs a *smaller* shape
+  — fewer replicas, a dropped resource — is flagged, while a different release tag is not.
 
-Implementing those — first-class `Dormant` in `state.ts`/`reconcile.ts`, the parity invariant in the
-planner, and the two `Posture` tiers with their per-environment cascade — is a **separate, sequenced
-change**, deliberately not bundled with this position so the model can be agreed before the engine moves.
+Still **not** modelled (honest follow-ups):
+
+- **Resume is immediate** — the cold-start / dropped-connection behaviour of guardrail 4 is named but not
+  yet simulated as a tested path.
+- **The live fleet cascade still varies Criticality** (dev C3 → prod C0), so it trades parity for cost the
+  *old* way; `parityCheck()` is the tool, but moving the cascade to a single shape (parity enforced, cost
+  taken only via the tiers) is a product change with budget implications, sequenced separately.
+- **Cost is still provisioned-max only** (the deterministic ceiling, guardrail 6) — there is no
+  duty-cycle savings estimate yet.

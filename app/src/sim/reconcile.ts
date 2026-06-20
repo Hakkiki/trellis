@@ -183,7 +183,7 @@ export class Reconciler {
           ? "Stalled"
           : "Settled";
       const st = derive(d, o, control, nowMs, this.stalenessBudgetMs);
-      if (st === "Converged") {
+      if (st === "Converged" || st === "Dormant") {
         this.attempts.delete(id);
         this.stalled.delete(id);
       }
@@ -195,6 +195,11 @@ export class Reconciler {
       switch (st) {
         case "Converged":
           reason = "matches spec and healthy";
+          break;
+        case "Dormant":
+          // Intentionally parked to save cost — hold. Waking it would fight the
+          // utilization lever; treating it as drift would page on a healthy idle.
+          reason = "intentionally dormant — parked to save cost (not drift)";
           break;
         case "Converging":
           intended = "apply";

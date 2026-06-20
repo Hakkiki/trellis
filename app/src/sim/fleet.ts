@@ -6,7 +6,7 @@
 // observed state. "What you validated is what shipped."
 
 import { type AuditClass, type AuditEntry, type ResourceView, securityTier } from "./engine";
-import type { Criticality, Manifest, Posture, Resilience } from "./model";
+import type { Criticality, Manifest, Posture, Resilience, Tier } from "./model";
 import { manifestCost, resourceCost, plan as runPlanner } from "./planner";
 import { Reconciler, type Status } from "./reconcile";
 import { SimCloud } from "./sim";
@@ -20,6 +20,10 @@ interface EnvDef {
   resilience: Resilience;
   regions: string[];
   budget: number;
+  // Utilization tiers (docs: Cost & parity): lower environments park idle
+  // capacity more aggressively to save cost, without changing the shape.
+  elasticity: Tier;
+  dormancy: Tier;
 }
 
 const ENV_DEFS: EnvDef[] = [
@@ -30,6 +34,8 @@ const ENV_DEFS: EnvDef[] = [
     resilience: "single",
     regions: ["us-east-1"],
     budget: 3000,
+    elasticity: "aggressive",
+    dormancy: "aggressive",
   },
   {
     id: "staging",
@@ -38,6 +44,8 @@ const ENV_DEFS: EnvDef[] = [
     resilience: "active-passive",
     regions: ["us-east-1", "eu-west-1"],
     budget: 6000,
+    elasticity: "balanced",
+    dormancy: "balanced",
   },
   {
     id: "prod",
@@ -46,6 +54,8 @@ const ENV_DEFS: EnvDef[] = [
     resilience: "active-active",
     regions: ["us-east-1", "eu-west-1"],
     budget: 12000,
+    elasticity: "conservative",
+    dormancy: "conservative",
   },
 ];
 
@@ -91,7 +101,8 @@ const ORDER: EnvId[] = ["dev", "staging", "prod"];
 /** A workload is settled per its lifecycle (jobs cycle; services/externals converge). */
 function settled(state: string, lifecycle: string): boolean {
   if (lifecycle === "job") return state !== "Failed";
-  return state === "Converged";
+  // Parked capacity (docs: Cost & parity) is a good steady state.
+  return state === "Converged" || state === "Dormant";
 }
 
 export class Fleet {
@@ -159,6 +170,8 @@ export class Fleet {
       optimize: "minimize-cost",
       compliance: this.base.compliance,
       governanceServices: ["load-balancer", "compute", "managed-relational-db"],
+      elasticity: env.def.elasticity,
+      dormancy: env.def.dormancy,
     };
     this.gen += 1;
     const p = runPlanner(posture, this.gen);

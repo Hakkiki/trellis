@@ -28,6 +28,7 @@ interface SimResource {
   convergeIn: number; // ticks until target becomes observed
   exists: boolean;
   stale: boolean;
+  dormant: boolean; // intentionally parked (scaled-to-zero / paused) to save cost
   broken: boolean; // root-cause failure that self-heal cannot fix
   costFactor: number; // billed ÷ planned — 1 normally; >1 is cost drift (§13)
   observedAtMs: number;
@@ -122,6 +123,7 @@ export class SimCloud implements Provider {
         convergeIn: 0,
         exists: false,
         stale: false,
+        dormant: false,
         broken: false,
         costFactor: 1,
         observedAtMs: this.nowMs,
@@ -181,6 +183,7 @@ export class SimCloud implements Provider {
       convergeIn: 0,
       exists: true,
       stale: false,
+      dormant: false,
       broken: false,
       costFactor: 1,
       observedAtMs: this.nowMs,
@@ -212,13 +215,17 @@ export class SimCloud implements Provider {
 
   private toObservation(id: ResourceID, r: SimResource): Observation {
     const stateful = r.lifecycle === "stateful";
-    const health: Health = !r.exists
-      ? "Unknown"
-      : stateful
-        ? r.nodesDown > 0
-          ? "Degraded"
-          : "Healthy"
-        : r.health;
+    // A parked resource is intentionally suspended, not unhealthy — report it
+    // Healthy so the dormant flag (not a degraded reading) carries the meaning.
+    const health: Health = r.dormant
+      ? "Healthy"
+      : !r.exists
+        ? "Unknown"
+        : stateful
+          ? r.nodesDown > 0
+            ? "Degraded"
+            : "Healthy"
+          : r.health;
     return {
       id,
       exists: r.exists,
@@ -228,7 +235,29 @@ export class SimCloud implements Provider {
       observedAtMs: r.observedAtMs,
       phase: r.lifecycle === "job" ? r.phase : undefined,
       quorum: stateful ? { healthy: r.nodesTotal - r.nodesDown, total: r.nodesTotal } : undefined,
+      dormant: r.dormant || undefined,
     };
+  }
+
+  // ---- Utilization levers: park idle capacity, resume on demand ------------
+
+  /** Park a resource: scale-to-zero (elasticity) or pause (dormancy). Durable
+   *  state is retained — this suspends compute, it does not delete (docs: Cost
+   *  & parity). The reconciler reads the result as Dormant, not down. */
+  park(id: ResourceID) {
+    const r = this.res.get(id);
+    if (r) r.dormant = true;
+  }
+
+  /** Resume a parked resource. Durable state is intact, so it comes back as it
+   *  was — a real cold-start would add resume latency; here wake is immediate. */
+  wake(id: ResourceID) {
+    const r = this.res.get(id);
+    if (r) {
+      r.dormant = false;
+      r.health = "Healthy";
+      r.nodesDown = 0;
+    }
   }
 
   // ---- Fault injection (sim-only; the dynamics the loop must survive) ------

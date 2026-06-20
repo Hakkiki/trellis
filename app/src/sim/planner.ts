@@ -445,3 +445,51 @@ export function manifestCost(m: Manifest): number {
   for (const r of Object.values(m.resources)) cost += resourceCost(r);
   return cost;
 }
+
+// ---- Parity invariant (docs: Cost & parity, guardrail 2) -------------------
+
+/** A resource's parity *shape* — what must be identical across environments for
+ *  dev/staging/prod parity. Excludes the promoted version (`release`) and the
+ *  utilization tier / dormancy: only the desired shape (kind, placement, size,
+ *  replicas, HA, quorum) counts, so an env can be cheaper by parking idle
+ *  capacity but never by running a *smaller* shape. */
+export function parityShape(r: DesiredResource): string {
+  return [
+    r.service,
+    r.cell,
+    r.region,
+    r.kind,
+    r.spec.size ?? "",
+    r.spec.replicas ?? "",
+    r.spec.multiAZ ?? "",
+    r.spec.nodes ?? "",
+  ].join("|");
+}
+
+export interface ParityResult {
+  ok: boolean;
+  violations: string[];
+}
+
+/** Parity invariant: every environment must share the same desired *shape*;
+ *  only the elasticity/dormancy tier may differ. A lower environment with a
+ *  missing or shrunk shape is a violation — this is what keeps "more aggressive
+ *  in dev" from silently decaying into "smaller in dev". Compares each env to
+ *  the first (the reference, e.g. prod). */
+export function parityCheck(envs: { id: string; manifest: Manifest }[]): ParityResult {
+  const sigSet = (m: Manifest) => new Set(Object.values(m.resources).map(parityShape));
+  if (envs.length < 2) return { ok: true, violations: [] };
+  const [ref, ...rest] = envs;
+  const refSig = sigSet(ref.manifest);
+  const violations: string[] = [];
+  for (const e of rest) {
+    const sig = sigSet(e.manifest);
+    for (const s of refSig) {
+      if (!sig.has(s)) violations.push(`${e.id} is missing a shape present in ${ref.id}: ${s}`);
+    }
+    for (const s of sig) {
+      if (!refSig.has(s)) violations.push(`${e.id} has a shape absent from ${ref.id}: ${s}`);
+    }
+  }
+  return { ok: violations.length === 0, violations };
+}

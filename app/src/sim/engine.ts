@@ -13,6 +13,8 @@ import {
   type Manifest,
   type Plan,
   type Posture,
+  parkable,
+  parkClass,
   type Resilience,
   type ResourceID,
   servicesOf,
@@ -151,6 +153,10 @@ export const DEFAULT_POSTURE: Posture = {
     { name: "internal-dashboard", criticality: "C3" },
   ],
   budgetPolicy: "alert",
+  // A prod-like single environment: never park (docs: Cost & parity). Lower
+  // environments carry more aggressive tiers (see the fleet cascade).
+  elasticity: "conservative",
+  dormancy: "conservative",
 };
 
 // Break-glass rate signal (§7): how many freezes within the trailing window
@@ -401,6 +407,34 @@ export class Engine {
   failNode(id: ResourceID) {
     this.cloud.failNode(id);
     this.log("Observe", "fault", "node-failure", id, "underlying node died");
+  }
+
+  /** Park idle capacity to save cost (docs: Cost & parity). Only parkable
+   *  resources park — a load balancer is fixed, jobs/external have no lever. The
+   *  desired shape is unchanged, so parity holds; only realized cost drops. The
+   *  reconciler reads the result as Dormant, not down, and holds (never wakes). */
+  park(id: ResourceID) {
+    const d = this.manifest?.resources[id];
+    if (!d || !parkable(d)) return;
+    this.cloud.park(id);
+    this.log(
+      "Observe",
+      "autoscaler",
+      "park",
+      id,
+      parkClass(d) === "dormancy"
+        ? "idle — paused, durable storage retained (dormancy)"
+        : "idle — scaled to zero (elasticity)",
+    );
+  }
+
+  /** Resume a parked resource when demand returns. Durable state is intact, so
+   *  it comes back as the same shape it was — parity preserved. */
+  wake(id: ResourceID) {
+    const d = this.manifest?.resources[id];
+    if (!d) return;
+    this.cloud.wake(id);
+    this.log("Observe", "autoscaler", "wake", id, "demand returned — resumed");
   }
 
   /** Cost drift (§13): the cloud starts billing a resource above plan (usage
@@ -683,7 +717,8 @@ export class Engine {
  *  externals when Converged; jobs whenever they aren't Failed (they cycle). */
 function isSettled(r: ResourceView): boolean {
   if (r.lifecycle === "job") return r.state !== "Failed";
-  return r.state === "Converged";
+  // Parked capacity is a good steady state — it doesn't break convergence.
+  return r.state === "Converged" || r.state === "Dormant";
 }
 
 /** Resilience parameterizes how the environment reads a degraded region (§4):
