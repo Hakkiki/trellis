@@ -256,6 +256,18 @@ The simulator deploys continuously from `main`, so entries are grouped by date r
   team-authored, and `gate-check` is now **adapter-enforced admission** rather than an advisory pipeline
   step. Recorded as the fifth pass in §21 with honest residuals named.
 
+- **Cost & parity — elasticity and dormancy.** A new applied-decision page stating how lower environments
+  save money *without* losing prod parity: keep the desired **shape** identical everywhere and take the
+  savings from **utilization** (parking idle capacity), not from a smaller dev. Two levers share one
+  three-tier vocabulary — `elasticity` (stateless compute: ASG/Karpenter, scale to zero) and `dormancy`
+  (stateful services: pause, keep durable storage) — with the class boundary grounded in the engine's
+  existing `sensitive = cell === "data" || lifecycle === "stateful"` test. Includes an **explicit AWS
+  position** per service class (EKS/Karpenter, Lambda no-op, ALB never-zero; Aurora pause-not-delete,
+  quorum all-or-nothing, ElastiCache discard-safe) and a **guardrails** section derived by inversion
+  (first-class `Dormant` state, an enforced parity invariant, consistency/determinism protections,
+  denial-of-wallet). Documented position only — the page is explicit that the engine does **not** yet
+  implement the levers, the `Dormant` state, or the parity invariant; that is sequenced follow-up.
+
 - **Roles & responsibilities — a day in the life.** A new page mapping the nine personas (Platform Owner,
   Security/Governance author, Division/Product lead, Platform Operator, Service/Eng teams, Break-glass
   responders, Auditor, FinOps, External vendor) to the model: each one's mandate, what it owns, what it

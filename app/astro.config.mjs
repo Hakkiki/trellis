@@ -67,6 +67,7 @@ export default defineConfig({
             { label: "Operating model", slug: "docs/operating-model" },
             { label: "Bootstrap & footprint", slug: "docs/bootstrap" },
             { label: "Inversion stress test", slug: "docs/hardening" },
+            { label: "Cost & parity", slug: "docs/cost-and-parity" },
             { label: "Provider crosswalk", slug: "docs/provider-crosswalk" },
             { label: "Architecture", slug: "docs/architecture" },
           ],

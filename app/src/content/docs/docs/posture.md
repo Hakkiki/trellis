@@ -32,3 +32,10 @@ expands into a coordinated bundle across the other axes. In the simulator it set
 
 Try it in the [simulator](/trellis/simulator/): switch C0 → C3 and re-plan to see the structure and cost
 move together.
+
+## Cost without losing parity
+
+Lower environments cost less by **parking idle capacity**, not by shrinking the shape — so dev stays
+prod-like while still saving money. Two utilization levers (`elasticity` for stateless compute,
+`dormancy` for stateful services) realize the Budget objective without touching the Resilience shape. See
+[Cost & parity](/trellis/docs/cost-and-parity).
