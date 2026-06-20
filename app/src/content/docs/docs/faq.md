@@ -479,10 +479,10 @@ or regulatory-separation boundary where two divisions were never going to share 
 **wrong** tool for "we'd like our infra spread across three clouds for resilience" — that's the
 lowest-common-denominator trap §15 exists to refuse.
 
-**Honest status:** this is *applied guidance composed from* §15 + the operating model, not a spec-blessed
-feature — and it's doubly hypothetical today, since even the first (AWS) adapter isn't built yet. If it
-were ever pursued, the per-instance reading of §15 and the multi-root governance model are the two things
-the spec would need to state outright.
+**Honest status:** the per-instance reading is now stated outright in [spec §15](/trellis/docs/spec), so
+this is applied guidance *on* the spec, not an extension of it — but it remains hypothetical in practice,
+since even the first (AWS) adapter isn't built yet, and the multi-root governance model it implies is
+deliberately fenced to the separate-root (M&A / strict-regulatory) case.
 
 ### What integrations does it have, or will it have?
 
