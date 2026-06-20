@@ -141,7 +141,7 @@ because:
 
 - entries are signed and versioned, and consumers **pin** them;
 - a new catalog version **auto-deploys nowhere** — each division promotes it on its own schedule,
-  canaried (the [Promotion](/trellis/promotion) model). A bad publish takes *nobody* down; the division
+  canaried (the [Promotion](/trellis/promotion/) model). A bad publish takes *nobody* down; the division
   that adopts it early blinks and recovers, and the rest simply haven't pinned it yet.
 
 So even the one genuinely shared thing is a **pull-and-promote registry**, not a synchronous-fate

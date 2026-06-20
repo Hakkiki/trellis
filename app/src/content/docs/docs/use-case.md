@@ -102,7 +102,7 @@ Part of adopting this model is that decomposition conversation. It's worth havin
 
 ## See it in the simulator
 
-The behaviors this use case relies on are all live in the [simulator](/trellis/simulator):
+The behaviors this use case relies on are all live in the [simulator](/trellis/simulator/):
 
 - **Self-upgrade** — propose an upgrade, clear a dual-control gate, watch it canary, and recover a bad
   one with re-bootstrap. (This is the shared-service-upgrade story, contained.)
