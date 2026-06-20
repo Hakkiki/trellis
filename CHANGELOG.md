@@ -104,11 +104,12 @@ The simulator deploys continuously from `main`, so entries are grouped by date r
   unauthored change, correcting") plus the generation it's converging toward — so the operator decides on
   evidence, not panic, and can tell "the loop is fighting me" from "the loop is right"; (§7) **break-glass
   *rate* is now a first-class gate-health signal** — computed from the persisted audit log (survives
-  reload, no extra state), it raises a "check the gate, not the operator" card when the glass is opened too
-  often in the trailing window, and decays on its own. The **§13 incident surface** now rolls up Frozen
-  (break-glass debt) alongside Stalled — each row shows the loop's belief and offers the right action
-  (Resolve root cause / Ratify the debt), so an override is decided on evidence and the Frozen debt is
-  loud, never a silent un-healed hole. Locked by four new engine tests.
+  reload, no extra state). The **§13 incident surface** is now the single home for the override loop: it
+  rolls up Stalled and Frozen (break-glass debt) resources, each row showing the loop's belief and the
+  right action (Resolve root cause / Ratify the debt), and it carries the break-glass *rate* banner —
+  "check the gate, not the operator" — since the spec routes that signal *via* §13. So an override is
+  decided on evidence, the Frozen debt is loud (never a silent un-healed hole), and a miscalibrated gate
+  is visible. A new **guided-tour step** walks break-glass → debt → ratify. Locked by four engine tests.
 
 - **Break-glass triggers — inversion red-team.** A new doc
   ([`docs/trellis-breakglass-redteam.md`](docs/trellis-breakglass-redteam.md)) reasons about the one state

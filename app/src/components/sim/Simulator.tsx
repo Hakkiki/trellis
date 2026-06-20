@@ -553,7 +553,10 @@ export default function Simulator() {
                 />
               </CardContent>
               {sel && (
-                <div className="border-border/60 mx-6 mb-4 rounded-md border border-dashed px-3 py-2 text-[11px] leading-relaxed">
+                <div
+                  id="tour-breakglass"
+                  className="border-border/60 mx-6 mb-4 rounded-md border border-dashed px-3 py-2 text-[11px] leading-relaxed"
+                >
                   {frozenIds.has(sel.id) ? (
                     <p className="text-muted-foreground">
                       <span className="font-medium text-[var(--state-frozen)]">
@@ -657,30 +660,14 @@ export default function Simulator() {
             </Card>
           )}
 
-          {phase === "applied" && snap?.breakGlassSignal.noisy && (
-            <Card className="border-[var(--state-stalled)]">
-              <CardContent className="flex items-start gap-3 pt-6 text-sm">
-                <ShieldAlert className="size-5 shrink-0 text-[var(--state-stalled)]" />
-                <div className="flex-1">
-                  <div className="font-semibold text-[var(--state-stalled)]">
-                    Break-glass is frequent — check the gate, not the operator
-                  </div>
-                  <p className="text-muted-foreground">
-                    {snap.breakGlassSignal.recent} break-glass opens in the recent window. The rate
-                    is a gate-health signal (§7): a frequently-opened glass diagnoses a
-                    miscalibrated gate — make normal Authoring fast (Inv 18) so the emergency path
-                    stays rare.
-                  </p>
-                </div>
-              </CardContent>
-            </Card>
-          )}
-
           {phase === "applied" &&
-            ((snap?.incidents.length ?? 0) > 0 || (snap?.frozenDebts.length ?? 0) > 0) && (
+            ((snap?.incidents.length ?? 0) > 0 ||
+              (snap?.frozenDebts.length ?? 0) > 0 ||
+              snap?.breakGlassSignal.noisy) && (
               <IncidentSurface
                 incidents={snap!.incidents}
                 frozen={snap!.frozenDebts}
+                breakGlass={snap!.breakGlassSignal}
                 onResolve={(id) => act((e) => e.resolveIncident(id))}
                 onRatify={(id) => act((e) => e.ratify(id))}
                 onSelect={setSelected}
@@ -1535,23 +1522,26 @@ function ProofPanel({
 function IncidentSurface({
   incidents,
   frozen,
+  breakGlass,
   onResolve,
   onRatify,
   onSelect,
 }: {
   incidents: Incident[];
   frozen: Incident[];
+  breakGlass: EngineSnapshot["breakGlassSignal"];
   onResolve: (id: string) => void;
   onRatify: (id: string) => void;
   onSelect: (id: string) => void;
 }) {
   const regions = [...new Set([...incidents, ...frozen].map((i) => i.region))];
-  const title = [
-    incidents.length ? `${incidents.length} Stalled` : null,
-    frozen.length ? `${frozen.length} Frozen` : null,
-  ]
-    .filter(Boolean)
-    .join(" · ");
+  const title =
+    [
+      incidents.length ? `${incidents.length} Stalled` : null,
+      frozen.length ? `${frozen.length} Frozen` : null,
+    ]
+      .filter(Boolean)
+      .join(" · ") || "gate-health signal";
   return (
     <Card className="border-[var(--state-stalled)]">
       <CardHeader className="pb-2">
@@ -1563,9 +1553,22 @@ function IncidentSurface({
       <CardContent className="space-y-2 text-xs">
         <p className="text-muted-foreground">
           The §13 rollup of Stalled + Frozen resources, joined to the audit log and routed by Frame
-          + Criticality to on-call. Blast radius: {regions.join(", ")}. Each row shows the loop's
-          belief — decide on evidence (§13).
+          + Criticality to on-call.{regions.length ? ` Blast radius: ${regions.join(", ")}.` : ""}{" "}
+          Each row shows the loop's belief — decide on evidence (§13).
         </p>
+        {breakGlass.noisy && (
+          <div className="flex items-start gap-2 rounded-md border border-[var(--state-stalled)]/60 bg-[var(--state-stalled)]/10 px-2 py-1.5">
+            <ShieldAlert className="mt-0.5 size-4 shrink-0 text-[var(--state-stalled)]" />
+            <p className="text-muted-foreground">
+              <span className="font-medium text-[var(--state-stalled)]">
+                Break-glass is frequent — check the gate, not the operator.
+              </span>{" "}
+              {breakGlass.recent} opens in the recent window. The rate is a gate-health signal (§7):
+              a frequently-opened glass diagnoses a miscalibrated gate — make normal Authoring fast
+              (Inv 18) so the emergency path stays rare.
+            </p>
+          </div>
+        )}
         {incidents.map((inc) => (
           <div
             key={inc.id}
