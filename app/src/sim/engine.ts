@@ -132,6 +132,7 @@ export interface ServiceRollup {
   version: string; // running version the runtime holds (§11 inner loop)
   rollout: RolloutState | null; // active rollout state, null when settled
   rolloutArtifact: string; // the version being rolled out, when active
+  rolloutShare: number; // % of traffic the rollout currently carries (canary step)
 }
 
 export const DEFAULT_POSTURE: Posture = {
@@ -636,6 +637,7 @@ export class Engine {
         version: this.teamRollout.currentVersion(sl),
         rollout: active ? active.state : null,
         rolloutArtifact: active ? active.artifact : "",
+        rolloutShare: active ? active.share : 0,
       };
     });
     return {

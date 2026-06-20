@@ -17,6 +17,9 @@ The simulator deploys continuously from `main`, so entries are grouped by date r
 
 ### Changed
 
+- **Owners panel: the rollout badge now shows canary progress.** It read `▶ Progressing v2`, which looked
+  stuck as the state oscillated `Progressing ⇄ Verifying`. It now appends the traffic share — `▶ Progressing
+  v2 · 10%` → `· 50%` → `· 100%` — so a canary reads as forward progress (`ServiceRollup.rolloutShare`).
 - **Simulator reframed to the observer model.** The rollout engine now *says* what the spec says: the
   class that holds a Service's running version and drives its canary is `TeamRollout` (it stands in for the
   team's own Argo/Flagger/Spinnaker), and the Engine **observes** it rather than running it

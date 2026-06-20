@@ -1050,6 +1050,7 @@ function OwnersPanel({
                     }}
                   >
                     ▶ {r.rollout} {r.rolloutArtifact}
+                    {r.rolloutShare > 0 ? ` · ${r.rolloutShare}%` : ""}
                   </span>
                 )}
               </span>
