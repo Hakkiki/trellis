@@ -43,48 +43,41 @@ necessarily the low-level apply.
 
 ### Why not just chat with an AI agent to provision infrastructure just-in-time?
 
-This is the sharpest version of the objection, and it deserves a straight answer: *if I can just talk to a
-capable model and have it spin up what I need on demand, who needs a control plane?* The honest reply is
-that provisioning-by-conversation isn't an alternative to Trellis — it's a faster, friendlier way to cause
-the exact 2&nbsp;a.m. outage Trellis exists to prevent. The agent is a fantastic **driver**; Trellis is the
-**road, the rails, and the brakes**. You don't skip the rails because the driver got good.
+Because that puts the model in the one seat it should never hold: the hand on the cloud. An agent makes a
+great driver. Trellis is the road, the rails, and the brakes. A good driver still needs all three.
 
-Point by point, against the four action classes above:
+Walk it through the four action classes above:
 
-- **A transcript is not a proof, and the prose can lie about the API calls.** Trellis's whole premise is
-  that the plan *is its own proof* — every resource traces to a reason, a human approves *that artifact*,
-  and the credential scope is **re-derived from the signed plan**, not from what the actor claimed. "Approve
-  this English summary" is structurally weaker than "approve this signed, machine-checkable diff" — it's the
-  confused-deputy gap (a benign-sounding rationale over an attacker- or accident-chosen scope) by another
-  name.
-- **It hands the agent standing god-write.** An always-available "provision whatever we need" assistant is,
-  by construction, broad standing privilege on a shared surface — the one thing the model refuses (ephemeral,
-  plan-scoped, leased credentials that expire). And it puts that privilege behind a *non-deterministic*
-  actor, at the exact layer — the hand on the cloud — where you most want boring repeatability.
-- **There's no reconcile loop, so there's no self-healing.** You chat, it provisions, the conversation
-  ends. A node dies, a cert expires, something drifts — and nothing is holding reality equal to intent.
-  Trellis's spine is declare → prove → **reconcile *forever***; JIT-chat gives you the provision and deletes
-  the loop, which is where the operational value actually lives.
-- **One chat-driven surface is the re-centralized SPOF.** Even if every other concern were solved, *one*
-  assistant everybody talks to is precisely the company-wide blast radius Trellis slices apart per division.
-  One bad — or merely confident — action reaches everyone.
+- **A chat transcript is not a proof.** Trellis approves a plan, and the plan proves itself: every resource
+  traces to a reason, and the credential comes from the signed plan, not from whatever the agent says it
+  wants. Approving an English summary is weaker than approving a signed, machine-checkable diff. The summary
+  can read clean while the change underneath does something else.
+- **It gives the agent standing god-write.** An assistant that provisions on demand needs broad, always-on
+  write access to the cloud. Trellis refuses exactly that. It mints a credential scoped to one approved
+  diff, and the credential expires. Chat-to-provision instead hands lasting power to a model that answers
+  differently every time, at the layer where you most want the same input to produce the same result.
+- **It runs no reconcile loop, so it cannot self-heal.** You chat, it provisions, the conversation ends.
+  Then a node dies, a certificate expires, a setting drifts, and nothing pulls reality back to what you
+  asked for. Trellis runs that loop forever. The loop is where the value lives, and chat-to-provision throws
+  it away.
+- **One chat surface everyone shares rebuilds the single point of failure.** Trellis slices the blast
+  radius per division, so one team's bad day stays contained. Route everyone through one assistant and a
+  single bad — or merely confident — action reaches the whole company again.
 
-The mistake isn't using the model; it's putting it in the **wrong seat**. A conversational agent is the best
-interface we have for *authoring the Posture* and for *reading the proof* — the declare-and-explain ends of
-the loop, where it's most useful. "Chat to provision JIT" instead seats it as the unaudited actuator with
-standing credentials, where it's most dangerous: fast, fluent, and *confident* — exactly the operator that
-turns a routine change into an outage when nothing structural stands in the way.
+Put the model where it earns its keep: helping a person write the Posture and read the proof. Those are the
+declare and explain ends of the loop. Seat it as the unaudited actuator instead and you get a fast, fluent,
+confident operator turning a routine change into an outage, with nothing in its way.
 
-This isn't hypothetical. Here is a coding agent, mid-session, doing precisely that — an irreversible
-destructive action on state it had a direct hand on, caught only after the fact:
+This already happens. Here is a coding agent, mid-session, destroying work it had a direct hand on and
+noticing only afterward:
 
 ![A coding agent's chat message reading: "I made a mistake — I ran git reset --hard with the responsive/pinch fixes still uncommitted on the working tree, which discarded them. Let me verify what's actually on disk and re-apply."](../../../assets/agent-git-reset-hard.jpeg)
 
-*A capable agent ran `git reset --hard` over uncommitted work and destroyed it — no plan, no approval, no
-proof, and the recovery is "let me verify what's on disk and re-apply" (hope, not a gate). Scale that hand
-from a working tree to a cloud organization and you have the outage. The lesson isn't "don't use agents" —
-it's that an agent's reach over live state belongs **behind** declare → prove → reconcile, not in place of
-it.*
+*The agent ran `git reset --hard` over uncommitted work and wiped it out. No plan, no approval, no proof.
+Its recovery plan was "let me verify what's on disk and re-apply," which is hope, not a gate. Move that same
+hand from a working tree to a cloud organization and you have the outage. The point is not "don't use
+agents." It is that an agent's reach over live state belongs behind declare, prove, and reconcile — not in
+place of them.*
 
 ## Who it's for
 
@@ -438,51 +431,46 @@ built on demand.
 
 ### Can different divisions run on different clouds (one on AWS, another on GCP)?
 
-This is the question the "one provider at a time" rule leaves genuinely open, and it's worth separating
-from active multi-cloud — which this is *not*. The short answer: **architecturally yes, but it lands you in
-the maximum-isolation corner, not the easy one.**
+Yes, but it lands you in the maximum-isolation corner, not the easy one. And it is not active multi-cloud;
+the two are different things.
 
-It falls out of composing two rules the spec states separately. The **provider rule** (spec §15) is scoped
-to *one execution path of one desired state* — "a second provider, once built, is just another execution
-path of the **same** desired state." And the [operating model](/trellis/docs/operating-model#slice-the-control-plane-too)
-slices the control plane to the division: each division runs **its own Trellis instance, against its own
-accounts, with its own per-domain desired state and bootstrap.** Compose them and "exactly one provider at
-a time" is naturally a **per-instance** property — each division's instance executes one provider richly,
-and nothing forces *every* division onto the *same* one. So the model **admits per-division provider
-choice**: call it **federated single-cloud divisions**, not active multi-cloud. There's still no single
-desired state spanning clouds and no lowest-common-denominator compromise — each division gets one cloud's
-primitives, in full.
+The answer comes from two rules the spec states separately. The provider rule (spec §15) governs *one
+execution path of one desired state*: "a second provider, once built, is just another execution path of the
+**same** desired state." The [operating model](/trellis/docs/operating-model#slice-the-control-plane-too)
+slices the control plane to the division, so each division runs its own Trellis instance, against its own
+accounts, with its own desired state and its own bootstrap. Put the two together and "one provider at a
+time" becomes a per-instance rule: each instance runs one provider richly, and nothing forces every
+division onto the same one. So divisions can pick their own cloud. Call it **federated single-cloud
+divisions**. No single desired state spans clouds, and nothing drops to a lowest common denominator — each
+division gets one cloud's primitives in full.
 
-But the bill is real and specific, and every line of it points at the operating model's *separate-org*
-corner:
+The bill is real, and every line of it pushes you toward a separate-org boundary:
 
-- **You pay for every adapter you use.** A GCP division means the GCP column is *built and parity-gated*
-  against AWS — including the credential mint, which the crosswalk flags as
-  [the least-portable piece](/trellis/docs/provider-crosswalk). Heterogeneity doesn't dodge the "built only
-  when the time comes" cost; it commits you to N rich implementations.
-- **You lose the single governance floor.** The operating model's shared rails are the **org root + SCPs**
-  — *one* tenancy root. Across AWS and GCP there is no shared root or SCP floor; it becomes the
-  **multi-root / trust-federation problem** the [grain ladder](/trellis/docs/operating-model) reserves for
-  strict-regulatory or M&A boundaries. Central governance shifts from "one SCP floor" to "per-cloud floors
-  held to parity."
+- **You pay for every adapter you use.** A GCP division means someone builds the GCP column and brings it
+  to parity with AWS, including the credential mint — the
+  [least-portable piece](/trellis/docs/provider-crosswalk). Mixing clouds doesn't dodge that cost; it
+  commits you to several rich implementations instead of one.
+- **You lose the single governance floor.** The operating model shares one set of rails: the org root and
+  its SCPs, under one tenancy root. AWS and GCP share no root and no common policy floor, so governance
+  becomes a multi-root, trust-federation problem — the kind the
+  [grain ladder](/trellis/docs/operating-model) reserves for strict-regulatory or M&A splits. You go from
+  one floor to one floor per cloud, each held to parity.
 - **The shared catalog splits or doubles.** Blueprints carry provider bindings, so a cross-cloud catalog
-  either carries **per-provider entries** or each division **forks its own** — the max-isolation /
-  loses-central-governance option the operating model already names.
-- **Cross-division Weave edges become cross-cloud edges.** A sync edge from an AWS division to a GCP one is
-  a cross-cloud network route with **weaker private-connectivity guarantees** (PrivateLink and Private
-  Service Connect don't share constraints).
+  either keeps per-provider entries or each division forks its own. Forking buys maximum isolation and gives
+  up central governance.
+- **Cross-division links become cross-cloud links.** A sync edge from an AWS division to a GCP one runs over
+  a cross-cloud route with weaker private-connectivity guarantees, since PrivateLink and Private Service
+  Connect don't share the same constraints.
 
-So the slicing model **doesn't forbid it** — it's the logical end of "slice everything to the division" —
-but it pushes you into the **separate-org / forked-catalog / multi-root** corner already marked as
-maximum-isolation, minimum-central-governance. That's coherent, and it's the *right* shape for a real M&A
-or regulatory-separation boundary where two divisions were never going to share a root anyway. It is the
-**wrong** tool for "we'd like our infra spread across three clouds for resilience" — that's the
-lowest-common-denominator trap §15 exists to refuse.
+So the model allows it. It is the logical end of slicing everything to the division. But it drops you in the
+separate-org, forked-catalog, multi-root corner: maximum isolation, minimum central governance. That fits a
+real M&A or regulatory split, where two divisions were never going to share a root. It is the wrong tool for
+"spread our infrastructure across three clouds for resilience," which is the lowest-common-denominator trap
+§15 exists to refuse.
 
-**Honest status:** the per-instance reading is now stated outright in [spec §15](/trellis/docs/spec), so
-this is applied guidance *on* the spec, not an extension of it — but it remains hypothetical in practice,
-since even the first (AWS) adapter isn't built yet, and the multi-root governance model it implies is
-deliberately fenced to the separate-root (M&A / strict-regulatory) case.
+Spec §15 now states the per-instance reading outright, so this guidance applies the spec rather than
+stretching it. It stays hypothetical for now: the first adapter (AWS) isn't built yet, and the multi-root
+governance it needs is fenced to the separate-root case.
 
 ### What integrations does it have, or will it have?
 
