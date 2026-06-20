@@ -5,6 +5,23 @@ The simulator deploys continuously from `main`, so entries are grouped by date r
 
 ## Unreleased
 
+### Added
+
+- **Spec §11 — the deploy bridge (observer model, trust handshake, CI/CD-agnostic).** Realigns the seam to
+  how teams actually deploy. Trellis **never reads the team's git and never runs their canary**: teams
+  declare a posture (maker-checker gated) and get a `trellis.yaml` + provisioned infra, then deploy from
+  **their own CI/CD** — GitLab, GitHub, Bitbucket, any OIDC-issuing pipeline — and **notify** Trellis, which
+  **honors** the (leased) window and **observes** App-Cell health. Adds the **trust handshake**: the CI job
+  presents a short-lived **OIDC** token, Trellis verifies it and mints a credential scoped to that **App
+  Cell only**; the **deploy binding** (which identity may ship which Service) is **checker-approved**, never
+  self-asserted. The release contract (`strategy`/`steps`/`bake`/`healthy_when`) lives **in the team's
+  pipeline**, not `trellis.yaml`; Trellis observes outcomes. Includes a CI/CD-agnostic walkthrough and a
+  trust red-team (spoofed notify, cross-service write, self-granted rights, honor-abuse, token replay — each
+  closed; honest residual: Trellis sees infra-visible health, not app SLOs). Reframes Invariant 27
+  (admission via verified identity + scoped credential, not an in-path adapter) and the rollout state
+  machine (states Trellis **observes**; the team's tool drives). Completes the posture example with
+  `optimize`.
+
 ### Fixed
 
 - **Owners panel is honest about who ships.** The release controls were labelled "Ship", which implied
