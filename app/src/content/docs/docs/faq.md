@@ -436,6 +436,54 @@ rewrite — but don't expect three live clouds on day one. The
 calls out where the mapping leaks (identity, the org boundary, Aurora/QLDB) — the documented escape hatch,
 built on demand.
 
+### Can different divisions run on different clouds (one on AWS, another on GCP)?
+
+This is the question the "one provider at a time" rule leaves genuinely open, and it's worth separating
+from active multi-cloud — which this is *not*. The short answer: **architecturally yes, but it lands you in
+the maximum-isolation corner, not the easy one.**
+
+It falls out of composing two rules the spec states separately. The **provider rule** (spec §15) is scoped
+to *one execution path of one desired state* — "a second provider, once built, is just another execution
+path of the **same** desired state." And the [operating model](/trellis/docs/operating-model#slice-the-control-plane-too)
+slices the control plane to the division: each division runs **its own Trellis instance, against its own
+accounts, with its own per-domain desired state and bootstrap.** Compose them and "exactly one provider at
+a time" is naturally a **per-instance** property — each division's instance executes one provider richly,
+and nothing forces *every* division onto the *same* one. So the model **admits per-division provider
+choice**: call it **federated single-cloud divisions**, not active multi-cloud. There's still no single
+desired state spanning clouds and no lowest-common-denominator compromise — each division gets one cloud's
+primitives, in full.
+
+But the bill is real and specific, and every line of it points at the operating model's *separate-org*
+corner:
+
+- **You pay for every adapter you use.** A GCP division means the GCP column is *built and parity-gated*
+  against AWS — including the credential mint, which the crosswalk flags as
+  [the least-portable piece](/trellis/docs/provider-crosswalk). Heterogeneity doesn't dodge the "built only
+  when the time comes" cost; it commits you to N rich implementations.
+- **You lose the single governance floor.** The operating model's shared rails are the **org root + SCPs**
+  — *one* tenancy root. Across AWS and GCP there is no shared root or SCP floor; it becomes the
+  **multi-root / trust-federation problem** the [grain ladder](/trellis/docs/operating-model) reserves for
+  strict-regulatory or M&A boundaries. Central governance shifts from "one SCP floor" to "per-cloud floors
+  held to parity."
+- **The shared catalog splits or doubles.** Blueprints carry provider bindings, so a cross-cloud catalog
+  either carries **per-provider entries** or each division **forks its own** — the max-isolation /
+  loses-central-governance option the operating model already names.
+- **Cross-division Weave edges become cross-cloud edges.** A sync edge from an AWS division to a GCP one is
+  a cross-cloud network route with **weaker private-connectivity guarantees** (PrivateLink and Private
+  Service Connect don't share constraints).
+
+So the slicing model **doesn't forbid it** — it's the logical end of "slice everything to the division" —
+but it pushes you into the **separate-org / forked-catalog / multi-root** corner already marked as
+maximum-isolation, minimum-central-governance. That's coherent, and it's the *right* shape for a real M&A
+or regulatory-separation boundary where two divisions were never going to share a root anyway. It is the
+**wrong** tool for "we'd like our infra spread across three clouds for resilience" — that's the
+lowest-common-denominator trap §15 exists to refuse.
+
+**Honest status:** this is *applied guidance composed from* §15 + the operating model, not a spec-blessed
+feature — and it's doubly hypothetical today, since even the first (AWS) adapter isn't built yet. If it
+were ever pursued, the per-instance reading of §15 and the multi-root governance model are the two things
+the spec would need to state outright.
+
 ### What integrations does it have, or will it have?
 
 - **Git** as the desired-state store and gate (any Git host).

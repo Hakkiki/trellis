@@ -70,6 +70,14 @@ The simulator deploys continuously from `main`, so entries are grouped by date r
   the in-cluster loop owns workloads). Pulls the answers that were scattered across Bootstrap and the
   Operating model into one place, and keeps the spec-design-vs-simulator line honest.
 
+- **FAQ: "Can different divisions run on different clouds?"** A new entry resolving the question §15's
+  "one provider at a time" rule leaves open, by composing it with the per-division control-plane slicing:
+  read per-instance, the rule admits *per-division provider choice* (federated single-cloud divisions, not
+  active multi-cloud), but the cost — building/parity-gating each adapter, losing the single org-root/SCP
+  governance floor (multi-root), forking the catalog, cross-cloud Weave edges — lands it squarely in the
+  operating model's separate-org / maximum-isolation corner. Flagged as applied guidance, not yet
+  spec-blessed.
+
 - **FAQ: "Why not just chat with an AI agent to provision infrastructure just-in-time?"** A new entry
   answering the sharpest objection to a control plane head-on — provisioning-by-conversation isn't an
   alternative to Trellis, it's a faster way to cause the 2&nbsp;a.m. outage it prevents (a transcript isn't
