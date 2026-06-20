@@ -676,13 +676,16 @@ export default function Simulator() {
             </Card>
           )}
 
-          {phase === "applied" && (snap?.incidents.length ?? 0) > 0 && (
-            <IncidentSurface
-              incidents={snap!.incidents}
-              onResolve={(id) => act((e) => e.resolveIncident(id))}
-              onSelect={setSelected}
-            />
-          )}
+          {phase === "applied" &&
+            ((snap?.incidents.length ?? 0) > 0 || (snap?.frozenDebts.length ?? 0) > 0) && (
+              <IncidentSurface
+                incidents={snap!.incidents}
+                frozen={snap!.frozenDebts}
+                onResolve={(id) => act((e) => e.resolveIncident(id))}
+                onRatify={(id) => act((e) => e.ratify(id))}
+                onSelect={setSelected}
+              />
+            )}
 
           {phase === "applied" && snap && (
             <ControlPlanePanel
@@ -1531,48 +1534,97 @@ function ProofPanel({
 
 function IncidentSurface({
   incidents,
+  frozen,
   onResolve,
+  onRatify,
   onSelect,
 }: {
   incidents: Incident[];
+  frozen: Incident[];
   onResolve: (id: string) => void;
+  onRatify: (id: string) => void;
   onSelect: (id: string) => void;
 }) {
-  const regions = [...new Set(incidents.map((i) => i.region))];
+  const regions = [...new Set([...incidents, ...frozen].map((i) => i.region))];
+  const title = [
+    incidents.length ? `${incidents.length} Stalled` : null,
+    frozen.length ? `${frozen.length} Frozen` : null,
+  ]
+    .filter(Boolean)
+    .join(" · ");
   return (
     <Card className="border-[var(--state-stalled)]">
       <CardHeader className="pb-2">
         <CardTitle className="flex items-center gap-2 text-sm">
           <Siren className="size-4 text-[var(--state-stalled)]" />
-          Incident — {incidents.length} resource{incidents.length > 1 ? "s" : ""} Stalled
+          Incident surface — {title}
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-2 text-xs">
         <p className="text-muted-foreground">
-          Self-heal flapped and the circuit breaker tripped (§9). Routed by Frame + Criticality to
-          on-call (§13). Blast radius: {regions.join(", ")}. The reconciler is holding — a human
-          must fix the root cause.
+          The §13 rollup of Stalled + Frozen resources, joined to the audit log and routed by Frame
+          + Criticality to on-call. Blast radius: {regions.join(", ")}. Each row shows the loop's
+          belief — decide on evidence (§13).
         </p>
         {incidents.map((inc) => (
           <div
             key={inc.id}
-            className="flex items-center gap-2 rounded-md border border-[var(--state-stalled)]/40 px-2 py-1.5"
+            className="rounded-md border border-[var(--state-stalled)]/40 px-2 py-1.5"
           >
-            <span className="size-2 rounded-full" style={{ background: "var(--state-stalled)" }} />
-            <button
-              onClick={() => onSelect(inc.id)}
-              className="hover:text-foreground min-w-0 flex-1 truncate text-left"
-            >
-              {inc.id}
-            </button>
-            <Button
-              size="sm"
-              variant="outline"
-              className="h-7 gap-1.5"
-              onClick={() => onResolve(inc.id)}
-            >
-              <Wrench className="size-3.5" /> Resolve
-            </Button>
+            <div className="flex items-center gap-2">
+              <span
+                className="size-2 shrink-0 rounded-full"
+                style={{ background: "var(--state-stalled)" }}
+              />
+              <button
+                onClick={() => onSelect(inc.id)}
+                className="hover:text-foreground min-w-0 flex-1 truncate text-left"
+              >
+                {inc.id}
+              </button>
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-7 gap-1.5"
+                onClick={() => onResolve(inc.id)}
+              >
+                <Wrench className="size-3.5" /> Resolve
+              </Button>
+            </div>
+            <p className="text-muted-foreground mt-1 pl-4">
+              loop: {inc.reconcilerReason ?? "stalled — needs a human"}
+            </p>
+          </div>
+        ))}
+        {frozen.map((fz) => (
+          <div
+            key={fz.id}
+            className="rounded-md border border-[var(--state-frozen)]/40 px-2 py-1.5"
+          >
+            <div className="flex items-center gap-2">
+              <span
+                className="size-2 shrink-0 rounded-full"
+                style={{ background: "var(--state-frozen)" }}
+              />
+              <button
+                onClick={() => onSelect(fz.id)}
+                className="hover:text-foreground min-w-0 flex-1 truncate text-left"
+              >
+                {fz.id}
+              </button>
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-7 gap-1.5"
+                onClick={() => onRatify(fz.id)}
+              >
+                <Snowflake className="size-3.5" /> Ratify
+              </Button>
+            </div>
+            <p className="text-muted-foreground mt-1 pl-4">
+              break-glass debt outstanding — {fz.reconcilerReason ?? "reconciliation suspended"}.
+              Ratify to repay through the Author gate (§7).
+            </p>
           </div>
         ))}
       </CardContent>

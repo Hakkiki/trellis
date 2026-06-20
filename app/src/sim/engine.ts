@@ -84,6 +84,7 @@ export interface Incident {
   region: string;
   service: string;
   cell: CellKind;
+  reconcilerReason?: string; // the loop's belief — shown before an override (§13)
 }
 
 export interface EngineSnapshot {
@@ -103,6 +104,9 @@ export interface EngineSnapshot {
   budgetPolicy: BudgetPolicy;
   converged: boolean;
   appliedGen: number;
+  // Break-glass debt: resources Frozen by an override, surfaced on the §13
+  // incident surface so the debt is loud (not a silent un-healed hole).
+  frozenDebts: Incident[];
   changeFreeze: boolean;
   blastTripped: boolean;
   // Break-glass *rate* is a first-class gate-health signal (§7): a frequently
@@ -475,9 +479,15 @@ export class Engine {
     const budgetPolicy: BudgetPolicy = this.posture.budgetPolicy ?? "alert";
     const budgetBreach = billedNow > budget;
     const phase: Phase = this.manifest ? "applied" : this.plan ? "planned" : "empty";
-    const incidents: Incident[] = resources
-      .filter((r) => r.state === "Stalled")
-      .map((r) => ({ id: r.id, region: r.region, service: r.service, cell: r.cell }));
+    const toIncident = (r: ResourceView): Incident => ({
+      id: r.id,
+      region: r.region,
+      service: r.service,
+      cell: r.cell,
+      reconcilerReason: r.reconcilerReason,
+    });
+    const incidents: Incident[] = resources.filter((r) => r.state === "Stalled").map(toIncident);
+    const frozenDebts: Incident[] = resources.filter((r) => r.state === "Frozen").map(toIncident);
 
     // Frame roll-up (§4): a region's state is the worst-of the resources it
     // contains; we manage Service + Stateful workloads (Jobs/External excluded).
@@ -533,6 +543,7 @@ export class Engine {
       budgetPolicy,
       converged: resources.length > 0 && resources.every(isSettled),
       appliedGen: this.appliedGen,
+      frozenDebts,
       changeFreeze: this.rec.isChangeFreeze(),
       blastTripped: this.rec.blastTripped(),
       breakGlassSignal: { recent: recentBreakGlass, noisy: recentBreakGlass >= BREAK_GLASS_NOISY },

@@ -593,6 +593,24 @@ describe("break-glass trigger discipline (§7/§13)", () => {
     expect(sig.noisy).toBe(true); // a frequently-opened glass diagnoses the gate
   });
 
+  it("surfaces break-glass debt on the incident surface — Frozen is loud, not a silent hole", () => {
+    const e = converged();
+    const app = e.snapshot().resources.find((r) => r.lifecycle === "service" && r.cell === "app")!;
+    expect(e.snapshot().frozenDebts).toHaveLength(0);
+
+    e.breakGlass(app.id);
+    e.tick();
+    const debt = e.snapshot().frozenDebts;
+    expect(debt.map((d) => d.id)).toContain(app.id);
+    expect(debt.find((d) => d.id === app.id)!.reconcilerReason).toMatch(/break-glass/i);
+
+    // Ratify repays the debt; the resource leaves the surface and reconciles again.
+    e.ratify(app.id);
+    for (let i = 0; i < 20 && !e.snapshot().converged; i++) e.tick();
+    expect(e.snapshot().frozenDebts).toHaveLength(0);
+    expect(e.snapshot().converged).toBe(true);
+  });
+
   it("the rate signal decays — old opens fall out of the trailing window", () => {
     const e = converged();
     const services = e.snapshot().resources.filter((r) => r.lifecycle === "service");

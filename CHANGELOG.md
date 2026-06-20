@@ -105,7 +105,10 @@ The simulator deploys continuously from `main`, so entries are grouped by date r
   evidence, not panic, and can tell "the loop is fighting me" from "the loop is right"; (§7) **break-glass
   *rate* is now a first-class gate-health signal** — computed from the persisted audit log (survives
   reload, no extra state), it raises a "check the gate, not the operator" card when the glass is opened too
-  often in the trailing window, and decays on its own. Locked by three new engine tests.
+  often in the trailing window, and decays on its own. The **§13 incident surface** now rolls up Frozen
+  (break-glass debt) alongside Stalled — each row shows the loop's belief and offers the right action
+  (Resolve root cause / Ratify the debt), so an override is decided on evidence and the Frozen debt is
+  loud, never a silent un-healed hole. Locked by four new engine tests.
 
 - **Break-glass triggers — inversion red-team.** A new doc
   ([`docs/trellis-breakglass-redteam.md`](docs/trellis-breakglass-redteam.md)) reasons about the one state
