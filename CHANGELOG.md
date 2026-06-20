@@ -29,6 +29,13 @@ The simulator deploys continuously from `main`, so entries are grouped by date r
 
 ### Changed
 
+- **Roles page rewritten for clarity and plain English.** The "day in the life of a change" section now
+  states outright that Git is the front door of the control plane, not a way around it: the engineer
+  authors in Git, the planner and reconciler are the control plane, the PR does nothing on its own, and
+  only the reconciler holds standing write into the cloud. Names the maker-checker pattern where
+  dual-control already appears (service teams propose, the security author clears). Prose moved to active
+  voice with the em-dash-heavy phrasing cut back so it reads cleanly out loud.
+
 - **Roles page diagram accuracy (red-team fix).** The responsibility map wrongly drew the second
   write-arrow into a division's cloud as an *External vendor* "break-glass" path — contradicting the spec
   (break-glass is the responder's, dual-controlled — §7/Inv 14) and the page's own vendor section. The
@@ -54,6 +61,8 @@ The simulator deploys continuously from `main`, so entries are grouped by date r
   collision-resistant** (23); a **federated generation is a coordinated vector**, Git having no cross-repo
   atomicity (24); the manifest substrate is **never on the liveness or recovery-blocking path** (25); and
   promotion is **ordered and override-proved** (26).
+
+### Added
 
 - **Roles & responsibilities — a day in the life.** A new page mapping the nine personas (Platform Owner,
   Security/Governance author, Division/Product lead, Platform Operator, Service/Eng teams, Break-glass
