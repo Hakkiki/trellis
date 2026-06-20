@@ -50,9 +50,23 @@
   right: 0.6rem;
   z-index: 2;
   display: flex;
-  gap: 0.3rem;
+  flex-direction: column; /* stacked, like map zoom controls */
+  align-items: center;
+  gap: 0.4rem;
   opacity: 0.55;
   transition: opacity 0.15s ease;
+}
+/* Inline toolbar buttons are icon-only: identical, centred squares. */
+.diagram__toolbar button {
+  width: 2rem;
+  height: 2rem;
+  margin: 0; /* defeat any inherited markdown-flow spacing */
+  padding: 0;
+  justify-content: center;
+}
+.diagram__toolbar button svg {
+  width: 18px;
+  height: 18px;
 }
 .diagram:hover .diagram__toolbar,
 .diagram:focus-within .diagram__toolbar {

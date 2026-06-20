@@ -5,7 +5,18 @@ The simulator deploys continuously from `main`, so entries are grouped by date r
 
 ## Unreleased
 
-### Added
+### Fixed
+
+- **Diagram viewer, verified in a real browser.** Fixes found by driving headless Chromium against the
+  built site (`scripts/verify-viewer.mjs`): the full-screen overlay now **fits and centres** the diagram
+  on open (it had opened at natural size in the top-left corner); the cloned SVG is given an explicit
+  viewBox-based size with Mermaid's `max-width` cap removed, so it **zooms without a ceiling** and stays
+  crisp (max zoom raised to 40×); and the inline toolbar buttons are now **equal-size squares in a row**
+  with full-screen rightmost. Verified: 9/9 diagrams render with no syntax errors, overlay opens above
+  the header with body-scroll lock, wheel/drag/deep-zoom/reset/code-tab/Esc all work, and the overlay
+  fills the viewport in mobile landscape — no console errors.
+
+
 
 - **Interactive diagram viewer.** Every rendered Mermaid diagram now has an on-brand toolbar: open it in
   a full-screen overlay (ideal in landscape on mobile) and view/copy its source. The overlay supports
