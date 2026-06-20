@@ -717,6 +717,7 @@ export default function Simulator() {
                     const first = resources.find((r) => r.service === slug);
                     if (first) setSelected(first.id);
                   }}
+                  onShip={(slug, broken) => act((e) => e.ship(slug, broken))}
                 />
               </TabsContent>
               <TabsContent value="audit" className="mt-3">
@@ -931,12 +932,14 @@ function OwnersPanel({
   envRollup,
   selectedSlug,
   onSelect,
+  onShip,
 }: {
   rollups: ServiceRollup[];
   budget: number;
   envRollup: State;
   selectedSlug: string | null;
   onSelect: (slug: string) => void;
+  onShip: (slug: string, broken: boolean) => void;
 }) {
   if (!rollups.length)
     return <p className="text-muted-foreground text-xs">Approve a plan to see ownership.</p>;
@@ -969,42 +972,80 @@ function OwnersPanel({
         const drifted = r.billedCost > r.monthlyCost;
         const share = budget > 0 ? Math.round((r.billedCost / budget) * 100) : 0;
         return (
-          <button
-            key={r.slug}
-            onClick={() => onSelect(r.slug)}
-            className={cn(
-              "border-border/60 w-full space-y-1 rounded-md border p-2 text-left transition",
-              selectedSlug === r.slug ? "ring-1 ring-[var(--ring)]" : "hover:bg-accent/40",
-            )}
-          >
-            <div className="flex items-center justify-between">
-              <span className="flex items-center gap-1.5 font-medium">
-                <span
-                  className="size-2 rounded-full"
-                  style={{ background: color, boxShadow: `0 0 6px ${color}` }}
+          <div key={r.slug} className="space-y-1">
+            <button
+              onClick={() => onSelect(r.slug)}
+              className={cn(
+                "border-border/60 w-full space-y-1 rounded-md border p-2 text-left transition",
+                selectedSlug === r.slug ? "ring-1 ring-[var(--ring)]" : "hover:bg-accent/40",
+              )}
+            >
+              <div className="flex items-center justify-between">
+                <span className="flex items-center gap-1.5 font-medium">
+                  <span
+                    className="size-2 rounded-full"
+                    style={{ background: color, boxShadow: `0 0 6px ${color}` }}
+                  />
+                  {r.service}
+                </span>
+                <Badge variant="secondary" className="px-1 py-0 text-[9px]">
+                  {r.criticality}
+                </Badge>
+              </div>
+              <div className="text-muted-foreground flex items-center justify-between text-[10px]">
+                <span>{r.state}</span>
+                <span className={cn("tabular-nums", drifted && "text-destructive")}>
+                  ${r.billedCost}/mo{drifted ? ` (plan $${r.monthlyCost})` : ""} · {share}%
+                </span>
+              </div>
+              <div className="bg-secondary h-1.5 w-full overflow-hidden rounded-full">
+                <div
+                  className="h-full rounded-full"
+                  style={{
+                    width: `${Math.min(100, share)}%`,
+                    background: drifted ? "var(--destructive)" : color,
+                  }}
                 />
-                {r.service}
+              </div>
+            </button>
+            {/* App-delivery inner loop (§11): ship a release into this Service's
+                App Cell. Ship ✗ fails the bake to show it self-reverts below
+                the reconciler — a bad deploy is RolledBack, not Stalled. */}
+            <div className="flex items-center justify-between gap-2 px-0.5 text-[10px]">
+              <span className="text-muted-foreground tabular-nums">
+                running {r.version}
+                {r.rollout && (
+                  <span
+                    className="ml-1.5 font-medium"
+                    style={{
+                      color:
+                        r.rollout === "Blocked" ? "var(--state-frozen)" : "var(--state-converging)",
+                    }}
+                  >
+                    ▶ {r.rollout} {r.rolloutArtifact}
+                  </span>
+                )}
               </span>
-              <Badge variant="secondary" className="px-1 py-0 text-[9px]">
-                {r.criticality}
-              </Badge>
-            </div>
-            <div className="text-muted-foreground flex items-center justify-between text-[10px]">
-              <span>{r.state}</span>
-              <span className={cn("tabular-nums", drifted && "text-destructive")}>
-                ${r.billedCost}/mo{drifted ? ` (plan $${r.monthlyCost})` : ""} · {share}%
+              <span className="flex gap-1">
+                <button
+                  type="button"
+                  disabled={r.rollout != null}
+                  onClick={() => onShip(r.slug, false)}
+                  className="border-border/60 hover:bg-accent rounded border px-1.5 py-0.5 disabled:opacity-40"
+                >
+                  Ship
+                </button>
+                <button
+                  type="button"
+                  disabled={r.rollout != null}
+                  onClick={() => onShip(r.slug, true)}
+                  className="border-border/60 text-destructive hover:bg-accent rounded border px-1.5 py-0.5 disabled:opacity-40"
+                >
+                  Ship&nbsp;✗
+                </button>
               </span>
             </div>
-            <div className="bg-secondary h-1.5 w-full overflow-hidden rounded-full">
-              <div
-                className="h-full rounded-full"
-                style={{
-                  width: `${Math.min(100, share)}%`,
-                  background: drifted ? "var(--destructive)" : color,
-                }}
-              />
-            </div>
-          </button>
+          </div>
         );
       })}
     </div>
@@ -1642,6 +1683,7 @@ function AuditPanel({ audit }: { audit: AuditEntry[] }) {
     Converge: "text-[var(--state-converged)]",
     "Break-glass": "text-[var(--state-stalled)]",
     Observe: "text-muted-foreground",
+    Release: "text-[var(--state-converging)]",
   };
   if (!audit.length) return <p className="text-muted-foreground text-xs">No actions yet.</p>;
   return (
