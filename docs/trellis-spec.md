@@ -1326,7 +1326,7 @@ step serves a single-region dev and a two-region prod unchanged.
 refs, §18) at runtime via its **own** scoped identity, which Trellis provisions and binds to the App Cell.
 The pipeline deploys the release *into* that identity; it never handles the credential. This is the
 workload side of *identity, not standing secrets* (§12): the control plane holds no standing app secrets,
-the app holds no long-lived keys, and the secret value is dereferenced just-in-time from the
+the app holds no long-lived keys, and the app dereferences the secret value just-in-time from the
 Governance-controlled secrets battery (§18).
 
 **(c) The deploy handshake — notify, honor, observe.** The team's pipeline tells Trellis when a deploy
@@ -1334,9 +1334,10 @@ starts and finishes; Trellis **honors** the window and **observes** the App Cell
 whether the environment is clear first:
 
 ```
-trellis env gate-check   payments-prod                  → { clear | hold, reason }
-trellis env deploy-start payments-prod/payments-api v3  # "I'm deploying"
-trellis env deploy-done  payments-prod/payments-api     # "...done" (or Trellis sees it settle)
+trellis env gate-check   payments-prod                  → { clear | hold, reason }  # env-scoped: holds
+                                                          # (posture transition / change-freeze) are env-wide
+trellis env deploy-start payments-prod/payments-api v3  # "I'm deploying"        # deploy-start/-done
+trellis env deploy-done  payments-prod/payments-api     # "...done"              # key on the Service
 ```
 
 `hold` means a posture transition (§10) or change-freeze (§9) is in flight. Trellis **honors** a deploy by
@@ -1345,10 +1346,10 @@ deploy** — so a rolling release is not mistaken for an infra fault and self-he
 passive). The window is **leased** (Invariant 16): if a deploy never reports done, the lease expires,
 reconciliation resumes, and Trellis raises — so "deploying forever" cannot freeze self-heal.
 
-Crucially, Trellis does **not** run the rollout and does **not** sit in the write path. What bounds *what
-the pipeline may write* is the **scoped credential** from the trust handshake (below) — the pipeline may
-change the workload **inside its own App Cell and nothing else** (Invariant 4). Trellis grants scope,
-honors the window, and observes; the team drives the release.
+Trellis does not run the rollout and does not sit in the write path. What bounds *what the pipeline may
+write* is the **scoped credential** from the trust handshake (below) — the pipeline may change the workload
+inside its own App Cell and nothing else (Invariant 4). Trellis grants scope, honors the window, and
+observes; the team drives the release.
 
 > **The seam, in one line:** Trellis compiles intent into a provisioned Structure and *publishes its
 > coordinates*; the team's pipeline promotes an immutable release through the environment pipeline (§11),
@@ -1405,14 +1406,15 @@ ungated.
 
 **Holes closed (the trust red-team):**
 
-| Hole | Closed by |
+| Hole | Addressed by |
 |---|---|
 | spoofed "I'm deploying" | OIDC verify + claim→(Service, env) authz; an unbound or forged identity is rejected |
-| deploy to a Service you don't own | the scoped credential reaches only your App Cell (Invariant 4) |
+| deploy to a Service you don't own | scope is the **credential**, not the handle you hold: the minted credential reaches only the App Cell in the checker-approved binding (Invariant 4) — holding a peer's coordinate grants no write |
 | team self-grants deploy rights | the deploy binding is **checker-approved** (maker-checker, Invariant 14), never self-asserted |
 | "honor" abused to freeze self-heal | the window is **leased and bounded** (Invariant 16) — it expires and reconciliation resumes |
+| credential outlives or is banked past the rollout | the credential's lease covers the **declared deploy window**; a long canary re-presents its OIDC token for a fresh scoped one (Invariant 16) — expiry never strands an in-flight rollout, and an idle credential cannot be banked |
 | token theft / replay | tokens are short-lived, `aud`-bound to Trellis, verified per call |
-| the team's canary lies "healthy" | Trellis's **independent** App-Cell observation corroborates (Invariant 15) — infra-visible degradation still raises |
+| the team's canary lies "healthy" | **narrowed, not closed:** Trellis's independent App-Cell observation (Invariant 15) still raises on infra-visible degradation; an "up but subtly wrong" release stays the team's canary's job (see residual) |
 
 **Honest residual.** Trellis observes *infra-visible* health, not the team's app-level SLOs; a release that
 is "up but subtly wrong" is caught only by the team's own canary (the Invariant 28 residual). Trellis
@@ -1425,8 +1427,10 @@ Observation here is **load-bearing for the platform's own job**, not curiosity; 
 cannot meet the guarantees of the rest of this spec:
 
 - **Self-heal needs the live version.** "Keep N healthy replicas of the right thing" requires knowing what
-  the right thing *is*: a replacement or scale-up must come up on the **current** artifact (the runtime
-  holds it, but the reconciler must observe it), or it resurrects a blank/stale instance.
+  the right thing *is*: a replacement or scale-up must come up on the **current** artifact (the team's tool
+  holds it; Trellis records the last-observed digest), or it resurrects a blank/stale instance. A *total*
+  App-Cell loss is the residual — with nothing live to read, recovery falls back to that last-observed
+  digest, or the team re-deploys.
 - **The two loops must not collide.** Provisioning and delivery run concurrently; without awareness an
   expand-contract transition (§10) can tear down capacity under a live rollout, or a rollout can land on
   half-built infra. Awareness is what powers the temporal handshake (facet c) that serializes them.
@@ -1455,7 +1459,8 @@ deploy target** the team's rollout tool writes to: Trellis publishes it (a coord
 ```
 trellis env coordinates  payments-prod/payments-api  → app_target, edge_host, data_ref
 trellis env deploy-start payments-prod/payments-api v3   # notify; the team's tool then rolls v3 out
-trellis env status       payments-prod/payments-api  → { progressing | healthy | rolled-back }  (observed)
+trellis env status       payments-prod/payments-api  → observed state ∈ { pending, blocked, progressing,
+                                                         verifying, healthy, rolled-back, superseded }
 ```
 
 The currency is an **immutable, content-addressed artifact** (an OCI image digest; for a non-container
@@ -1639,8 +1644,9 @@ budget precisely so failure is contained there.
 **Success hands the version to the steady state.** On Healthy, the running-version pointer becomes vN (the
 team's tool holds the running version; Trellis authors capacity, not version — above), and the Service
 returns to converge-and-hold on vN: subsequent self-heals and scale-ups bring up vN, not the old artifact.
-`trellis env status` reports the **observed** state; `{ progressing | healthy | rolled-back }` is its
-three-way summary.
+`trellis env status` reports the **observed** state (the full machine above); `{ progressing | healthy |
+rolled-back }` is its collapsed headline — `verifying` folds into `progressing`, and `pending` / `blocked` /
+`superseded` are visible on the full state.
 
 ### Worked example — promoting one Service through dev → staging → prod
 
@@ -1680,9 +1686,9 @@ team CI: gate-check payments-prod → hold (transition in flight)  → pipeline 
 When the reconciler finishes the migration, `gate-check` clears and the team proceeds — the **sole**
 coupling between the two loops, doing its one job.
 
-**Act 5 — a failed bake, contained below the outer loop.** The team's canary opens at 10%; its bake
-evaluates the new version — and the error rate spikes in `eu-west-1`, the region staging (single-region C2)
-never exercised. The team's metric gate fails, and its tool self-reverts (Trellis observing):
+**Act 5 — a failed bake, contained below the outer loop.** The team's canary opens at 10% and bakes the new
+version — and the error rate spikes in `eu-west-1`, a region staging never exercised because staging runs
+single-region at C2. The team's metric gate fails, and its tool self-reverts (Trellis observing):
 
 ```
   Blocked → Progressing (10%) → Verifying → RolledBack
