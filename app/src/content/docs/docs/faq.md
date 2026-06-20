@@ -41,6 +41,51 @@ result, and a standing reconciler keeps it true. Underneath, an executor like Te
 actuator behind the provider port (see below). Trellis replaces the reasoning and the standing loop, not
 necessarily the low-level apply.
 
+### Why not just chat with an AI agent to provision infrastructure just-in-time?
+
+This is the sharpest version of the objection, and it deserves a straight answer: *if I can just talk to a
+capable model and have it spin up what I need on demand, who needs a control plane?* The honest reply is
+that provisioning-by-conversation isn't an alternative to Trellis — it's a faster, friendlier way to cause
+the exact 2&nbsp;a.m. outage Trellis exists to prevent. The agent is a fantastic **driver**; Trellis is the
+**road, the rails, and the brakes**. You don't skip the rails because the driver got good.
+
+Point by point, against the four action classes above:
+
+- **A transcript is not a proof, and the prose can lie about the API calls.** Trellis's whole premise is
+  that the plan *is its own proof* — every resource traces to a reason, a human approves *that artifact*,
+  and the credential scope is **re-derived from the signed plan**, not from what the actor claimed. "Approve
+  this English summary" is structurally weaker than "approve this signed, machine-checkable diff" — it's the
+  confused-deputy gap (a benign-sounding rationale over an attacker- or accident-chosen scope) by another
+  name.
+- **It hands the agent standing god-write.** An always-available "provision whatever we need" assistant is,
+  by construction, broad standing privilege on a shared surface — the one thing the model refuses (ephemeral,
+  plan-scoped, leased credentials that expire). And it puts that privilege behind a *non-deterministic*
+  actor, at the exact layer — the hand on the cloud — where you most want boring repeatability.
+- **There's no reconcile loop, so there's no self-healing.** You chat, it provisions, the conversation
+  ends. A node dies, a cert expires, something drifts — and nothing is holding reality equal to intent.
+  Trellis's spine is declare → prove → **reconcile *forever***; JIT-chat gives you the provision and deletes
+  the loop, which is where the operational value actually lives.
+- **One chat-driven surface is the re-centralized SPOF.** Even if every other concern were solved, *one*
+  assistant everybody talks to is precisely the company-wide blast radius Trellis slices apart per division.
+  One bad — or merely confident — action reaches everyone.
+
+The mistake isn't using the model; it's putting it in the **wrong seat**. A conversational agent is the best
+interface we have for *authoring the Posture* and for *reading the proof* — the declare-and-explain ends of
+the loop, where it's most useful. "Chat to provision JIT" instead seats it as the unaudited actuator with
+standing credentials, where it's most dangerous: fast, fluent, and *confident* — exactly the operator that
+turns a routine change into an outage when nothing structural stands in the way.
+
+This isn't hypothetical. Here is a coding agent, mid-session, doing precisely that — an irreversible
+destructive action on state it had a direct hand on, caught only after the fact:
+
+![A coding agent's chat message reading: "I made a mistake — I ran git reset --hard with the responsive/pinch fixes still uncommitted on the working tree, which discarded them. Let me verify what's actually on disk and re-apply."](../../../assets/agent-git-reset-hard.jpeg)
+
+*A capable agent ran `git reset --hard` over uncommitted work and destroyed it — no plan, no approval, no
+proof, and the recovery is "let me verify what's on disk and re-apply" (hope, not a gate). Scale that hand
+from a working tree to a cloud organization and you have the outage. The lesson isn't "don't use agents" —
+it's that an agent's reach over live state belongs **behind** declare → prove → reconcile, not in place of
+it.*
+
 ## Who it's for
 
 ### Who is this for?
