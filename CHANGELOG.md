@@ -7,6 +7,12 @@ The simulator deploys continuously from `main`, so entries are grouped by date r
 
 ### Added
 
+- **FAQ: what foundational layers Trellis owns.** A new "Where it fits" entry answering directly whether
+  Trellis owns the **security baseline** and sets up **OUs, accounts, VPCs, and Kubernetes** — with an
+  ownership table per layer and the one boundary that matters (Trellis owns the *cluster as a resource*;
+  the in-cluster loop owns workloads). Pulls the answers that were scattered across Bootstrap and the
+  Operating model into one place, and keeps the spec-design-vs-simulator line honest.
+
 - **Roles & responsibilities — a day in the life.** A new page mapping the nine personas (Platform Owner,
   Security/Governance author, Division/Product lead, Platform Operator, Service/Eng teams, Break-glass
   responders, Auditor, FinOps, External vendor) to the model: each one's mandate, what it owns, what it

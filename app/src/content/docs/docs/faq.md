@@ -353,6 +353,32 @@ pipeline that ships their code.
   talks to a cloud only through a **provider port**. A Terraform/OpenTofu adapter could implement that port;
   Trellis still owns the intent, the proof, the gate, and the standing loop.
 
+### Does Trellis own baseline security, and does it set up OUs, accounts, VPCs, and Kubernetes?
+
+Yes — laying down the **governed foundation** is precisely Trellis's job, not a prerequisite you bring.
+The whole point is that you declare intent and Trellis owns the structure underneath it: the org layout,
+the accounts, the network boundaries, the security baseline, and clusters-as-resources are all reconciled
+through the same **Posture → plan → reconcile** loop as everything else. The one boundary worth memorizing
+is on Kubernetes — Trellis owns the cluster, not what runs inside it.
+
+| Layer | Does Trellis own it? | What that means — and where it stops |
+|---|---|---|
+| **Baseline security / guardrails** | **Yes** | Governance authors *authorization intent* — what MAY connect — and the planner compiles it into the concrete SCP / IAM / security-group / route set. The org sets non-negotiable **floors**; delegated parents may *tighten, never loosen*; the gate enforces the composition. This is the security baseline, owned and proof-carrying. |
+| **OUs** | **Yes** | The org root is the top **Frame**; Admin carves OUs as part of structure. Bootstrap stands up the OU layout via AWS Organizations + Control Tower. |
+| **Accounts** | **Yes** | Accounts are Frames too. Bootstrap provisions the log-archive account, the delegated-admin identity foundation, and the control plane's own account; the account factory provisions managed accounts thereafter. **Default grain: account-per-division.** |
+| **VPCs / networking** | **Yes** | A VPC / network boundary is a Frame; the planner provisions it and the typed connectivity (the **Weave** — DNS, LB, peering, transit) drawn over the placement tree, and heals it through the same loop. |
+| **Kubernetes** | **The cluster, yes — workloads, no** | Trellis owns the cluster *as a resource*: its existence, version, node groups, networking, pod-identity (IRSA), and platform add-ons (CNI, CSI, DNS, autoscaler, the GitOps agent). It **stops at the cluster API**; the in-cluster loop (Argo/Flux) owns Deployments, pods, and Services. Slice at the **cluster**, not the namespace. See [Trellis and Kubernetes](/trellis/docs/operating-model#trellis-and-kubernetes-where-the-line-is). |
+
+Two honest qualifiers:
+
+- **Greenfield vs. brownfield.** On a fresh org Trellis lays the foundation down cleanly. Adopting it into
+  an *existing* org with live accounts is a **discovery-and-reconcile** exercise first — it maps what's
+  already there before it holds it. See [Bootstrap & footprint](/trellis/docs/bootstrap).
+- **Spec design vs. the simulator.** Everything above is the **spec** (the source of truth). The
+  client-side simulator on this site deliberately models the *loop* at the resource level (compute, data,
+  load balancers, jobs, stateful clusters) and **does not** simulate the org / account / VPC / cluster
+  provisioning — the cloud is simulated, the dynamics are real.
+
 ### Is it really provider-neutral, or is that marketing?
 
 Honestly: **neutral in concept, AWS-first in practice.** The grammar, Topology, and Structure are
