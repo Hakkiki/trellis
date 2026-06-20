@@ -105,8 +105,12 @@ The simulator deploys continuously from `main`, so entries are grouped by date r
   make an operator reach for the glass (and shows only three are clean triggers — the rest have cheaper
   correct responses), then runs **Munger inversion** on the trigger itself (B1–B7): the machinery is
   well-defended, but the *decision* to open the glass is the unguarded surface — economic trigger-inflation
-  (B1), fog-of-war misreads (B6), and the missing trigger taxonomy (B7). Three proposed §7/§13 additions,
-  no change to the machinery.
+  (B1), fog-of-war misreads (B6), and the missing trigger taxonomy (B7). The three trigger gaps are now
+  **folded into the spec** (§7 + §13) — no change to the break-glass machinery: §7 gains the six-sensation
+  trigger table (only three sensations should open the glass; the rest route to scope-freeze /
+  observe-only / liveness escalation) and makes break-glass *rate* a first-class gate-health signal; §13's
+  incident surface now shows the reconciler's reasoning *before* an override, so the most dangerous
+  triggers are decided on evidence, not panic.
 
 - **Roles & responsibilities — a day in the life.** A new page mapping the nine personas (Platform Owner,
   Security/Governance author, Division/Product lead, Platform Operator, Service/Eng teams, Break-glass

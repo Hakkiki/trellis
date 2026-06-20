@@ -916,6 +916,28 @@ become a permanent un-healed hole.
 > Break-glass buys *time*, not *permission*. The governing law still holds — desired state changes only
 > through Author; only "reality converges to desired state" is suspended, and only until the debt is paid.
 
+#### The trigger — *when* to open the glass
+
+Break-glass is the **one transition the state model never derives** (§4): every other edge is a pure
+`f(desired, observed, health)`; `Converged → Frozen` is a *human judgment*. An undecided trigger is an
+untrainable, un-drillable, un-auditable decision, so the trigger is itself part of the spec. Six
+**sensations** make an operator reach for the glass — but **only three should open it**; the rest have a
+cheaper correct response, and confusing them is how the emergency exit becomes the front door:
+
+| Sensation | Condition | Correct response |
+|---|---|---|
+| "Every fix I make reverts" | out-of-band fix read as Drift, enforce-stomped | **scope-freeze / observe-only** (§4 drift policy) — *not* glass, unless it can't wait |
+| "Approval is slower than the bleed" | gate latency > incident tolerance | first try the Inv 18 fast-path; glass only if it truly can't run — *this is the most-abused trigger* |
+| "The deploy *is* the outage" | approved-but-bad generation converging | **glass** (halt convergence) — Inv 11 auto-rollback should already be acting |
+| "It's holding and won't move" | Stalled, or Frozen-on-Unknown when failover is needed (§4) | **liveness escalation** (§13), *not* a bypass |
+| "I can't even propose a change" | gate / CI / mint authority unreachable | **glass** — the gate literally cannot run; this is break-glass's reason to exist |
+| "There's no manifest for *this*" | fix not expressible as desired state (forensic / containment one-off) | **glass** — outside the envelope by nature |
+
+**Break-glass *rate* is a first-class gate-health signal** (routed via §13, not just budget-capped, §7
+above): a frequently-opened glass diagnoses a *miscalibrated gate*, not a heroic operator — the fix is to
+make normal Authoring fast (Inv 18), keeping the emergency path rare. (Inversion red-team of the trigger:
+[`trellis-breakglass-redteam.md`](trellis-breakglass-redteam.md).)
+
 ### The duality with observability
 
 Actions are the writes; the observability plane is the log of them. Every action emits one audit record:
@@ -1299,8 +1321,16 @@ Self-heal is autonomous; break-glass is emergency-human. The vast middle — a *
   posture, not ad-hoc.
 - **Incident surface = an incident View:** the blast-radius rollup of Stalled/Degraded/Frozen joined to
   the time-correlated **action audit log** (actions and observability are duals, joined here).
+- **Shows the reconciler's reasoning *before* an override.** When an operator is about to break glass (§7),
+  the surface presents *why the loop is acting as it is* — the generation it's converging toward, the
+  proof, why a resource is being reverted — so the decision is made on evidence, not panic. The most
+  dangerous trigger ("every fix reverts" / "the deploy is the outage") is the one indistinguishable from
+  *the loop being right and the operator wrong*; surfacing the loop's belief is the guardrail against
+  breaking glass on a misread and disabling the thing that was healing the incident.
 - **Runbooks** are catalog entries bound to a failure class; break-glass is invocable *from* the incident
-  surface, scoped to the blast radius.
+  surface, scoped to the blast radius. Each runbook binds a failure class to its correct response, so the
+  six break-glass sensations (§7) route to glass *or* to the cheaper fix (scope-freeze / observe-only /
+  liveness escalation) by recognition, not improvisation.
 
 ---
 

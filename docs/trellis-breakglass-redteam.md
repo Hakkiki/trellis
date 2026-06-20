@@ -62,21 +62,22 @@ containment model?* Each kill-path scored **✓ foreclosed** / **◑ partial** /
 | **B6** | **Decision under fog.** S1 and S3 are indistinguishable from "*I am wrong and the loop is right*" under stress. Break glass on a misread → you **disable the thing that was saving you**, at the worst possible moment | P4 | ➕ **GAP** | §13 incident surface must *show the operator the loop's reasoning before they break glass* — the generation it's converging toward, the proof, *why* it's reverting. The decision must be on evidence, not panic. Today the surface shows state rollups + audit log, not "here is what the reconciler believes and why" |
 | **B7** | **No trigger taxonomy → no muscle memory.** Because the trigger was never defined, every operator invents their own threshold: inconsistent, untrainable, unauditable, un-drillable | P1, P2 | ➕ **GAP** | This document's sensation taxonomy (S1–S6) is the fix: make break-glass a *recognized situation with a runbook* (§13 runbooks are catalog entries bound to a failure class), not an improvisation. Bind each sensation to its correct response so S1/S4 stop reaching for glass reflexively |
 
-## What this produces
+## What this produces — folded into the spec
 
-Break-glass machinery is **well-defended** (B2, B3 foreclosed). The unguarded surface is the **trigger**,
-not the mechanism:
+Break-glass machinery is **well-defended** (B2, B3 foreclosed). The unguarded surface was the **trigger**,
+not the mechanism. The three trigger gaps are now resolved in the spec — no change to the machinery:
 
-- **B1** — the economic pressure that turns the rare path into the default. Mitigated by Inv 18; **gap:
-  route break-glass *rate* as a first-class alarm** (a high rate diagnoses the gate, not the operator).
-- **B6** — the fog of war. **Gap: the incident surface must expose the reconciler's reasoning** *before*
-  the human overrides it, so S1/S3 are decided on evidence.
-- **B7** — the missing taxonomy. **Gap: bind the six sensations to their correct responses** so only
-  S3/S5/S6 reach for glass and S1/S4 route to the cheaper fix (scope-freeze / observe-only / liveness
-  escalation).
+- **B1** — the economic pressure that turns the rare path into the default. Mitigated by Inv 18; **now
+  §7** makes break-glass *rate* a first-class gate-health signal (a high rate diagnoses the gate, not the
+  operator), routed via §13 rather than only budget-capped.
+- **B6** — the fog of war. **Now §13:** the incident surface must expose the reconciler's reasoning — the
+  generation it's converging toward, the proof, why it's reverting — *before* the human overrides it, so
+  the most dangerous triggers (S1/S3) are decided on evidence, not panic.
+- **B7** — the missing taxonomy. **Now §7** carries the six-sensation trigger table (only S3/S5/S6 open
+  the glass; S1/S4 route to scope-freeze / observe-only / liveness escalation), and **§13** binds each
+  runbook's failure class to its correct response so the routing is by recognition, not improvisation.
 
 The one-line headline: **Trellis hardened the glass but never specified the alarm that should make you
-break it — and "any sensation will do" is how the emergency exit becomes the front door.** The fix is a
+break it — and "any sensation will do" is how the emergency exit becomes the front door.** The fix was a
 *decision discipline* (S1–S6 + their correct responses), the loop's reasoning shown at the moment of
-decision (B6), and break-glass *rate* watched as a gate-health signal (B1) — three additions to §7/§13,
-no change to the machinery.
+decision (B6), and break-glass *rate* watched as a gate-health signal (B1) — now landed in §7/§13.
