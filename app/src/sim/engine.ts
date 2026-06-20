@@ -18,6 +18,7 @@ import {
   type Resilience,
   type ResourceID,
   servicesOf,
+  type Tier,
 } from "./model";
 import { manifestCost, resourceCost, plan as runPlanner, serviceSlug } from "./planner";
 import { Reconciler, type Status } from "./reconcile";
@@ -120,6 +121,9 @@ export interface EngineSnapshot {
   envRollup: State;
   envNote: string;
   controlPlane: ControlPlaneView;
+  // Resources the denial-of-wallet guard has pinned warm (guardrail 7): resume
+  // thrash detected, so the autoscaler stops parking them until resolved.
+  walletGuard: ResourceID[];
 }
 
 /** Ownership roll-up (§6): a Service's state (worst-of its managed children) and
@@ -164,6 +168,21 @@ export const DEFAULT_POSTURE: Posture = {
 const BREAK_GLASS_WINDOW_MS = 60_000;
 const BREAK_GLASS_NOISY = 3;
 
+// Idle ticks before the autoscaler parks a resource, per tier (docs: Cost &
+// parity). The demand-driven replacement for env-label parking: conservative
+// never parks (a warm floor), aggressive parks quickly.
+const IDLE_THRESHOLD: Record<Tier, number> = {
+  aggressive: 2,
+  balanced: 5,
+  conservative: Number.POSITIVE_INFINITY,
+};
+// Denial-of-wallet guard (guardrail 7): more than DOW_LIMIT resumes inside the
+// trailing window is resume thrash (a flapping signal or an attacker forcing
+// cold starts). Pin the resource warm and alert — churn costs more than a warm
+// floor, so the cost-effective response is to stop the churn, not the workload.
+const DOW_WINDOW_MS = 10_000;
+const DOW_LIMIT = 3;
+
 export class Engine {
   private cloud = new SimCloud({ applyLatency: 2 });
   private rec = new Reconciler(this.cloud, {
@@ -187,6 +206,10 @@ export class Engine {
   private teamRollout = new TeamRollout();
   private nextVer = new Map<string, number>();
   private bakes = new Map<string, Bake>();
+  // Utilization control loop: resume timestamps per resource (denial-of-wallet
+  // guard) and the set the guard has pinned warm to stop resume thrash.
+  private resumeLog = new Map<ResourceID, number[]>();
+  private pinnedWarm = new Set<ResourceID>();
 
   constructor(posture: Posture = DEFAULT_POSTURE) {
     this.posture = posture;
@@ -281,6 +304,10 @@ export class Engine {
   tick(): boolean {
     this.cp.tick();
     if (!this.manifest) return false;
+    // Utilization control loop (docs: Cost & parity): park idle capacity and
+    // resume on demand, per tier — runs before reconcile so a just-parked
+    // resource reads Dormant this pass.
+    this.autoscale();
     // A bad self-upgrade can brick the reconciler — the one change that disables
     // the thing that would heal (§16). The workload loop is then down: the cloud
     // still drifts, but nothing reconciles it until a re-bootstrap.
@@ -417,6 +444,7 @@ export class Engine {
     const d = this.manifest?.resources[id];
     if (!d || !parkable(d)) return;
     this.cloud.park(id);
+    this.cloud.setIdle(id, true); // parked because idle — stays parked until demand returns
     this.log(
       "Observe",
       "autoscaler",
@@ -429,12 +457,104 @@ export class Engine {
   }
 
   /** Resume a parked resource when demand returns. Durable state is intact, so
-   *  it comes back as the same shape it was — parity preserved. */
+   *  it comes back as the same shape — parity preserved. Routed through the
+   *  denial-of-wallet guard, which caps resume thrash. */
   wake(id: ResourceID) {
+    this.resumeWithGuard(id, false);
+  }
+
+  /** A *cold* resume (guardrail 4): the resource comes back behaviour-divergent
+   *  — dropped connections / cold buffers — Degraded until the loop self-heals
+   *  it. The tested failure path behind a wake, not a free instant return. */
+  coldResume(id: ResourceID) {
+    this.resumeWithGuard(id, true);
+  }
+
+  /** Observed demand for a resource: idle (no traffic) or busy. The autoscaler
+   *  parks on sustained idleness and resumes when demand returns (docs: Cost &
+   *  parity) — the demand-driven signal, not an env label. */
+  setIdle(id: ResourceID, idle: boolean) {
+    this.cloud.setIdle(id, idle);
+  }
+
+  /** Resolve a denial-of-wallet incident: un-pin so the resource may park again. */
+  resolveWalletGuard(id: ResourceID) {
+    if (!this.pinnedWarm.delete(id)) return;
+    this.resumeLog.delete(id);
+    this.log(
+      "Author",
+      "finops",
+      "wallet-guard-reset",
+      id,
+      "resume thrash resolved — parking resumes",
+    );
+  }
+
+  /** The utilization control loop: park parkable resources idle past their tier
+   *  threshold, resume on demand. Conservative tiers never park (a warm floor);
+   *  a wallet-guard-pinned resource stays warm. */
+  private autoscale() {
+    if (!this.manifest) return;
+    for (const d of Object.values(this.manifest.resources)) {
+      const cls = parkClass(d);
+      if (cls !== "elasticity" && cls !== "dormancy") continue; // fixed/none never auto-park
+      const tier = cls === "elasticity" ? this.posture.elasticity : this.posture.dormancy;
+      const threshold = IDLE_THRESHOLD[tier ?? "conservative"];
+      const idle = this.cloud.idleTicks(d.id);
+      if (!this.cloud.isDormant(d.id)) {
+        if (idle >= threshold && !this.pinnedWarm.has(d.id)) {
+          this.cloud.park(d.id);
+          this.log(
+            "Observe",
+            "autoscaler",
+            "auto-park",
+            d.id,
+            cls === "dormancy"
+              ? `idle ${idle}t — paused, storage retained (dormancy/${tier})`
+              : `idle ${idle}t — scaled to zero (elasticity/${tier})`,
+          );
+        }
+      } else if (!this.cloud.isIdle(d.id)) {
+        this.resumeWithGuard(d.id, false); // demand returned → resume
+      }
+    }
+  }
+
+  /** Resume a resource, enforcing the denial-of-wallet guard (guardrail 7): too
+   *  many resumes in the trailing window is thrash — pin warm and alert rather
+   *  than keep paying cold-start churn. The request is still served. */
+  private resumeWithGuard(id: ResourceID, cold: boolean) {
     const d = this.manifest?.resources[id];
-    if (!d) return;
-    this.cloud.wake(id);
-    this.log("Observe", "autoscaler", "wake", id, "demand returned — resumed");
+    if (!d || !this.cloud.isDormant(id)) return;
+    const now = this.cloud.now();
+    const times = (this.resumeLog.get(id) ?? []).filter((t) => now - t <= DOW_WINDOW_MS);
+    times.push(now);
+    this.resumeLog.set(id, times);
+    this.cloud.setIdle(id, false); // resuming means demand is present now
+    if (times.length > DOW_LIMIT) {
+      if (!this.pinnedWarm.has(id)) {
+        this.pinnedWarm.add(id);
+        this.log(
+          "Observe",
+          "finops",
+          "denial-of-wallet",
+          id,
+          `resume thrash (${times.length} in ${DOW_WINDOW_MS / 1000}s) — pinning warm to cap cost`,
+        );
+      }
+      this.cloud.wake(id, cold); // serve the request, but stop the park/wake churn
+      return;
+    }
+    this.cloud.wake(id, cold);
+    this.log(
+      "Observe",
+      "autoscaler",
+      cold ? "cold-resume" : "wake",
+      id,
+      cold
+        ? "demand returned — cold resume (dropped connections, self-heal recovering)"
+        : "demand returned — resumed",
+    );
   }
 
   /** Cost drift (§13): the cloud starts billing a resource above plan (usage
@@ -700,6 +820,7 @@ export class Engine {
       envRollup,
       envNote,
       controlPlane: this.cp.view(),
+      walletGuard: [...this.pinnedWarm],
     };
   }
 

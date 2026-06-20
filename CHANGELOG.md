@@ -7,6 +7,17 @@ The simulator deploys continuously from `main`, so entries are grouped by date r
 
 ### Added
 
+- **Engine: a demand-driven utilization loop + cold-resume + denial-of-wallet guard.** The remaining
+  [Cost & parity](https://hakkiki.github.io/trellis/docs/cost-and-parity) follow-ups land. `autoscale()`
+  runs each tick: it **parks** a parkable resource once observed idle past its **tier** threshold
+  (aggressive parks quickly; conservative never — a warm floor) and **resumes** on returning demand — so
+  parking is driven by an observed idle signal (`setIdle`), not an env label or a manual call. A **cold
+  resume** (`coldResume`) brings a resource back **Degraded** (dropped connections / cold buffers) for the
+  reconciler to self-heal — guardrail 4's failure path, tested. And a **denial-of-wallet guard**
+  (guardrail 7) detects resume thrash, **pins the resource warm**, and alerts (surfaced as `walletGuard`,
+  cleared by `resolveWalletGuard`) — because churn costs more than a warm floor. Tests cover all four
+  behaviours.
+
 - **Cost & parity: "cost-effectiveness, not cost optimization."** A new framing section on the
   [Cost & parity](https://hakkiki.github.io/trellis/docs/cost-and-parity) page argues cost is a property
   **held continuously**, not a saving banked once — the same reason a desired state needs a reconcile

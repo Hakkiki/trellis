@@ -200,17 +200,27 @@ The first slice — the two guardrails everything else depends on — is now in 
   on — that stays the provisioned ceiling (`manifestCost`).
 - **Resume has latency** (guardrail 4): a woken resource warms through a cold-start window (`Converging`)
   before it is live — data-consistent, but not free — and the path is tested.
+- **A demand-driven utilization loop.** `engine.autoscale()` runs every tick: it **parks** a parkable
+  resource once it has been observed idle past its **tier** threshold (`aggressive` parks quickly,
+  `conservative` never — a warm floor) and **resumes** it when demand returns. Parking is no longer an
+  env label or a manual call — it's driven by the observed idle signal, the first move from a static tier
+  toward a control loop.
+- **Cold resume is a tested failure path** (guardrail 4): `engine.coldResume()` brings a resource back
+  **Degraded** — dropped connections / cold buffers — and the reconciler must self-heal it. Not a free
+  instant wake.
+- **The denial-of-wallet guard** (guardrail 7): more than a few resumes in a trailing window is treated
+  as **resume thrash** (a flapping signal or an attacker forcing cold starts); the guard **pins the
+  resource warm** and alerts, because churn costs more than a warm floor. Surfaced in the snapshot
+  (`walletGuard`) and cleared by `resolveWalletGuard()`.
 
 Still **not** modelled (honest follow-ups):
 
-- **Cost is still plan-time, not a reconciled property** — the biggest gap, and the one
-  [Cost-effectiveness, not cost optimization](#cost-effectiveness-not-cost-optimization) calls out: the
-  objective solves once, the tiers are fixed by env, and cost-drift detection observes without
-  re-optimizing. The honest version is a closed loop with a value/outcome term, a moving cost setpoint in
-  Posture, and demand-driven tiers.
-- **No idle *trigger*** — environments don't auto-park on observed idleness; parking is an explicit
-  operator/autoscaler action (`engine.park()` / `wake()`). The expected-cost estimate stands in for the
-  duty cycle until an idleness model exists. (This is the demand-driven half of the gap above.)
-- **Resume is benign-only** — the dropped-connection / cold-buffer *behaviour* of guardrail 4 is modelled
-  as latency, not yet as a failure path an app must survive.
-- **Denial-of-wallet guard** (guardrail 7) — resume is not yet rate-limited.
+- **Cost is not yet a *fully* reconciled property** — the demand-driven tiers above are the first half;
+  the rest of [Cost-effectiveness, not cost optimization](#cost-effectiveness-not-cost-optimization)
+  remains: the objective still solves **once** (no continuous re-optimization), there is **no value /
+  outcome term** so "effective" still lacks a denominator, and the cost setpoint (budget) is still a
+  **static** number rather than a live Posture input that moves with business drivers.
+- **The idle signal is exogenous** — `setIdle()` is injected, not derived from modelled traffic/SLOs; a
+  real demand model (and the value term it feeds) is the next step.
+- **Resume-as-failure is coarse** — a cold resume degrades the resource itself; it doesn't yet model the
+  *clients'* dropped in-flight transactions as a path the calling service must survive.

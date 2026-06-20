@@ -30,6 +30,8 @@ interface SimResource {
   stale: boolean;
   dormant: boolean; // intentionally parked (scaled-to-zero / paused) to save cost
   resumeIn: number; // ticks of cold-start remaining after a wake (0 = warm)
+  idle: boolean; // observed: no demand right now (the autoscaler's input signal)
+  idleTicks: number; // consecutive ticks observed idle (drives demand-based parking)
   broken: boolean; // root-cause failure that self-heal cannot fix
   costFactor: number; // billed ÷ planned — 1 normally; >1 is cost drift (§13)
   observedAtMs: number;
@@ -90,6 +92,8 @@ export class SimCloud implements Provider {
       // Burn down a cold-start: while resumeIn > 0 the resource reads as warming
       // (Converging); when it hits 0 it is live again.
       if (r.resumeIn > 0) r.resumeIn--;
+      // Accrue observed idleness — the demand signal the autoscaler controls on.
+      r.idleTicks = r.idle ? r.idleTicks + 1 : 0;
       if (!r.stale) r.observedAtMs = this.nowMs;
     }
   }
@@ -134,6 +138,8 @@ export class SimCloud implements Provider {
         stale: false,
         dormant: false,
         resumeIn: 0,
+        idle: false,
+        idleTicks: 0,
         broken: false,
         costFactor: 1,
         observedAtMs: this.nowMs,
@@ -195,6 +201,8 @@ export class SimCloud implements Provider {
       stale: false,
       dormant: false,
       resumeIn: 0,
+      idle: false,
+      idleTicks: 0,
       broken: false,
       costFactor: 1,
       observedAtMs: this.nowMs,
@@ -263,15 +271,49 @@ export class SimCloud implements Provider {
 
   /** Resume a parked resource. Durable state is intact, so it comes back as the
    *  same shape (data-consistent) — but not instantly: it warms through a
-   *  cold-start window (RESUME_LATENCY) before it is live again. */
-  wake(id: ResourceID) {
+   *  cold-start window (RESUME_LATENCY) before it is live again. A `cold` resume
+   *  surfaces the behaviour-divergent path (dropped connections / cold buffers,
+   *  guardrail 4): it comes back Degraded and the reconciler must self-heal it
+   *  — a tested failure path, not a free wake. */
+  wake(id: ResourceID, cold = false) {
     const r = this.res.get(id);
-    if (r?.dormant) {
-      r.dormant = false;
+    if (!r?.dormant) return;
+    r.dormant = false;
+    r.nodesDown = 0;
+    if (cold) {
+      r.resumeIn = 0;
+      r.health = "Degraded"; // came back unhealthy — the loop must recover it
+      if (r.lifecycle === "stateful") r.nodesDown = 1; // a node slow to rejoin
+    } else {
       r.resumeIn = RESUME_LATENCY;
-      r.health = "Healthy"; // data retained; the warm-up is the latency, not a fault
-      r.nodesDown = 0;
+      r.health = "Healthy"; // data retained; the warm-up is latency, not a fault
     }
+  }
+
+  /** Mark a resource's observed demand: idle (no traffic) or busy. The autoscaler
+   *  reads the accrued idleness to decide when to park, and treats returning
+   *  demand as the trigger to resume. */
+  setIdle(id: ResourceID, idle: boolean) {
+    const r = this.res.get(id);
+    if (r) {
+      r.idle = idle;
+      if (!idle) r.idleTicks = 0;
+    }
+  }
+
+  /** Consecutive ticks a resource has been observed idle (0 = busy now). */
+  idleTicks(id: ResourceID): number {
+    return this.res.get(id)?.idleTicks ?? 0;
+  }
+
+  /** Whether a resource is currently observed idle (no demand). */
+  isIdle(id: ResourceID): boolean {
+    return this.res.get(id)?.idle ?? false;
+  }
+
+  /** Whether a resource is currently parked. */
+  isDormant(id: ResourceID): boolean {
+    return this.res.get(id)?.dormant ?? false;
   }
 
   // ---- Fault injection (sim-only; the dynamics the loop must survive) ------
