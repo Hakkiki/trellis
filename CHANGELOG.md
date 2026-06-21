@@ -33,6 +33,15 @@ The simulator deploys continuously from `main`, so entries are grouped by date r
 
 ### Added
 
+- **Principles — the twelve convictions.** A new front-of-house page stating, in plain spoken language,
+  why Trellis is shaped the way it is: containment as the spine, the path-not-just-target view of safe
+  change, the boundary-is-the-guarantee rule, the enforcer that obeys its own rule, the one law (only a
+  human authors; everything else converges), plan-as-proof and loud failure, governance as a wall not a
+  dial, break-glass that buys time not permission, the one Criticality dial, legibility as a correctness
+  property, and self-service that isn't self-operate. Each principle's *claim is its heading*, so the
+  table of contents reads as the whole philosophy. Distilled from the spec and its invariants; linked from
+  a top-of-sidebar "Principles" group and the landing-page "Explore" grid.
+
 - **Simulator: the cost-effectiveness loop is now on screen.** The whole Cost & parity chapter — built in
   the engine over the prior PRs — is surfaced in the simulator UI and the guided tour, which previously
   predated all of it. The Posture form gains **cost levers** (elasticity · dormancy tiers); the **Inject**

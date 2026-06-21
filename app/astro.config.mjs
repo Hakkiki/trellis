@@ -34,6 +34,10 @@ export default defineConfig({
       // and the normative specification (the source of truth).
       sidebar: [
         {
+          label: "Principles",
+          items: [{ label: "The twelve principles", slug: "docs/principles" }],
+        },
+        {
           label: "The case (start here)",
           items: [
             { label: "The case", slug: "docs/the-case" },
