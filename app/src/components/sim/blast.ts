@@ -9,7 +9,9 @@ export type BeatId = "shared" | "redundant" | "process" | "partition" | "recover
 
 export const BEATS: BeatId[] = ["shared", "redundant", "process", "partition", "recover"];
 
-export const DIVISIONS = ["Payments", "Trading", "Risk", "Web"] as const;
+/** Lines of business — actual divisions, not capabilities. (Payments, Trading,
+ *  Risk are services a division *runs*, not divisions themselves.) */
+export const DIVISIONS = ["Retail", "Wealth", "Markets", "Commercial"] as const;
 
 /** Each division runs its own stack of services — the point the picture must make
  *  obvious: a division is a set of services, not a single box. */
