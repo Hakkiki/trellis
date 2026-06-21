@@ -44,8 +44,8 @@ idea, not the finished one:
 - the elasticity/dormancy tiers are fixed **by environment** (dev = aggressive), not driven by observed
   demand — a label is not a loop;
 - the only continuously cost-aware thing in the model, **cost-drift detection** (§13, billed vs planned),
-  *observes and flags* but never **re-optimizes**: it sees that you've left the setpoint, it does not
-  track the setpoint as it moves.
+  *observes and flags* but never **regulates**: it sees that you've drifted off the setpoint, but it
+  neither corrects toward it nor tracks the setpoint as it moves.
 
 Making this honest is a model change, not a tuning pass. Cost-effectiveness becomes a **reconciled
 property**: (1) a **value/outcome term** in the loop so "effective" has a denominator; (2) the cost
@@ -213,14 +213,42 @@ The first slice — the two guardrails everything else depends on — is now in 
   resource warm** and alerts, because churn costs more than a warm floor. Surfaced in the snapshot
   (`walletGuard`) and cleared by `resolveWalletGuard()`.
 
-Still **not** modelled (honest follow-ups):
+Still **not** modelled — and here is the honest map of what *effectiveness* would require. The system
+would have to read three signals **through time** and act on each, surfacing every decision to the owner
+as a proposal (the machine proposes from observed reality; the owner ratifies at the gate — so the gate
+declaration stops being a one-time blind guess and becomes a living, evidence-backed schedule):
 
-- **Cost is not yet a *fully* reconciled property** — the demand-driven tiers above are the first half;
-  the rest of [Cost-effectiveness, not cost optimization](#cost-effectiveness-not-cost-optimization)
-  remains: the objective still solves **once** (no continuous re-optimization), there is **no value /
-  outcome term** so "effective" still lacks a denominator, and the cost setpoint (budget) is still a
-  **static** number rather than a live Posture input that moves with business drivers.
-- **The idle signal is exogenous** — `setIdle()` is injected, not derived from modelled traffic/SLOs; a
-  real demand model (and the value term it feeds) is the next step.
-- **Resume-as-failure is coarse** — a cold resume degrades the resource itself; it doesn't yet model the
-  *clients'* dropped in-flight transactions as a path the calling service must survive.
+1. **Temporal idle → park (the *when*).** Not "idle right now" — a blind point sample, which is all
+   `autoscale()` does today (`idleTicks` over a threshold) — but a *model of demand over time*: park
+   during predicted idle, **pre-warm before predicted demand**. Trellis already carries `schedule:
+   "nightly"` on the batch job in desired state and the autoscaler **ignores it** — it would park the DB
+   at 11:58 and cold-start the midnight job. The richer version *infers* the patterns nobody declared
+   (the month-end spike, the weekday ramp) from observed telemetry, and keeps a reactive floor for demand
+   the model didn't predict.
+
+2. **Low utilization → right-size (the *how much*).** A resource used continuously but at 50% of a
+   `large` isn't idle — it's **overprovisioned**; the action is not park but **shrink the SKU / drop a
+   replica**. Today the planner sizes purely by Criticality (`C0→large`), blind to observed utilization —
+   there is no right-sizing loop. The catch: "50% used = 50% waste" is the naive claim. You can't call it
+   waste without the **required headroom** (burst / failover / p99 — cutting it breaks SLA), the
+   **binding resource** (50% CPU at 95% memory is *not* overprovisioned), and the **distribution** (a 50%
+   average may be 10% nights / 90% peak — size to the peak you must serve). And because right-sizing
+   changes the **shape**, it is a *shared* decision driven by **prod's** utilization, proposed at the
+   gate and cascaded with parity preserved — never a per-env shrink.
+
+3. **Output vs outcome → the value term (the *what for*).** Even fully utilized, is the work worth it?
+   This is the **denominator** that makes "effective" measurable at all. We surface **budget vs cost** —
+   numerator only; we surface no value/outcome, so neither the loop nor the owner can tell *cost-effective*
+   from *cheap*. Utilization is a decent proxy for "using what you bought," but a box pinned at 100% on
+   retry storms is fully utilized and useless.
+
+Across all three the control action is to **regulate** — hold cost-against-value in band as demand,
+prices, and business drivers move — **not** to re-run an optimizer on a timer (which would chase the
+cheapest point and strip the very slack effectiveness must preserve). The cost setpoint must **move** with
+business drivers (Black Friday spends more, on purpose), as an owner-ratified proposal, not a static
+budget. What ships today is the dumb reactive floor on axis 1, a declared signal we ignore, and
+numerator-only visibility — useful scaffolding, **not yet effectiveness**.
+
+One smaller, separate gap: **resume-as-failure is coarse** — a cold resume degrades the resource itself;
+it doesn't yet model the *clients'* dropped in-flight transactions as a path the calling service must
+survive.
