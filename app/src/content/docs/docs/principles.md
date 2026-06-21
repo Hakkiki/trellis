@@ -18,10 +18,10 @@ When everyone shares the same systems, one team's mistake becomes everyone's out
 someone who never should have had the keys, and the whole company is down. So Trellis gives each team its
 own setup, walled off from the rest. Now when something breaks, it breaks in one place.
 
-### 2. The risky part is the change, not the result
+### 2. The danger is the jump, not the landing
 
-Two setups can both be perfectly healthy, and the move between them can still take you down. The danger is
-in the switch itself. You can't rebuild a running database in place. You stand up a new one, copy the data
+Two setups can both be perfectly healthy, and the move between them can still take you down. The switch
+itself is where things break. You can't rebuild a running database in place. You stand up a new one, copy the data
 over, move the traffic, then retire the old. So Trellis doesn't just pick the end state. It plans a safe
 route there: small steps, and you can undo each one if it goes wrong.
 
@@ -46,7 +46,7 @@ machine does the tireless work: it watches everything, fixes what slips, and hol
 it only ever steers toward what a person already decided. People decide what should be true. The system
 keeps it true.
 
-### 6. Every change explains itself
+### 6. Every change shows its work
 
 A plan should be an argument you can check, not a claim you just trust. Every piece of it points back to a
 reason: why this exists, and what allowed it. So you approve the reasoning, not just the result. Nothing
