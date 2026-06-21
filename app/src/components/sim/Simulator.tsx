@@ -2,6 +2,7 @@ import {
   Activity,
   AlertTriangle,
   Boxes,
+  Check,
   CircleSlash,
   Clock,
   Cloud,
@@ -1975,13 +1976,38 @@ function EventButton({
   hint?: string;
   onClick: () => void;
 }) {
+  // A momentary "fired" flash so a click clearly registers — these trigger an
+  // instantaneous event, so the feedback is the acknowledgement, not a spinner.
+  const [fired, setFired] = React.useState(false);
+  const timer = React.useRef<number | null>(null);
+  React.useEffect(() => () => void (timer.current && window.clearTimeout(timer.current)), []);
+  const handle = () => {
+    onClick();
+    setFired(true);
+    if (timer.current) window.clearTimeout(timer.current);
+    timer.current = window.setTimeout(() => setFired(false), 600);
+  };
   return (
     <button
-      onClick={onClick}
-      className="border-input hover:bg-accent flex flex-col items-start gap-1 rounded-md border px-3 py-2 text-left transition"
+      type="button"
+      onClick={handle}
+      className={cn(
+        "focus-visible:ring-ring relative flex flex-col items-start gap-1 rounded-md border px-3 py-2 text-left transition-all duration-150 focus-visible:ring-2 focus-visible:outline-none active:scale-[0.97]",
+        fired
+          ? "border-primary bg-primary/15 ring-primary/40 ring-1"
+          : "border-input hover:bg-accent hover:border-primary/40",
+      )}
     >
-      <Icon className="size-4" />
-      <span className="text-xs font-medium">{label}</span>
+      <Icon className={cn("size-4 transition-colors", fired && "text-primary")} />
+      <span className="flex items-center gap-1 text-xs font-medium">
+        {label}
+        <Check
+          className={cn(
+            "size-3 text-primary transition-opacity duration-150",
+            fired ? "opacity-100" : "opacity-0",
+          )}
+        />
+      </span>
       {hint && <span className="text-muted-foreground truncate text-[10px]">{hint}</span>}
     </button>
   );

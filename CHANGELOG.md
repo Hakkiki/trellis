@@ -30,8 +30,10 @@ The simulator deploys continuously from `main`, so entries are grouped by date r
   the Value tab is alive out of the box. The intro ("How to drive it", "What's included") and the tour
   (now 10 steps, with cost-levers, park/cold-resume, and cost-vs-value) are refreshed to match. Selection
   now reads at a glance via an **on-brand gold halo** (a thin ring + warm glow) on the highlighted
-  resource node and owner row. Verified live in Chrome (cost levers, approve, Value tab, accept
-  right-sizing → cost ÷ value drops, park → Dormant, the tour) with zero console errors.
+  resource node and owner row. The **Inject** tiles now give real button feedback — an active press-scale
+  plus a momentary gold "fired" flash with a ✓ — so a click clearly registers (they were flat cards that
+  looked inert). Verified live in Chrome (cost levers, approve, Value tab, accept right-sizing → cost ÷
+  value drops, park → Dormant, the tour, the button flash) with zero console errors.
 
 - **Engine: value is served *well*, not just served (Cost & parity axis 3, SLO/quality term).** Refines
   the value denominator: a `sloAttainment` factor discounts demand met while the serving capacity runs
