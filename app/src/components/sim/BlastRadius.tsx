@@ -213,7 +213,7 @@ function SharedPlatform({
         </div>
       )}
       <div className="text-muted-foreground text-center text-xs font-medium tracking-wide uppercase">
-        Shared platform — every division depends on it
+        Shared platform — every LOB depends on it
       </div>
       {replicas ? (
         <div className="grid grid-cols-3 gap-2">
@@ -245,13 +245,18 @@ function Connector({ down }: { down: boolean }) {
   );
 }
 
-/** The org as four divisions, each its own stack of services. */
+/** The org as four lines of business (LOBs), each its own stack of services. */
 function DivisionGrid({ down, withOwnPlatform }: { down: Set<string>; withOwnPlatform: boolean }) {
   return (
-    <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-      {DIVISIONS.map((d) => (
-        <DivisionStack key={d} name={d} down={down.has(d)} withOwnPlatform={withOwnPlatform} />
-      ))}
+    <div>
+      <div className="text-muted-foreground mb-2 text-center text-xs font-medium tracking-wide uppercase">
+        Lines of business (LOBs) — each runs its own services
+      </div>
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        {DIVISIONS.map((d) => (
+          <DivisionStack key={d} name={d} down={down.has(d)} withOwnPlatform={withOwnPlatform} />
+        ))}
+      </div>
     </div>
   );
 }

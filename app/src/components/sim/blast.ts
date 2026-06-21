@@ -68,7 +68,7 @@ export const BEAT_COPY: Record<BeatId, BeatCopy> = {
     short: "Shared",
     title: "One shared service",
     setup:
-      "Four divisions, one shared PAM / secrets service they all depend on. Roll out a bad upgrade and watch what it reaches.",
+      "Four lines of business (LOBs), one shared PAM / secrets service they all depend on. Roll out a bad upgrade and watch what it reaches.",
     action: "Roll out a bad upgrade",
     undo: "Roll back",
     verdict:
@@ -101,7 +101,7 @@ export const BEAT_COPY: Record<BeatId, BeatCopy> = {
     short: "Partition",
     title: "“Partition it” — share-nothing",
     setup:
-      "The structural answer: share nothing. One cell per division — its own service, no shared substrate for a fault to cross.",
+      "The structural answer: share nothing. One cell per LOB — its own services, no shared substrate for a fault to cross.",
     action: "Roll out the same bad change",
     undo: "Roll back",
     verdict:
