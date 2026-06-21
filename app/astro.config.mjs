@@ -42,9 +42,9 @@ export default defineConfig({
           items: [
             { label: "The case", slug: "docs/the-case" },
             { label: "Why Trellis — use case", slug: "docs/use-case" },
-            // Standalone page (not a docs entry), so use an absolute `link` —
-            // Starlight does not prepend the base path to sidebar `link`s.
-            { label: "Blast radius (demo)", link: "/trellis/blast-radius" },
+            // Standalone page (not a docs entry). Starlight prepends the base
+            // path to sidebar `link`s, so give it the base-relative path.
+            { label: "Blast radius (demo)", link: "/blast-radius/" },
           ],
         },
         {
@@ -71,6 +71,7 @@ export default defineConfig({
             { label: "Operating model", slug: "docs/operating-model" },
             { label: "Bootstrap & footprint", slug: "docs/bootstrap" },
             { label: "Inversion stress test", slug: "docs/hardening" },
+            { label: "Cost & parity", slug: "docs/cost-and-parity" },
             { label: "Provider crosswalk", slug: "docs/provider-crosswalk" },
             { label: "Architecture", slug: "docs/architecture" },
           ],

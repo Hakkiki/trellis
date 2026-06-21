@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { DEFAULT_POSTURE, Engine, securityTier } from "./engine";
 import type { DesiredResource, Manifest, Observation, Posture } from "./model";
-import { plan } from "./planner";
+import { parkable, parkClass } from "./model";
+import { parityCheck, plan } from "./planner";
 import { allConverged, Reconciler, type Status } from "./reconcile";
+import { parseSchedule } from "./schedule";
 import { SimCloud } from "./sim";
 import { derive, rollup } from "./state";
 
@@ -144,6 +146,52 @@ describe("planner", () => {
     expect(p.feasible).toBe(false);
     expect(p.failure).toMatch(/binding constraint/);
     expect(p.sensitivity.length).toBeGreaterThan(0);
+  });
+});
+
+describe("release inner loop wired into the engine (§11)", () => {
+  function ready(): Engine {
+    const e = new Engine(DEFAULT_POSTURE);
+    e.declare(DEFAULT_POSTURE);
+    e.approve();
+    for (let i = 0; i < 40 && !e.snapshot().converged; i++) e.tick();
+    return e;
+  }
+  const rollupFor = (e: Engine, slug: string) =>
+    e.snapshot().serviceRollups.find((r) => r.slug === slug)!;
+
+  it("a good release advances the running version; the env stays converged", () => {
+    const e = ready();
+    expect(e.snapshot().converged).toBe(true);
+    e.ship("payments-api");
+    expect(rollupFor(e, "payments-api").rollout).not.toBeNull(); // rolling out
+    for (let i = 0; i < 15 && rollupFor(e, "payments-api").rollout; i++) e.tick();
+    const r = rollupFor(e, "payments-api");
+    expect(r.rollout).toBeNull(); // settled
+    expect(r.version).toBe("v2"); // advanced
+    expect(e.snapshot().converged).toBe(true); // outer loop undisturbed
+  });
+
+  it("a broken release self-reverts; the version holds and the env never has an incident", () => {
+    const e = ready();
+    e.ship("payments-api", true);
+    for (let i = 0; i < 15 && rollupFor(e, "payments-api").rollout; i++) e.tick();
+    expect(rollupFor(e, "payments-api").version).toBe("v1"); // unchanged — held safe
+    expect(e.snapshot().converged).toBe(true); // never the platform's Stalled
+    const audit = e.snapshot().audit;
+    expect(audit.some((a) => a.cls === "Release" && a.verb === "rolled-back")).toBe(true);
+    expect(audit.some((a) => a.verb === "STALLED")).toBe(false);
+  });
+
+  it("a change-freeze parks the rollout in Blocked — the temporal handshake", () => {
+    const e = ready();
+    e.setChangeFreeze(true);
+    e.ship("payments-api");
+    e.tick();
+    expect(rollupFor(e, "payments-api").rollout).toBe("Blocked");
+    e.setChangeFreeze(false);
+    for (let i = 0; i < 15 && rollupFor(e, "payments-api").rollout; i++) e.tick();
+    expect(rollupFor(e, "payments-api").version).toBe("v2"); // proceeds once clear
   });
 });
 
@@ -550,5 +598,592 @@ describe("stateful clusters (quorum)", () => {
     e.failNode(b!.id);
     for (let i = 0; i < 20 && !e.snapshot().converged; i++) e.tick();
     expect(e.snapshot().converged).toBe(true);
+  });
+});
+
+describe("break-glass trigger discipline (§7/§13)", () => {
+  function converged() {
+    const e = new Engine(DEFAULT_POSTURE);
+    e.declare(DEFAULT_POSTURE);
+    e.approve();
+    for (let i = 0; i < 30 && !e.snapshot().converged; i++) e.tick();
+    return e;
+  }
+
+  it("surfaces the reconciler's reasoning per resource, so a break-glass is decided on evidence", () => {
+    const e = converged();
+    const app = e.snapshot().resources.find((r) => r.lifecycle === "service" && r.cell === "app")!;
+    // Converged: the loop's belief is shown and benign.
+    expect(e.snapshot().resources.find((r) => r.id === app.id)!.reconcilerReason).toMatch(
+      /matches spec/,
+    );
+    // Drift the resource: the surfaced reasoning now explains the loop is correcting it —
+    // the evidence that distinguishes "the loop is fighting me" from "the loop is right".
+    e.injectDrift(app.id);
+    e.tick();
+    const reason = e.snapshot().resources.find((r) => r.id === app.id)!.reconcilerReason!;
+    expect(reason).toMatch(/drift/i);
+  });
+
+  it("treats break-glass rate as a gate-health signal — frequent opens go noisy", () => {
+    const e = converged();
+    const services = e.snapshot().resources.filter((r) => r.lifecycle === "service");
+    expect(e.snapshot().breakGlassSignal.noisy).toBe(false);
+
+    e.breakGlass(services[0].id);
+    e.breakGlass(services[1].id);
+    expect(e.snapshot().breakGlassSignal.recent).toBe(2);
+    expect(e.snapshot().breakGlassSignal.noisy).toBe(false); // below the threshold
+
+    e.breakGlass(services[2].id);
+    const sig = e.snapshot().breakGlassSignal;
+    expect(sig.recent).toBe(3);
+    expect(sig.noisy).toBe(true); // a frequently-opened glass diagnoses the gate
+  });
+
+  it("surfaces break-glass debt on the incident surface — Frozen is loud, not a silent hole", () => {
+    const e = converged();
+    const app = e.snapshot().resources.find((r) => r.lifecycle === "service" && r.cell === "app")!;
+    expect(e.snapshot().frozenDebts).toHaveLength(0);
+
+    e.breakGlass(app.id);
+    e.tick();
+    const debt = e.snapshot().frozenDebts;
+    expect(debt.map((d) => d.id)).toContain(app.id);
+    expect(debt.find((d) => d.id === app.id)!.reconcilerReason).toMatch(/break-glass/i);
+
+    // Ratify repays the debt; the resource leaves the surface and reconciles again.
+    e.ratify(app.id);
+    for (let i = 0; i < 20 && !e.snapshot().converged; i++) e.tick();
+    expect(e.snapshot().frozenDebts).toHaveLength(0);
+    expect(e.snapshot().converged).toBe(true);
+  });
+
+  it("the rate signal decays — old opens fall out of the trailing window", () => {
+    const e = converged();
+    const services = e.snapshot().resources.filter((r) => r.lifecycle === "service");
+    e.breakGlass(services[0].id);
+    e.breakGlass(services[1].id);
+    e.breakGlass(services[2].id);
+    expect(e.snapshot().breakGlassSignal.noisy).toBe(true);
+    // Advance well past the 60s trailing window; the signal quiets on its own.
+    for (let i = 0; i < 70; i++) e.tick();
+    expect(e.snapshot().breakGlassSignal.recent).toBe(0);
+    expect(e.snapshot().breakGlassSignal.noisy).toBe(false);
+  });
+});
+
+// ---- Cost & parity: elasticity / dormancy ---------------------------------
+
+function res(over: Partial<DesiredResource>): DesiredResource {
+  return {
+    id: "r",
+    kind: "compute",
+    spec: {},
+    generation: 1,
+    lifecycle: "service",
+    service: "s",
+    region: "us-east-1",
+    cell: "app",
+    ...over,
+  };
+}
+
+describe("park class (docs: Cost & parity)", () => {
+  it("assigns the lever from the same state-bearing test the security tier uses", () => {
+    // Stateless compute → elasticity; a load balancer is elasticity-class but
+    // never parks; state-bearing (data cell / stateful) → dormancy.
+    expect(parkClass(res({ cell: "app", kind: "compute" }))).toBe("elasticity");
+    expect(parkClass(res({ cell: "edge", kind: "load-balancer" }))).toBe("fixed");
+    expect(parkClass(res({ cell: "data", kind: "managed-relational-db" }))).toBe("dormancy");
+    expect(parkClass(res({ cell: "data", kind: "stream-broker", lifecycle: "stateful" }))).toBe(
+      "dormancy",
+    );
+    // Jobs and external dependencies have no utilization lever.
+    expect(parkClass(res({ lifecycle: "job", kind: "batch-job" }))).toBe("none");
+    expect(parkClass(res({ lifecycle: "external", kind: "external-saas", cell: "edge" }))).toBe(
+      "none",
+    );
+  });
+  it("only elasticity/dormancy resources are parkable", () => {
+    expect(parkable(res({ cell: "app", kind: "compute" }))).toBe(true);
+    expect(parkable(res({ cell: "data", kind: "managed-relational-db" }))).toBe(true);
+    expect(parkable(res({ cell: "edge", kind: "load-balancer" }))).toBe(false);
+    expect(parkable(res({ lifecycle: "job", kind: "batch-job" }))).toBe(false);
+  });
+});
+
+describe("Dormant state — parked is not down, not drift", () => {
+  it("a parked observation derives Dormant, before any health/quorum reading", () => {
+    const compute = res({ id: "x", spec: { a: "1" } });
+    // Scaled-to-zero compute: Dormant, not Unknown/Degraded.
+    expect(derive(compute, obs({ spec: { a: "1" }, dormant: true }), "Settled", 1000, 0)).toBe(
+      "Dormant",
+    );
+    // A paused stateful cluster reports quorum 0 — still Dormant, not Unavailable.
+    const broker = res({ id: "b", kind: "stream-broker", lifecycle: "stateful", cell: "data" });
+    expect(
+      derive(broker, obs({ dormant: true, quorum: { healthy: 0, total: 3 } }), "Settled", 1000, 0),
+    ).toBe("Dormant");
+  });
+  it("break-glass still dominates a parked resource", () => {
+    const d = res({ id: "x", spec: { a: "1" } });
+    expect(derive(d, obs({ spec: { a: "1" }, dormant: true }), "Frozen", 1000, 0)).toBe("Frozen");
+  });
+});
+
+describe("reconciler holds on Dormant (does not fight the lever)", () => {
+  function converged() {
+    const e = new Engine(DEFAULT_POSTURE);
+    e.declare(DEFAULT_POSTURE);
+    e.approve();
+    for (let i = 0; i < 30 && !e.snapshot().converged; i++) e.tick();
+    return e;
+  }
+
+  it("parks elasticity + dormancy resources; the loop holds and the env stays settled", () => {
+    const e = converged();
+    expect(e.snapshot().converged).toBe(true);
+    const app = e.snapshot().resources.find((r) => r.cell === "app" && r.lifecycle === "service")!;
+    const db = e.snapshot().resources.find((r) => r.kind === "managed-relational-db")!;
+
+    e.park(app.id);
+    e.park(db.id);
+    e.tick();
+
+    const find = (id: string) => e.snapshot().resources.find((r) => r.id === id)!;
+    expect(find(app.id).state).toBe("Dormant");
+    expect(find(db.id).state).toBe("Dormant");
+    // The reconciler's belief is "parked", not drift/degraded.
+    expect(find(app.id).reconcilerReason).toMatch(/dormant|parked/i);
+    // Parked capacity does not break convergence.
+    expect(e.snapshot().converged).toBe(true);
+
+    // The loop never wakes it: it stays Dormant across many passes.
+    for (let i = 0; i < 8; i++) e.tick();
+    expect(find(app.id).state).toBe("Dormant");
+    expect(find(db.id).state).toBe("Dormant");
+
+    // Resume on demand → it comes back as the same shape, converged.
+    e.wake(app.id);
+    e.wake(db.id);
+    for (let i = 0; i < 10 && find(app.id).state !== "Converged"; i++) e.tick();
+    expect(find(app.id).state).toBe("Converged");
+    expect(find(db.id).state).toBe("Converged");
+  });
+
+  it("a fixed resource (load balancer) never parks", () => {
+    const e = converged();
+    const lb = e.snapshot().resources.find((r) => r.kind === "load-balancer")!;
+    e.park(lb.id); // no-op — elasticity class, but never zero
+    e.tick();
+    const after = e.snapshot().resources.find((r) => r.id === lb.id)!;
+    expect(after.state).not.toBe("Dormant");
+  });
+
+  it("resume has latency — a woken resource warms through Converging, then Converged", () => {
+    const e = converged();
+    const db = e.snapshot().resources.find((r) => r.kind === "managed-relational-db")!;
+    const stateOf = () => e.snapshot().resources.find((r) => r.id === db.id)!.state;
+    e.park(db.id);
+    e.tick();
+    expect(stateOf()).toBe("Dormant");
+
+    e.wake(db.id);
+    e.tick();
+    // Not instant — the cold-start window reads as benign progress, not down.
+    expect(stateOf()).toBe("Converging");
+    for (let i = 0; i < 10 && stateOf() !== "Converged"; i++) e.tick();
+    expect(stateOf()).toBe("Converged");
+  });
+});
+
+describe("parity invariant (docs: Cost & parity, guardrail 2)", () => {
+  it("identical shapes pass; a shrunk lower environment is flagged", () => {
+    const a = plan(DEFAULT_POSTURE, 1).manifest;
+    const b = plan(DEFAULT_POSTURE, 1).manifest;
+    expect(
+      parityCheck([
+        { id: "prod", manifest: a },
+        { id: "dev", manifest: b },
+      ]).ok,
+    ).toBe(true);
+
+    // Drop a resource from the lower env (a smaller shape) → violation.
+    const shrunk: Manifest = { generation: b.generation, resources: { ...b.resources } };
+    delete shrunk.resources[Object.keys(shrunk.resources)[0]];
+    const dropped = parityCheck([
+      { id: "prod", manifest: a },
+      { id: "dev", manifest: shrunk },
+    ]);
+    expect(dropped.ok).toBe(false);
+    expect(dropped.violations.length).toBeGreaterThan(0);
+  });
+
+  it("shrinking replicas in a lower env is a parity violation", () => {
+    const a = plan(DEFAULT_POSTURE, 1).manifest;
+    const b = plan(DEFAULT_POSTURE, 1).manifest;
+    const appId = Object.values(b.resources).find((r) => r.cell === "app")!.id;
+    const smaller: Manifest = {
+      generation: b.generation,
+      resources: {
+        ...b.resources,
+        [appId]: { ...b.resources[appId], spec: { ...b.resources[appId].spec, replicas: "1" } },
+      },
+    };
+    expect(
+      parityCheck([
+        { id: "prod", manifest: a },
+        { id: "dev", manifest: smaller },
+      ]).ok,
+    ).toBe(false);
+  });
+
+  it("a different promoted version (release tag) does NOT break parity", () => {
+    const a = plan(DEFAULT_POSTURE, 1).manifest;
+    const b = plan(DEFAULT_POSTURE, 1).manifest;
+    const tagged: Manifest = {
+      generation: b.generation,
+      resources: Object.fromEntries(
+        Object.entries(b.resources).map(([k, r]) => [
+          k,
+          { ...r, spec: { ...r.spec, release: "v9" } },
+        ]),
+      ),
+    };
+    expect(
+      parityCheck([
+        { id: "prod", manifest: a },
+        { id: "dev", manifest: tagged },
+      ]).ok,
+    ).toBe(true);
+  });
+});
+
+describe("utilization control loop (idle trigger, cold resume, wallet guard)", () => {
+  function ready(over: Partial<Posture> = {}) {
+    const posture: Posture = { ...DEFAULT_POSTURE, ...over };
+    const e = new Engine(posture);
+    e.declare(posture);
+    e.approve();
+    for (let i = 0; i < 30 && !e.snapshot().converged; i++) e.tick();
+    return e;
+  }
+  const aggressive = (): Posture => ({
+    ...DEFAULT_POSTURE,
+    elasticity: "aggressive",
+    dormancy: "aggressive",
+  });
+  const stateOf = (e: Engine, id: string) => e.snapshot().resources.find((r) => r.id === id)!.state;
+
+  it("an aggressive env auto-parks on observed idleness and resumes on demand", () => {
+    const e = ready(aggressive());
+    const app = e.snapshot().resources.find((r) => r.cell === "app" && r.lifecycle === "service")!;
+
+    // Demand goes away → the autoscaler parks it once idle past the tier threshold.
+    e.setIdle(app.id, true);
+    for (let i = 0; i < 6 && stateOf(e, app.id) !== "Dormant"; i++) e.tick();
+    expect(stateOf(e, app.id)).toBe("Dormant");
+
+    // Demand returns → it resumes on its own (no operator action).
+    e.setIdle(app.id, false);
+    for (let i = 0; i < 10 && stateOf(e, app.id) !== "Converged"; i++) e.tick();
+    expect(stateOf(e, app.id)).toBe("Converged");
+  });
+
+  it("a conservative env never auto-parks, however long it sits idle", () => {
+    const e = ready(); // DEFAULT_POSTURE is conservative
+    const app = e.snapshot().resources.find((r) => r.cell === "app" && r.lifecycle === "service")!;
+    e.setIdle(app.id, true);
+    for (let i = 0; i < 12; i++) e.tick();
+    expect(stateOf(e, app.id)).not.toBe("Dormant"); // warm floor
+  });
+
+  it("a cold resume comes back Degraded and the loop self-heals it (guardrail 4)", () => {
+    const e = ready();
+    const db = e.snapshot().resources.find((r) => r.kind === "managed-relational-db")!;
+    e.park(db.id);
+    e.tick();
+    expect(stateOf(e, db.id)).toBe("Dormant");
+
+    e.coldResume(db.id); // dropped connections / cold buffers
+    e.tick();
+    expect(stateOf(e, db.id)).toBe("Degraded"); // not a free wake — a failure path
+    for (let i = 0; i < 10 && stateOf(e, db.id) !== "Converged"; i++) e.tick();
+    expect(stateOf(e, db.id)).toBe("Converged"); // the loop recovers it
+  });
+
+  it("the denial-of-wallet guard trips on resume thrash and pins warm (guardrail 7)", () => {
+    const e = ready(aggressive());
+    const db = e.snapshot().resources.find((r) => r.kind === "managed-relational-db")!;
+
+    // Thrash: park/resume repeatedly in a tight window.
+    for (let i = 0; i < 5; i++) {
+      e.park(db.id);
+      e.wake(db.id);
+    }
+    expect(e.snapshot().walletGuard).toContain(db.id);
+
+    // Pinned warm: even sustained idleness no longer parks it (churn > warm floor).
+    e.setIdle(db.id, true);
+    for (let i = 0; i < 8; i++) e.tick();
+    expect(stateOf(e, db.id)).not.toBe("Dormant");
+
+    // Resolving the incident lets it park again.
+    e.resolveWalletGuard(db.id);
+    expect(e.snapshot().walletGuard).not.toContain(db.id);
+    for (let i = 0; i < 8 && stateOf(e, db.id) !== "Dormant"; i++) e.tick();
+    expect(stateOf(e, db.id)).toBe("Dormant");
+  });
+});
+
+describe("temporal demand model wired into the autoscaler (axis 1)", () => {
+  function ready(): Engine {
+    const posture: Posture = {
+      ...DEFAULT_POSTURE,
+      elasticity: "aggressive",
+      dormancy: "aggressive",
+    };
+    const e = new Engine(posture);
+    e.declare(posture);
+    e.approve();
+    for (let i = 0; i < 30 && !e.snapshot().converged; i++) e.tick();
+    return e;
+  }
+  const NIGHTLY = parseSchedule("nightly")!; // { everyTicks: 24, atTick: 0, durationTicks: 3 }
+  const tickOf = (e: Engine) => Math.floor(e.snapshot().tMs / 1000);
+  const phaseOf = (e: Engine) => tickOf(e) % NIGHTLY.everyTicks;
+  const driveToPhase = (e: Engine, p: number) => {
+    for (let i = 0; i < NIGHTLY.everyTicks && phaseOf(e) !== p; i++) e.tick();
+  };
+  const stateOf = (e: Engine, id: string) => e.snapshot().resources.find((r) => r.id === id)!.state;
+  // The DB in the same region as the nightly batch job — it inherits the window.
+  const scheduledDb = (e: Engine) => {
+    const jr = e.snapshot().resources.find((r) => r.lifecycle === "job")!.region;
+    return e
+      .snapshot()
+      .resources.find((r) => r.kind === "managed-relational-db" && r.region === jr)!;
+  };
+
+  it("refuses to park into scheduled demand, then parks once the window passes", () => {
+    const e = ready();
+    const db = scheduledDb(e);
+    driveToPhase(e, 0); // the nightly window is open (demand active)
+
+    // Idle through the active window — a blind autoscaler would park after the
+    // tier threshold (2 ticks); the temporal one holds it warm.
+    e.setIdle(db.id, true);
+    e.tick();
+    e.tick();
+    e.tick(); // autoscale saw phases 0,1,2 — all warm
+    expect(stateOf(e, db.id)).not.toBe("Dormant");
+
+    // Window has passed (and the next is far): now it is free to park.
+    for (let i = 0; i < 5 && stateOf(e, db.id) !== "Dormant"; i++) e.tick();
+    expect(stateOf(e, db.id)).toBe("Dormant");
+  });
+
+  it("pre-warms a parked resource ahead of the next scheduled window", () => {
+    const e = ready();
+    const db = scheduledDb(e);
+    driveToPhase(e, 8); // far from the window
+
+    e.setIdle(db.id, true);
+    for (let i = 0; i < 5 && stateOf(e, db.id) !== "Dormant"; i++) e.tick();
+    expect(stateOf(e, db.id)).toBe("Dormant"); // parks while demand is far off
+
+    // Advance toward the next window; it must wake *before* demand arrives, so it
+    // isn't cold-started at the window opening.
+    for (let i = 0; i < NIGHTLY.everyTicks && phaseOf(e) !== 0; i++) e.tick();
+    expect(stateOf(e, db.id)).not.toBe("Dormant"); // pre-warmed, not cold at demand
+  });
+});
+
+describe("right-sizing from observed utilization (axis 2)", () => {
+  function converged() {
+    const e = new Engine(DEFAULT_POSTURE);
+    e.declare(DEFAULT_POSTURE);
+    e.approve();
+    for (let i = 0; i < 30 && !e.snapshot().converged; i++) e.tick();
+    return e;
+  }
+  // Inject load on every sized resource of a Service (its compute + data).
+  const loadService = (e: Engine, slug: string, cpu: number, mem: number) => {
+    for (const r of e.snapshot().resources) {
+      if (r.service === slug && (r.size === "small" || r.size === "medium" || r.size === "large")) {
+        e.setLoad(r.id, { cpu, mem });
+      }
+    }
+  };
+  const propFor = (e: Engine, slug: string) =>
+    e.snapshot().rightSizing.find((p) => p.slug === slug);
+
+  it("surfaces a shrink proposal for an overprovisioned service, only with telemetry", () => {
+    const e = converged();
+    // payments-api is C0 → large; run it at ~37% of large.
+    loadService(e, "payments-api", 1.5, 1.5);
+    e.tick();
+    expect(propFor(e, "payments-api")).toMatchObject({ from: "large", to: "medium" });
+    // internal-dashboard has no telemetry → no recommendation (never blind).
+    expect(propFor(e, "internal-dashboard")).toBeUndefined();
+  });
+
+  it("does not propose a shrink when memory binds (low CPU is not enough)", () => {
+    const e = converged();
+    loadService(e, "payments-api", 1.0, 3.0); // 25% CPU but 75% memory of large
+    e.tick();
+    expect(propFor(e, "payments-api")).toBeUndefined();
+  });
+
+  it("sizes to the peak, not the average — a spike in the window blocks the shrink", () => {
+    const e = converged();
+    loadService(e, "payments-api", 0.5, 0.5); // mostly quiet
+    for (let i = 0; i < 3; i++) e.tick();
+    loadService(e, "payments-api", 3.0, 3.0); // a brief spike
+    e.tick();
+    loadService(e, "payments-api", 0.5, 0.5); // back to quiet (low average)
+    for (let i = 0; i < 3; i++) e.tick();
+    // The windowed peak still holds the spike → no shrink despite the low average.
+    expect(propFor(e, "payments-api")).toBeUndefined();
+  });
+
+  it("accepting a proposal shrinks the shared shape and drops cost", () => {
+    const e = converged();
+    loadService(e, "payments-api", 1.5, 1.5);
+    e.tick();
+    const before = e.snapshot().costNow;
+
+    expect(e.acceptRightSizing("payments-api")).toBe(true);
+    for (let i = 0; i < 30 && !e.snapshot().converged; i++) e.tick();
+
+    const after = e.snapshot();
+    const sizes = after.resources
+      .filter((r) => r.service === "payments-api" && r.kind === "compute")
+      .map((r) => r.size);
+    expect(sizes.length).toBeGreaterThan(0);
+    expect(sizes.every((s) => s === "medium")).toBe(true); // shrank, on every region
+    expect(after.costNow).toBeLessThan(before); // cheaper for the same workload
+    expect(after.converged).toBe(true);
+    expect(propFor(e, "payments-api")).toBeUndefined(); // now right-sized
+  });
+});
+
+describe("the value term — cost vs value served (axis 3)", () => {
+  function converged(over: Partial<Posture> = {}) {
+    const posture: Posture = { ...DEFAULT_POSTURE, ...over };
+    const e = new Engine(posture);
+    e.declare(posture);
+    e.approve();
+    for (let i = 0; i < 30 && !e.snapshot().converged; i++) e.tick();
+    return e;
+  }
+  const aggressive = (): Posture => ({
+    ...DEFAULT_POSTURE,
+    elasticity: "aggressive",
+    dormancy: "aggressive",
+  });
+  const valueFor = (e: Engine, slug: string) => e.snapshot().value.find((v) => v.slug === slug);
+
+  it("value is what's served: a live service fully serves its demand", () => {
+    const e = converged();
+    e.setDemand("payments-api", 6);
+    for (let i = 0; i < 12; i++) e.tick();
+    const v = valueFor(e, "payments-api")!;
+    expect(v.servedFraction).toBeCloseTo(1, 5);
+    expect(v.value).toBeGreaterThan(0);
+    expect(v.costPerValue).not.toBeNull();
+    expect(v.ineffective).toBe(false);
+    expect(e.snapshot().costPerValue).not.toBeNull();
+  });
+
+  it("parking serving capacity drops served value (the loop sees the cost)", () => {
+    const e = converged();
+    e.setDemand("payments-api", 16); // near the full compute capacity
+    for (let i = 0; i < 12; i++) e.tick();
+    expect(valueFor(e, "payments-api")!.servedFraction).toBeCloseTo(1, 5);
+
+    const eu = e
+      .snapshot()
+      .resources.find(
+        (r) => r.service === "payments-api" && r.kind === "compute" && r.region === "eu-west-1",
+      )!;
+    e.park(eu.id); // half the serving capacity goes away
+    for (let i = 0; i < 12; i++) e.tick();
+    expect(valueFor(e, "payments-api")!.servedFraction).toBeLessThan(0.9);
+  });
+
+  it("spend that serves no value is flagged ineffective", () => {
+    const e = converged();
+    e.setDemand("payments-api", 0); // provisioned, but no demand to serve
+    for (let i = 0; i < 5; i++) e.tick();
+    const v = valueFor(e, "payments-api")!;
+    expect(v.value).toBe(0);
+    expect(v.ineffective).toBe(true);
+    expect(v.costPerValue).toBeNull(); // serving nothing → cost ÷ 0
+  });
+
+  it("the park lever consults value — it won't park a service that's serving", () => {
+    const e = converged(aggressive());
+    const c = e
+      .snapshot()
+      .resources.find((r) => r.service === "payments-api" && r.kind === "compute")!;
+    e.setDemand("payments-api", 5); // value present
+    e.setIdle(c.id, true); // a stale idle flag would otherwise park it
+    for (let i = 0; i < 8; i++) e.tick();
+    expect(e.snapshot().resources.find((r) => r.id === c.id)!.state).not.toBe("Dormant");
+  });
+
+  it("right-sizing improves effectiveness: same value served, lower cost per value", () => {
+    const e = converged();
+    // Low utilization (→ shrinkable) but real demand that medium still covers.
+    for (const r of e.snapshot().resources) {
+      if (r.service === "payments-api" && ["small", "medium", "large"].includes(r.size)) {
+        e.setLoad(r.id, { cpu: 1.5, mem: 1.5 });
+      }
+    }
+    e.setDemand("payments-api", 6);
+    for (let i = 0; i < 12; i++) e.tick();
+    const before = valueFor(e, "payments-api")!;
+    expect(before.servedFraction).toBeCloseTo(1, 5);
+
+    expect(e.acceptRightSizing("payments-api")).toBe(true);
+    for (let i = 0; i < 30 && !e.snapshot().converged; i++) e.tick();
+    for (let i = 0; i < 14; i++) e.tick(); // refill the value window at the new size
+
+    const after = valueFor(e, "payments-api")!;
+    expect(after.servedFraction).toBeCloseTo(1, 5); // still fully served
+    expect(after.value).toBeCloseTo(before.value, 5); // same value delivered
+    expect(after.costPerValue!).toBeLessThan(before.costPerValue!); // cheaper per unit value
+  });
+});
+
+describe("value is served *well* — the SLO/quality term (axis 3)", () => {
+  function converged() {
+    const e = new Engine(DEFAULT_POSTURE);
+    e.declare(DEFAULT_POSTURE);
+    e.approve();
+    for (let i = 0; i < 30 && !e.snapshot().converged; i++) e.tick();
+    return e;
+  }
+  const valueFor = (e: Engine, slug: string) => e.snapshot().value.find((v) => v.slug === slug)!;
+
+  it("running hot keeps quantity served but cuts SLO-adjusted value (headroom isn't waste)", () => {
+    // payments-api serving capacity is ~20 units (large compute, 3+2 replicas).
+    const hotE = converged();
+    hotE.setDemand("payments-api", 18); // ~90% utilization → hot, latency degrades
+    for (let i = 0; i < 12; i++) hotE.tick();
+    const hot = valueFor(hotE, "payments-api");
+    expect(hot.servedFraction).toBeCloseTo(1, 5); // every request served (quantity fine)
+    expect(hot.sloAttainment).toBeLessThan(0.95); // but served outside SLO (quality hit)
+
+    const coolE = converged();
+    coolE.setDemand("payments-api", 6); // ~30% utilization → comfortable headroom
+    for (let i = 0; i < 12; i++) coolE.tick();
+    const cool = valueFor(coolE, "payments-api");
+    expect(cool.sloAttainment).toBeCloseTo(1, 5);
+
+    // Same service: the hot one delivers less value per unit served — the
+    // headroom it lacks was not waste.
+    expect(hot.value / hot.offered).toBeLessThan(cool.value / cool.offered);
   });
 });

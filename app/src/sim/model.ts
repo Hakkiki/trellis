@@ -55,6 +55,8 @@ export interface Observation {
   observedAtMs: number;
   phase?: JobPhase; // for Job workloads
   quorum?: { healthy: number; total: number }; // for Stateful workloads
+  dormant?: boolean; // intentionally parked (scaled-to-zero / paused) — not down
+  resuming?: boolean; // warming back up after a park (cold start) — benign progress
 }
 
 // ---- Posture (what a human declares, spec §2) -----------------------------
@@ -64,12 +66,19 @@ export type Resilience = "active-active" | "active-passive" | "single";
 export type Optimize = "minimize-cost" | "maximize-resilience";
 /** What a budget-breach does (§13): alert only, or block further provisioning. */
 export type BudgetPolicy = "alert" | "block";
+/** How aggressively an environment parks idle capacity to save cost (docs: Cost
+ *  & parity). One three-tier scale shared by both utilization levers. */
+export type Tier = "aggressive" | "balanced" | "conservative";
 
 /** A Service the environment owns (spec §6): a function tag + its own
  *  Criticality, which drives sizing/replication independently of its peers. */
 export interface ServiceSpec {
   name: string;
   criticality: Criticality;
+  /** A right-sized compute/data size accepted by the owner (docs: Cost & parity
+   *  axis 2), overriding the Criticality default. A *shared* shape decision —
+   *  cascaded to every environment, so parity holds. */
+  sizeOverride?: string;
 }
 
 export interface Posture {
@@ -87,6 +96,34 @@ export interface Posture {
   services?: ServiceSpec[];
   /** What a budget-breach does (§13). Defaults to "alert" when absent (legacy). */
   budgetPolicy?: BudgetPolicy;
+  /** Utilization levers (docs: Cost & parity). How eagerly idle capacity is
+   *  parked — stateless compute via `elasticity`, stateful services via
+   *  `dormancy`. They lower *realized* cost without changing the desired shape,
+   *  so parity across environments is preserved. Default "conservative" (never
+   *  park) when absent. */
+  elasticity?: Tier;
+  dormancy?: Tier;
+}
+
+/** Which utilization lever governs a resource (docs: Cost & parity). Grounded in
+ *  the same state-bearing test the security tier uses (`cell === "data" ||
+ *  lifecycle === "stateful"`): state-bearing → dormancy (pause, keep storage);
+ *  stateless compute → elasticity (scale, incl. to zero); a load balancer is
+ *  elasticity-class but never parks ("fixed"); jobs/external have no lever. */
+export type ParkClass = "elasticity" | "dormancy" | "fixed" | "none";
+
+export function parkClass(d: DesiredResource): ParkClass {
+  if (d.lifecycle === "job" || d.lifecycle === "external") return "none";
+  const sensitive = d.cell === "data" || d.lifecycle === "stateful";
+  if (sensitive) return "dormancy";
+  if (d.kind === "load-balancer") return "fixed"; // elasticity class, never zero
+  return "elasticity";
+}
+
+/** True when a resource may be parked when idle (elasticity or dormancy class). */
+export function parkable(d: DesiredResource): boolean {
+  const c = parkClass(d);
+  return c === "elasticity" || c === "dormancy";
 }
 
 /** The effective Service list: explicit `services`, or a single Service

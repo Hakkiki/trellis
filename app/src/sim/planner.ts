@@ -20,9 +20,11 @@ import {
   type Plan,
   type Posture,
   type ProofRow,
+  parkClass,
   type Resilience,
   type ServiceSpec,
   servicesOf,
+  type Tier,
 } from "./model";
 
 const COMPUTE_COST: Record<string, number> = { small: 120, medium: 300, large: 700 };
@@ -84,10 +86,13 @@ function buildCandidate(
   resilience: Resilience,
   headroom: number,
   gen: Generation,
+  sizeOverride?: string,
 ): Candidate {
   const svc = slug(svcName);
   const c = criticality;
-  const size = SIZE_FOR[c];
+  // Size follows Criticality unless the owner has accepted a right-sizing
+  // recommendation (docs: Cost & parity axis 2) — a shared, parity-preserved override.
+  const size = sizeOverride ?? SIZE_FOR[c];
   const replicas = REPLICAS_FOR[c] + headroom;
   const multiAZ = c === "C0" || c === "C1";
   const regions = posture.regions.length ? posture.regions : ["us-east-1"];
@@ -194,7 +199,17 @@ function candidatesFor(
   const out: Candidate[] = [];
   for (let i = floorIdx; i <= maxIdx; i++) {
     for (const headroom of [0, 1]) {
-      out.push(buildCandidate(svc.name, svc.criticality, posture, RES_LEVELS[i], headroom, gen));
+      out.push(
+        buildCandidate(
+          svc.name,
+          svc.criticality,
+          posture,
+          RES_LEVELS[i],
+          headroom,
+          gen,
+          svc.sizeOverride,
+        ),
+      );
     }
   }
   return out.sort((a, b) => a.cost - b.cost);
@@ -439,9 +454,90 @@ export function resourceCost(r: DesiredResource): number {
   return LB_COST;
 }
 
-/** Estimated monthly cost of an arbitrary manifest (for the FinOps view). */
+/** Estimated monthly cost of an arbitrary manifest (for the FinOps view). This
+ *  is the *provisioned* cost — the deterministic ceiling budget feasibility
+ *  gates on (docs: Cost & parity, guardrail 6). */
 export function manifestCost(m: Manifest): number {
   let cost = 0;
   for (const r of Object.values(m.resources)) cost += resourceCost(r);
   return cost;
+}
+
+// Illustrative duty-cycle savings per tier (docs: Cost & parity). A *clearly-
+// labelled estimate* of what a parkable resource bills once idle capacity is
+// parked — never the number budget feasibility gates on (that stays the
+// provisioned ceiling, `manifestCost`).
+const TIER_FACTOR: Record<Tier, number> = {
+  aggressive: 0.5,
+  balanced: 0.8,
+  conservative: 1.0,
+};
+
+/** Expected (duty-cycle-discounted) monthly cost of a manifest under a posture's
+ *  utilization tiers. The desired *shape* — hence the provisioned ceiling — is
+ *  unchanged; this is what an environment is expected to *bill* once idle
+ *  capacity is parked, so a more aggressive env bills less for the identical
+ *  shape. Fixed (load balancer) and lever-less (job/external) resources never
+ *  discount. */
+export function expectedCost(m: Manifest, tiers: { elasticity?: Tier; dormancy?: Tier }): number {
+  let cost = 0;
+  for (const r of Object.values(m.resources)) {
+    const cls = parkClass(r);
+    const factor =
+      cls === "elasticity"
+        ? TIER_FACTOR[tiers.elasticity ?? "conservative"]
+        : cls === "dormancy"
+          ? TIER_FACTOR[tiers.dormancy ?? "conservative"]
+          : 1;
+    cost += resourceCost(r) * factor;
+  }
+  return cost;
+}
+
+// ---- Parity invariant (docs: Cost & parity, guardrail 2) -------------------
+
+/** A resource's parity *shape* — what must be identical across environments for
+ *  dev/staging/prod parity. Excludes the promoted version (`release`) and the
+ *  utilization tier / dormancy: only the desired shape (kind, placement, size,
+ *  replicas, HA, quorum) counts, so an env can be cheaper by parking idle
+ *  capacity but never by running a *smaller* shape. */
+export function parityShape(r: DesiredResource): string {
+  return [
+    r.service,
+    r.cell,
+    r.region,
+    r.kind,
+    r.spec.size ?? "",
+    r.spec.replicas ?? "",
+    r.spec.multiAZ ?? "",
+    r.spec.nodes ?? "",
+  ].join("|");
+}
+
+export interface ParityResult {
+  ok: boolean;
+  violations: string[];
+}
+
+/** Parity invariant: every environment must share the same desired *shape*;
+ *  only the elasticity/dormancy tier may differ. A lower environment with a
+ *  missing or shrunk shape is a violation — this is what keeps "more aggressive
+ *  in dev" from silently decaying into "smaller in dev". Compares each env to
+ *  the first (the reference, e.g. prod). */
+export function parityCheck(envs: { id: string; manifest: Manifest }[]): ParityResult {
+  const sigSet = (m: Manifest) => new Set(Object.values(m.resources).map(parityShape));
+  if (envs.length < 2) return { ok: true, violations: [] };
+  const [ref, ...rest] = envs;
+  const refSig = sigSet(ref.manifest);
+  const violations: string[] = [];
+  for (const e of rest) {
+    const sig = sigSet(e.manifest);
+    for (const s of refSig) {
+      if (!sig.has(s)) violations.push(`${e.id} is missing a shape present in ${ref.id}: ${s}`);
+    }
+    for (const s of sig) {
+      if (!refSig.has(s)) violations.push(`${e.id} has a shape absent from ${ref.id}: ${s}`);
+    }
+  }
+  return { ok: violations.length === 0, violations };
 }

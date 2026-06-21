@@ -138,8 +138,14 @@
     0 0 18px -5px var(--st);
 }
 .stage-node.selected .face {
-  outline: 2px solid var(--st);
+  /* On-brand selection halo: gold ring + warm outer glow (brand --ring),
+     keeping the node's depth shadow underneath. */
+  outline: 1.5px solid var(--ring);
   outline-offset: 1px;
+  box-shadow:
+    0 1px 0 #ffffff12 inset,
+    0 8px 18px #0009,
+    0 0 22px 2px color-mix(in oklch, var(--ring) 55%, transparent);
 }
 .stage-node .accent {
   position: absolute;
