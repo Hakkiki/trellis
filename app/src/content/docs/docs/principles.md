@@ -3,107 +3,88 @@ title: Principles
 description: The twelve convictions that shape Trellis — why the platform is built the way it is, and what it refuses to give up.
 ---
 
-> **The convictions** — why Trellis is shaped the way it is, in plain language. Not a normative
-> reference; the rigor lives in the [specification](/trellis/docs/spec) and its invariants.
+> **The convictions** — why Trellis is built the way it is, in plain language. The rigor lives in the
+> [specification](/trellis/docs/spec).
 
-Trellis is built on a short list of convictions, not preferences. Each one explains why the platform is
-shaped the way it is: why the control plane slices itself, why a plan has to prove itself, why what's
-*allowed* can't be traded away. None of it is decoration. Read these twelve and the rest of the system
-makes sense — it follows from a few things Trellis won't give up. Each one is a plain claim you could say
-out loud, with its reasoning underneath: the same shape as a Trellis plan.
+Trellis runs on a short list of convictions, not preferences. Each one is a claim and its proof — the
+shape of every Trellis plan: say it in a line, back it underneath. Read the twelve and the rest of the
+system stops looking like features and starts looking like the few things Trellis won't give up.
 
 ## The twelve
 
 ### 1. One team's bad day should stay one team's bad day
 
-A routine, change-managed upgrade to a shared service shouldn't be able to take down the whole company.
-But it does, over and over, because everyone leans on the same thing. So Trellis makes containment the
-spine, not an afterthought. Slice the blast radius per division, and a failure can't cross a boundary it
-has no business crossing. One division's worst day stays one division's.
-([See it contained vs. company-wide →](/trellis/blast-radius))
+Share an environment long enough and you meet the person who has root and shouldn't — and one careless
+command makes their bad day everyone's. So Trellis makes containment the spine: slice the blast radius per
+division, people included. One team's worst day stays one team's.
 
 ### 2. Two good states can have no safe road between them
 
-A target only has to be valid at the end. A path has to keep availability, your data, and your SLOs true
-at every step along the way. A change can be unsafe even when both ends are flawless. You don't redefine a
-live database in place; you stand up the new one, replicate, cut over, then retire the old. So Trellis
-plans the road, not just where it ends: ordered, reversible, gated steps, each carrying its own undo.
+A target only has to be valid at the end; a path has to stay safe at every step to it. A change can break
+you when both ends are perfect — you can't swap a live database in place. So Trellis plans the road, not
+just the destination: ordered, reversible steps, each with its own undo.
 
 ### 3. The boundary you pick is the blast radius you keep
 
-You don't choose containment in the abstract. You choose it the moment you decide where the wall goes. A
-separate account, a shared VPC, a Kubernetes namespace — each one leaves a different fate still shared,
-and whatever a boundary still shares is the blast radius you didn't actually eliminate. The grain is the
-guarantee. Same knob. ([Where the boundary goes →](/trellis/docs/operating-model))
+You don't choose containment in the abstract. You choose it when you decide where the wall goes. A
+separate account, a shared VPC, a namespace — each leaves a different fate shared, and whatever a boundary
+shares is the blast radius you didn't eliminate. The grain is the guarantee. Same knob.
 
 ### 4. The control plane obeys the rule it enforces
 
-If shared services are the danger, then one central control plane governing every division is the biggest
-single point of failure in the company. It holds standing write across all of it. So Trellis slices
-itself too: each division runs its own instance, on its own upgrade cadence, against its own accounts.
-The thing that enforces containment has to be contained.
+One central control plane over every division is the biggest single point of failure of all — it holds
+standing write across the whole company. So Trellis slices itself too: one instance per division, each on
+its own cadence. The thing that enforces containment has to be contained.
 
 ### 5. Only a human moves the goalposts
 
-Desired state changes through exactly one door: a human authoring intent. Everything else only moves
-reality toward that intent. The [reconciler](/trellis/docs/reconcile) holds the line, but it never decides
-where the line goes. The machine takes the relentless part — watching, correcting, holding reality
-steady. You keep the part that needs judgment: what should be true in the first place.
+Nobody's paid to be awake at 2 a.m. — forty hours, not the pager at three. So the machine takes the
+relentless part: watching, correcting, holding the line all night. But it only ever converges toward what
+a human already chose. People move the goalposts; the system runs the field.
 
 ### 6. Every change carries its own proof
 
-A plan is an argument, not a promise. Every resource in it traces to a reason — why it exists, and what
-authorized it — so the plan is its own proof. You approve the reasoning, not just the result. No magic:
-nothing reaches your cloud that the plan can't explain.
+A plan is an argument, not a promise. Every resource traces to a reason — why it exists, what authorized
+it — so you approve the thinking, not just the result. Nothing reaches your cloud that the plan can't
+explain. No magic.
 
 ### 7. A plan that can't be built tells you why
 
-When what you asked for won't fit — the budget can't buy active-active, or the constraint won't hold —
-Trellis doesn't quietly ship something close and hope you don't notice. The plan fails loudly, names the
-constraint that's binding, and shows you the price of yes: raise the budget by $X, and active-active
-becomes feasible. A tool that papers over the impossible is one you can't trust with the possible.
+Ask for the impossible — active-active on a shoestring — and Trellis won't quietly ship something close
+and hope. The plan fails out loud, names the binding constraint, and shows the price of yes: raise the
+budget $500 and it's feasible. A tool that papers over the impossible can't be trusted with the possible.
 
 ### 8. Governance is a wall, not a dial
 
-You trade cost against resilience, size against budget. Those are real trade-offs, and they're yours to
-make. What's *allowed* is not one of them. Governance runs first and throws out every disallowed plan
-before cost or speed get a vote. It's never a line item you can trade down for a cheaper answer. Some
-limits are walls, not dials. You build inside them. You don't haggle with them.
+You trade cost against resilience, size against budget — yours to make. What's *allowed* isn't on the
+table. Governance runs first and throws out every illegal plan before cost or speed get a vote. Some
+limits are walls: build inside them, don't haggle with them.
 
-### 9. Breaking glass buys time, never permission
+### 9. Break-glass buys time, never permission
 
-The gate can't run and something's on fire, so you break glass: a time-boxed, dual-controlled override
-that changes reality right now. It freezes reconciliation on what it touched and owes a debt — ratify the
-change through the normal gate, or revert it. Break-glass buys you time to act. It never hardens into
-permission, and it never moves desired state.
+Break the glass on a real one and recovery takes days, not hours — and the people at home pay for that
+week too. That's why it buys time, not permission: a time-boxed, two-person override that owes a debt —
+ratify it, or revert it. It changes reality, never intent.
 
 ### 10. You set how much it matters; the system sets the rest
 
-You declare four things — what it's for, how it must survive, what it may cost, what's allowed — and each
-one stays independent, owned by the people who should own it. Then you turn one dial,
-[Criticality](/trellis/docs/posture), and the rest moves together: a C0 service earns multi-AZ, more
-replicas, and tighter isolation; a C3 tool colocates and stays cheap. Say once how much it matters, and
-the structure and the bill move as one.
+Buy cheap and you buy twice — the bargain that dies in three years costs more than the tool that lasts
+seventeen. Cost only means something next to value. So you turn one dial, Criticality: a C0 service earns
+multi-AZ and tight isolation; a C3 tool colocates and stays cheap. Pay where the value is.
 
 ### 11. A proof nobody can read is magic by another name
 
-A plan that's a proof fails the instant you can't read it. An unreadable proof asks you to trust it
-blindly, which is the one thing the model exists to kill. So legibility is a correctness property here,
-not a polish item: every plan opens with a one-line headline and honest detail underneath. If the person
-approving can't follow the argument, the gate never really ran.
+A proof you can't read asks you to trust it blindly — the exact thing this model exists to kill. So
+legibility is a correctness property, not a nicety: every plan opens with a one-line headline and honest
+detail underneath. Can't follow the argument? The gate never really ran.
 
 ### 12. Self-service shouldn't mean self-operate
 
-Self-service usually means handing a team raw cloud and wishing them luck. Trellis gives each division its
-full stack — source control, CI/CD, secrets, DNS, privileged access — provisioned and self-healed for
-them, with nothing to install and no cloud to operate. The enterprise governs lightly: curate a vetted
-catalog, set the guardrails, and let each division declare a posture and drive. Set the rails; let them
-drive.
+Hand people raw cloud they're not ready for and disaster follows — the sharp ones know it and tell you no.
+You earn the yes by making it safe: training wheels on the bike, and you running alongside to catch it
+when a wheel goes. Each division gets its full stack, self-healed, with nothing to operate. Set the rails;
+let them drive.
 
-## Where to go next
+## Go deeper
 
-- **[The case](/trellis/docs/the-case)** — the three-minute version of the problem these convictions answer.
-- **[The specification](/trellis/docs/spec)** — the normative source of truth, and the 19 invariants that
-  make each conviction a rule a builder can't break.
-- **[The simulator](/trellis/simulator/)** — feel the loop these principles describe: declare, plan,
-  approve, reconcile, fail, heal.
+[The case](/trellis/docs/the-case) · [the spec and its invariants](/trellis/docs/spec) · [the simulator](/trellis/simulator/).
