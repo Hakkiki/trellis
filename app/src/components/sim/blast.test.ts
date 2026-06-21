@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { BEATS, BLAST_TRAIL, blastForBeat, CONTAINED_PCT } from "./blast";
+import { BEATS, BLAST_TRAIL, blastForBeat, CONTAINED_PCT, degradedLobs, edgeHealth } from "./blast";
 
 // The lesson, as a test. The blast-radius number must refuse to move while you
 // apply redundancy and process, and only drop when the architecture changes.
@@ -38,5 +38,24 @@ describe("blast-radius walkthrough model", () => {
       // beat starts healthy.
       expect(blastForBeat(beat, false)).toBe(beat === "recover" ? CONTAINED_PCT : 0);
     }
+  });
+});
+
+describe("graceful degradation between LOBs", () => {
+  it("a sync dependency blacks the caller out; an async one only browns out", () => {
+    expect(edgeHealth(true, true)).toBe("blackout");
+    expect(edgeHealth(true, false)).toBe("brownout");
+    expect(edgeHealth(false, true)).toBe("good");
+    expect(edgeHealth(false, false)).toBe("good");
+  });
+
+  it("when one LOB is down, its async dependents degrade but keep serving", () => {
+    // Retail down: Wealth and Markets call it async → brownout. Commercial calls
+    // Markets (up), so it stays good. Brownouts never inflate the blast radius.
+    expect(degradedLobs(new Set(["Retail"])).sort()).toEqual(["Markets", "Wealth"]);
+  });
+
+  it("no down LOB means no degradation", () => {
+    expect(degradedLobs(new Set())).toEqual([]);
   });
 });

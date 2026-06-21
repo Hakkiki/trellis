@@ -10,6 +10,10 @@ import {
   blastForBeat,
   DIVISION_SERVICES,
   DIVISIONS,
+  degradedLobs,
+  type EdgeHealth,
+  edgeHealth,
+  LOB_DEPS,
   PLATFORM,
 } from "./blast";
 
@@ -21,7 +25,12 @@ import {
 // (share-nothing partitioning). The number refusing to move is the argument.
 
 const GREEN = "var(--state-converged)";
+const AMBER = "var(--state-degraded)";
 const RED = "var(--state-stalled)";
+
+function edgeColor(h: EdgeHealth): string {
+  return h === "good" ? GREEN : h === "brownout" ? AMBER : RED;
+}
 
 /** Which divisions are dark for a given beat — kept in lockstep with
  *  `blastForBeat` so the picture and the number can never disagree. */
@@ -49,6 +58,7 @@ export default function BlastRadius() {
   const down = downSet(beat, fired);
   const shared = beat === "shared" || beat === "redundant" || beat === "process";
   const platformDown = shared && fired;
+  const degraded = degradedLobs(down);
 
   const go = (next: number) => {
     setIdx(next);
@@ -68,6 +78,12 @@ export default function BlastRadius() {
           </span>
           <span className="text-muted-foreground text-sm">of the org affected</span>
         </div>
+        {degraded.length > 0 && (
+          <div className="mt-1 text-sm font-medium" style={{ color: AMBER }}>
+            + {degraded.length} LOB{degraded.length > 1 ? "s" : ""} degraded (brownout) — still
+            serving, not counted
+          </div>
+        )}
         <Trail current={idx} firedPct={pct} onJump={go} />
         <p className="text-muted-foreground mt-3 text-sm">
           <b className="text-foreground">Redundancy and process are probability levers.</b> Blast
@@ -107,7 +123,7 @@ export default function BlastRadius() {
             <Connector down={platformDown} />
           </>
         )}
-        <DivisionGrid down={down} withOwnPlatform={!shared} />
+        <DivisionGrid down={down} shared={shared} platformDown={platformDown} />
       </div>
 
       {/* Action + navigation. */}
@@ -245,60 +261,141 @@ function Connector({ down }: { down: boolean }) {
   );
 }
 
-/** The org as four lines of business (LOBs), each its own stack of services. */
-function DivisionGrid({ down, withOwnPlatform }: { down: Set<string>; withOwnPlatform: boolean }) {
+/** The org as four lines of business (LOBs), each its own stack of services,
+ *  with the dependency edges between them colored by health. */
+function DivisionGrid({
+  down,
+  shared,
+  platformDown,
+}: {
+  down: Set<string>;
+  shared: boolean;
+  platformDown: boolean;
+}) {
   return (
     <div>
       <div className="text-muted-foreground mb-2 text-center text-xs font-medium tracking-wide uppercase">
         Lines of business (LOBs) — each runs its own services
       </div>
+      <Legend />
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         {DIVISIONS.map((d) => (
-          <DivisionStack key={d} name={d} down={down.has(d)} withOwnPlatform={withOwnPlatform} />
+          <DivisionStack key={d} name={d} down={down} shared={shared} platformDown={platformDown} />
         ))}
       </div>
     </div>
   );
 }
 
-/** One division: a header + the set of services it runs. When partitioned it also
- *  owns its copy of the platform — no shared substrate for a fault to cross. */
+/** What the edge colors mean — healthy, browned-out (degraded but serving), or
+ *  blacked-out (down). */
+function Legend() {
+  const items: [string, string][] = [
+    [GREEN, "healthy"],
+    [AMBER, "brownout — degraded, still serving"],
+    [RED, "blackout — down"],
+  ];
+  return (
+    <div className="text-muted-foreground mb-3 flex flex-wrap justify-center gap-x-3 gap-y-1 text-[10px]">
+      {items.map(([c, t]) => (
+        <span key={t} className="inline-flex items-center gap-1">
+          <span className="size-2 rounded-full" style={{ background: c }} />
+          {t}
+        </span>
+      ))}
+    </div>
+  );
+}
+
+/** One LOB: its services, plus the dependencies it calls. The shared platform
+ *  (beats 1-3) is a *synchronous* edge — its outage blacks the LOB out. The
+ *  LOB→LOB edges (once partitioned) are *async + graceful* — a callee's outage
+ *  only browns the edge out, the LOB keeps serving. */
 function DivisionStack({
   name,
   down,
-  withOwnPlatform,
+  shared,
+  platformDown,
 }: {
   name: string;
-  down: boolean;
-  withOwnPlatform: boolean;
+  down: Set<string>;
+  shared: boolean;
+  platformDown: boolean;
 }) {
-  const color = down ? RED : GREEN;
+  const isDown = down.has(name);
+  const edges: { label: string; health: EdgeHealth; sync: boolean }[] = shared
+    ? [{ label: `Shared ${PLATFORM}`, health: edgeHealth(platformDown, true), sync: true }]
+    : (LOB_DEPS[name] ?? []).map((t) => ({
+        label: t,
+        health: edgeHealth(down.has(t), false),
+        sync: false,
+      }));
+  const degraded = !isDown && edges.some((e) => e.health === "brownout");
+  const tone = isDown ? RED : degraded ? AMBER : GREEN;
+  const status = isDown ? "DOWN" : degraded ? "serving · degraded" : "serving";
+
   return (
     <div
       className="flex flex-col gap-2 rounded-lg border bg-black/20 p-2.5"
       style={{
-        borderColor: `color-mix(in srgb, ${color} ${down ? 65 : 45}%, transparent)`,
+        borderColor: `color-mix(in srgb, ${tone} ${isDown ? 65 : degraded ? 55 : 45}%, transparent)`,
       }}
     >
       <div className="flex items-center gap-2">
-        <Dot color={color} />
+        <Dot color={tone} />
         <div className="min-w-0">
           <div className="truncate text-sm font-semibold">{name}</div>
           <div
             className="text-[11px] font-medium"
-            style={{ color: down ? RED : "var(--muted-foreground)" }}
+            style={{ color: isDown || degraded ? tone : "var(--muted-foreground)" }}
           >
-            {down ? "DOWN" : "serving"}
+            {status}
           </div>
         </div>
       </div>
       <div className="flex flex-wrap gap-1">
         {DIVISION_SERVICES.map((s) => (
-          <Chip key={s} label={s} down={down} />
+          <Chip key={s} label={s} down={isDown} />
         ))}
-        {withOwnPlatform && <Chip label={`${PLATFORM} (own)`} down={down} own />}
+        {!shared && <Chip label={`${PLATFORM} (own)`} down={isDown} own />}
       </div>
+      {edges.length > 0 && (
+        <div
+          className="flex flex-col gap-1 border-t pt-2"
+          style={{ borderColor: "color-mix(in srgb, var(--border) 70%, transparent)" }}
+        >
+          <span className="text-muted-foreground text-[9px] tracking-wide uppercase">
+            depends on
+          </span>
+          <div className="flex flex-wrap gap-1">
+            {edges.map((e) => (
+              <EdgeChip key={e.label} label={e.label} health={e.health} sync={e.sync} />
+            ))}
+          </div>
+        </div>
+      )}
     </div>
+  );
+}
+
+/** A dependency edge to another LOB or the shared platform, colored by health and
+ *  tagged sync/async — the sync/async distinction is why one blacks out and the
+ *  other only browns out. */
+function EdgeChip({ label, health, sync }: { label: string; health: EdgeHealth; sync: boolean }) {
+  const color = edgeColor(health);
+  return (
+    <span
+      className="inline-flex items-center gap-1 rounded border px-1.5 py-0.5 text-[10px] whitespace-nowrap"
+      style={{
+        borderColor: `color-mix(in srgb, ${color} 50%, transparent)`,
+        background: `color-mix(in srgb, ${color} 10%, transparent)`,
+        color,
+      }}
+    >
+      <span aria-hidden>→</span>
+      {label}
+      <span className="opacity-70">· {sync ? "sync" : "async"}</span>
+    </span>
   );
 }
 
