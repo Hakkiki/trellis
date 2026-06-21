@@ -5,6 +5,19 @@ The simulator deploys continuously from `main`, so entries are grouped by date r
 
 ## Unreleased
 
+### Changed
+
+- **Blast radius is now a guided "three false hopes" walkthrough.** The page no longer toggles between a
+  shared service and a sliced one — that framed blast radius as a topology choice and left it all-or-nothing.
+  Instead it walks one bad change through five beats with a blast-radius counter (and a trail of its past
+  values) always on screen: **shared → redundant (active-active/DR) → process (change board/freeze) →
+  partition (share-nothing) → recover**. The counter stays pinned at 100% through redundancy and process —
+  *probability levers that lower how often a bad change ships, never how far one reaches* — and only drops to
+  1/N when the architecture partitions, then to 0 on recovery from last-good. The throughline: redundancy and
+  process are probability levers; blast radius is a magnitude problem; only partitioning bounds the worst case.
+  Each fix maps to a real Trellis mechanism (staged promotion, reconcile/drift control). A new pure model
+  (`blast.ts`) makes the lesson — the settled trail `100 → 100 → 100 → 25 → 0` — unit-tested.
+
 ### Fixed
 
 - **Cost & parity: stop saying "re-optimization," and map what effectiveness really requires.** The
