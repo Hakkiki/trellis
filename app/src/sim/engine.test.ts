@@ -4,6 +4,7 @@ import type { DesiredResource, Manifest, Observation, Posture } from "./model";
 import { parkable, parkClass } from "./model";
 import { parityCheck, plan } from "./planner";
 import { allConverged, Reconciler, type Status } from "./reconcile";
+import { parseSchedule } from "./schedule";
 import { SimCloud } from "./sim";
 import { derive, rollup } from "./state";
 
@@ -933,5 +934,67 @@ describe("utilization control loop (idle trigger, cold resume, wallet guard)", (
     expect(e.snapshot().walletGuard).not.toContain(db.id);
     for (let i = 0; i < 8 && stateOf(e, db.id) !== "Dormant"; i++) e.tick();
     expect(stateOf(e, db.id)).toBe("Dormant");
+  });
+});
+
+describe("temporal demand model wired into the autoscaler (axis 1)", () => {
+  function ready(): Engine {
+    const posture: Posture = {
+      ...DEFAULT_POSTURE,
+      elasticity: "aggressive",
+      dormancy: "aggressive",
+    };
+    const e = new Engine(posture);
+    e.declare(posture);
+    e.approve();
+    for (let i = 0; i < 30 && !e.snapshot().converged; i++) e.tick();
+    return e;
+  }
+  const NIGHTLY = parseSchedule("nightly")!; // { everyTicks: 24, atTick: 0, durationTicks: 3 }
+  const tickOf = (e: Engine) => Math.floor(e.snapshot().tMs / 1000);
+  const phaseOf = (e: Engine) => tickOf(e) % NIGHTLY.everyTicks;
+  const driveToPhase = (e: Engine, p: number) => {
+    for (let i = 0; i < NIGHTLY.everyTicks && phaseOf(e) !== p; i++) e.tick();
+  };
+  const stateOf = (e: Engine, id: string) => e.snapshot().resources.find((r) => r.id === id)!.state;
+  // The DB in the same region as the nightly batch job — it inherits the window.
+  const scheduledDb = (e: Engine) => {
+    const jr = e.snapshot().resources.find((r) => r.lifecycle === "job")!.region;
+    return e
+      .snapshot()
+      .resources.find((r) => r.kind === "managed-relational-db" && r.region === jr)!;
+  };
+
+  it("refuses to park into scheduled demand, then parks once the window passes", () => {
+    const e = ready();
+    const db = scheduledDb(e);
+    driveToPhase(e, 0); // the nightly window is open (demand active)
+
+    // Idle through the active window — a blind autoscaler would park after the
+    // tier threshold (2 ticks); the temporal one holds it warm.
+    e.setIdle(db.id, true);
+    e.tick();
+    e.tick();
+    e.tick(); // autoscale saw phases 0,1,2 — all warm
+    expect(stateOf(e, db.id)).not.toBe("Dormant");
+
+    // Window has passed (and the next is far): now it is free to park.
+    for (let i = 0; i < 5 && stateOf(e, db.id) !== "Dormant"; i++) e.tick();
+    expect(stateOf(e, db.id)).toBe("Dormant");
+  });
+
+  it("pre-warms a parked resource ahead of the next scheduled window", () => {
+    const e = ready();
+    const db = scheduledDb(e);
+    driveToPhase(e, 8); // far from the window
+
+    e.setIdle(db.id, true);
+    for (let i = 0; i < 5 && stateOf(e, db.id) !== "Dormant"; i++) e.tick();
+    expect(stateOf(e, db.id)).toBe("Dormant"); // parks while demand is far off
+
+    // Advance toward the next window; it must wake *before* demand arrives, so it
+    // isn't cold-started at the window opening.
+    for (let i = 0; i < NIGHTLY.everyTicks && phaseOf(e) !== 0; i++) e.tick();
+    expect(stateOf(e, db.id)).not.toBe("Dormant"); // pre-warmed, not cold at demand
   });
 });

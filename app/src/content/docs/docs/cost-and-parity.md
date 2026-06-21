@@ -212,19 +212,24 @@ The first slice — the two guardrails everything else depends on — is now in 
   as **resume thrash** (a flapping signal or an attacker forcing cold starts); the guard **pins the
   resource warm** and alerts, because churn costs more than a warm floor. Surfaced in the snapshot
   (`walletGuard`) and cleared by `resolveWalletGuard()`.
+- **A temporal demand model (axis 1, declared half).** `autoscale()` is no longer blind to time: it reads
+  the `schedule` on a Job (`schedule.ts` turns it into a recurring demand window on the job's same-Frame
+  neighbours) and **pre-warms ahead of predicted demand** and **refuses to park into it** — so the DB
+  isn't parked at 11:58 and cold-started by the midnight job. Conservative stays a hands-off warm floor.
 
-Still **not** modelled — and here is the honest map of what *effectiveness* would require. The system
-would have to read three signals **through time** and act on each, surfacing every decision to the owner
-as a proposal (the machine proposes from observed reality; the owner ratifies at the gate — so the gate
-declaration stops being a one-time blind guess and becomes a living, evidence-backed schedule):
+Effectiveness requires reading three signals **through time** and acting on each, surfacing every decision
+to the owner as a proposal (the machine proposes from observed reality; the owner ratifies at the gate —
+so the gate declaration stops being a one-time blind guess and becomes a living, evidence-backed
+schedule). **Axis 1 now has its declared half; axes 2 and 3 are still open.**
 
-1. **Temporal idle → park (the *when*).** Not "idle right now" — a blind point sample, which is all
-   `autoscale()` does today (`idleTicks` over a threshold) — but a *model of demand over time*: park
-   during predicted idle, **pre-warm before predicted demand**. Trellis already carries `schedule:
-   "nightly"` on the batch job in desired state and the autoscaler **ignores it** — it would park the DB
-   at 11:58 and cold-start the midnight job. The richer version *infers* the patterns nobody declared
-   (the month-end spike, the weekday ramp) from observed telemetry, and keeps a reactive floor for demand
-   the model didn't predict.
+1. **Temporal idle → park (the *when*) — *declared half built*.** Not "idle right now" — a blind point
+   sample — but a *model of demand over time*. `autoscale()` now reads the `schedule` Trellis already
+   carries on a Job (`schedule.ts` → a recurring demand window on the job's same-Frame neighbours) and
+   uses it to **pre-warm before predicted demand** and **refuse to park into** it: it won't park the DB at
+   11:58 and cold-start the midnight job, and it wakes a parked DB ahead of the window so it's warm when
+   demand lands. A reactive floor still catches unpredicted demand. **Still open:** *inferring* the
+   patterns nobody declared — the month-end spike, the weekday ramp — from observed telemetry, rather than
+   only honouring declared schedules.
 
 2. **Low utilization → right-size (the *how much*).** A resource used continuously but at 50% of a
    `large` isn't idle — it's **overprovisioned**; the action is not park but **shrink the SKU / drop a
@@ -246,8 +251,9 @@ Across all three the control action is to **regulate** — hold cost-against-val
 prices, and business drivers move — **not** to re-run an optimizer on a timer (which would chase the
 cheapest point and strip the very slack effectiveness must preserve). The cost setpoint must **move** with
 business drivers (Black Friday spends more, on purpose), as an owner-ratified proposal, not a static
-budget. What ships today is the dumb reactive floor on axis 1, a declared signal we ignore, and
-numerator-only visibility — useful scaffolding, **not yet effectiveness**.
+budget. What ships today is the *declared* half of axis 1 (honour schedules; pre-warm, don't park into
+demand), the reactive floor beneath it, and numerator-only visibility — real progress, but inference,
+right-sizing, and the value term are still missing: **not yet effectiveness**.
 
 One smaller, separate gap: **resume-as-failure is coarse** — a cold resume degrades the resource itself;
 it doesn't yet model the *clients'* dropped in-flight transactions as a path the calling service must
