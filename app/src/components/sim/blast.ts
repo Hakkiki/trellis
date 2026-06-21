@@ -11,6 +11,14 @@ export const BEATS: BeatId[] = ["shared", "redundant", "process", "partition", "
 
 export const DIVISIONS = ["Payments", "Trading", "Risk", "Web"] as const;
 
+/** Each division runs its own stack of services — the point the picture must make
+ *  obvious: a division is a set of services, not a single box. */
+export const DIVISION_SERVICES = ["API", "Web app", "Database"] as const;
+
+/** The shared platform dependency every division reaches into — the coupling that
+ *  turns one bad change into an org-wide outage until you give each division its own. */
+export const PLATFORM = "PAM / secrets";
+
 /** 1/N as a percentage — the blast radius a partitioned system bounds itself to. */
 export const CONTAINED_PCT = Math.round(100 / DIVISIONS.length);
 
@@ -39,6 +47,8 @@ export const BLAST_TRAIL: number[] = BEATS.map((b) => blastForBeat(b, true));
 
 export interface BeatCopy {
   step: number;
+  /** Short label for the per-attempt trail strip. */
+  short: string;
   title: string;
   /** Intro narration shown before the action. */
   setup: string;
@@ -53,6 +63,7 @@ export interface BeatCopy {
 export const BEAT_COPY: Record<BeatId, BeatCopy> = {
   shared: {
     step: 1,
+    short: "Shared",
     title: "One shared service",
     setup:
       "Four divisions, one shared PAM / secrets service they all depend on. Roll out a bad upgrade and watch what it reaches.",
@@ -63,6 +74,7 @@ export const BEAT_COPY: Record<BeatId, BeatCopy> = {
   },
   redundant: {
     step: 2,
+    short: "Redundant",
     title: "“Make it redundant” — active-active / DR",
     setup:
       "Leadership’s first answer: redundancy. Three regions, active-active, a DR site. All green. Surely now we’re safe.",
@@ -73,6 +85,7 @@ export const BEAT_COPY: Record<BeatId, BeatCopy> = {
   },
   process: {
     step: 3,
+    short: "Process",
     title: "“Tighten the process” — change board + freeze",
     setup:
       "Second answer: process. A change-approval board, a freeze window, runbooks. Nothing ships without sign-off.",
@@ -83,6 +96,7 @@ export const BEAT_COPY: Record<BeatId, BeatCopy> = {
   },
   partition: {
     step: 4,
+    short: "Partition",
     title: "“Partition it” — share-nothing",
     setup:
       "The structural answer: share nothing. One cell per division — its own service, no shared substrate for a fault to cross.",
@@ -93,6 +107,7 @@ export const BEAT_COPY: Record<BeatId, BeatCopy> = {
   },
   recover: {
     step: 5,
+    short: "Recover",
     title: "Recover",
     setup: "The hit cell rolls back to its own last-good. The other three never noticed.",
     action: "Recover (last-good)",
