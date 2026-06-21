@@ -20,6 +20,18 @@ The simulator deploys continuously from `main`, so entries are grouped by date r
 
 ### Added
 
+- **Engine: the value term — cost ÷ value served (Cost & parity axis 3).** The denominator that makes
+  "effective" measurable. `engine.setDemand()` feeds the demand offered to a Service; each tick the engine
+  records how much its *serving* compute actually met (parked, cold, or degraded compute serves nothing;
+  under-capacity serves only what it can), weighted by Criticality. The headline is no longer
+  numerator-only: `snapshot().value` and `costPerValue` surface **cost-vs-value** (not cost-vs-budget),
+  spend that serves nothing is flagged **`ineffective`**, and the levers consult it — the autoscaler
+  **won't park a Service that's serving**, and right-sizing **won't shrink below the demand it's serving**.
+  So right-sizing a Service that serves the same demand for less money *measurably* raises effectiveness
+  (lower cost per value). Tests cover served-tracks-state, parking-drops-value, the ineffective flag, the
+  park value-consult, and right-sizing improving cost-per-value. Still open: demand/value are injected, not
+  yet inferred from real traffic/SLOs, and value is *quantity* served (a quality/SLO term is next).
+
 - **Engine: right-sizing from observed utilization (Cost & parity axis 2).** A new `rightsizing.ts`
   recommends the smallest size that still covers a resource's observed **peak** load plus headroom — never
   the naive "50% used = 50% waste": it sizes on the **binding resource** (`max(cpu, mem)`, so 25% CPU at

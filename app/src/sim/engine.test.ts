@@ -1067,3 +1067,92 @@ describe("right-sizing from observed utilization (axis 2)", () => {
     expect(propFor(e, "payments-api")).toBeUndefined(); // now right-sized
   });
 });
+
+describe("the value term — cost vs value served (axis 3)", () => {
+  function converged(over: Partial<Posture> = {}) {
+    const posture: Posture = { ...DEFAULT_POSTURE, ...over };
+    const e = new Engine(posture);
+    e.declare(posture);
+    e.approve();
+    for (let i = 0; i < 30 && !e.snapshot().converged; i++) e.tick();
+    return e;
+  }
+  const aggressive = (): Posture => ({
+    ...DEFAULT_POSTURE,
+    elasticity: "aggressive",
+    dormancy: "aggressive",
+  });
+  const valueFor = (e: Engine, slug: string) => e.snapshot().value.find((v) => v.slug === slug);
+
+  it("value is what's served: a live service fully serves its demand", () => {
+    const e = converged();
+    e.setDemand("payments-api", 6);
+    for (let i = 0; i < 12; i++) e.tick();
+    const v = valueFor(e, "payments-api")!;
+    expect(v.servedFraction).toBeCloseTo(1, 5);
+    expect(v.value).toBeGreaterThan(0);
+    expect(v.costPerValue).not.toBeNull();
+    expect(v.ineffective).toBe(false);
+    expect(e.snapshot().costPerValue).not.toBeNull();
+  });
+
+  it("parking serving capacity drops served value (the loop sees the cost)", () => {
+    const e = converged();
+    e.setDemand("payments-api", 16); // near the full compute capacity
+    for (let i = 0; i < 12; i++) e.tick();
+    expect(valueFor(e, "payments-api")!.servedFraction).toBeCloseTo(1, 5);
+
+    const eu = e
+      .snapshot()
+      .resources.find(
+        (r) => r.service === "payments-api" && r.kind === "compute" && r.region === "eu-west-1",
+      )!;
+    e.park(eu.id); // half the serving capacity goes away
+    for (let i = 0; i < 12; i++) e.tick();
+    expect(valueFor(e, "payments-api")!.servedFraction).toBeLessThan(0.9);
+  });
+
+  it("spend that serves no value is flagged ineffective", () => {
+    const e = converged();
+    e.setDemand("payments-api", 0); // provisioned, but no demand to serve
+    for (let i = 0; i < 5; i++) e.tick();
+    const v = valueFor(e, "payments-api")!;
+    expect(v.value).toBe(0);
+    expect(v.ineffective).toBe(true);
+    expect(v.costPerValue).toBeNull(); // serving nothing → cost ÷ 0
+  });
+
+  it("the park lever consults value — it won't park a service that's serving", () => {
+    const e = converged(aggressive());
+    const c = e
+      .snapshot()
+      .resources.find((r) => r.service === "payments-api" && r.kind === "compute")!;
+    e.setDemand("payments-api", 5); // value present
+    e.setIdle(c.id, true); // a stale idle flag would otherwise park it
+    for (let i = 0; i < 8; i++) e.tick();
+    expect(e.snapshot().resources.find((r) => r.id === c.id)!.state).not.toBe("Dormant");
+  });
+
+  it("right-sizing improves effectiveness: same value served, lower cost per value", () => {
+    const e = converged();
+    // Low utilization (→ shrinkable) but real demand that medium still covers.
+    for (const r of e.snapshot().resources) {
+      if (r.service === "payments-api" && ["small", "medium", "large"].includes(r.size)) {
+        e.setLoad(r.id, { cpu: 1.5, mem: 1.5 });
+      }
+    }
+    e.setDemand("payments-api", 6);
+    for (let i = 0; i < 12; i++) e.tick();
+    const before = valueFor(e, "payments-api")!;
+    expect(before.servedFraction).toBeCloseTo(1, 5);
+
+    expect(e.acceptRightSizing("payments-api")).toBe(true);
+    for (let i = 0; i < 30 && !e.snapshot().converged; i++) e.tick();
+    for (let i = 0; i < 14; i++) e.tick(); // refill the value window at the new size
+
+    const after = valueFor(e, "payments-api")!;
+    expect(after.servedFraction).toBeCloseTo(1, 5); // still fully served
+    expect(after.value).toBeCloseTo(before.value, 5); // same value delivered
+    expect(after.costPerValue!).toBeLessThan(before.costPerValue!); // cheaper per unit value
+  });
+});
