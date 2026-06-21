@@ -23,7 +23,7 @@ import {
 import { manifestCost, resourceCost, plan as runPlanner, serviceSlug } from "./planner";
 import { Reconciler, type Status } from "./reconcile";
 import { type Bake, isTerminal, type RolloutState, type Strategy, TeamRollout } from "./release";
-import { isSize, recommendSize, type Size } from "./rightsizing";
+import { isSize, recommendSize, SIZE_CAPACITY, type Size } from "./rightsizing";
 import { demandWindowsFor, warmNeeded } from "./schedule";
 import { SimCloud } from "./sim";
 import { rollup, type State } from "./state";
@@ -129,6 +129,13 @@ export interface EngineSnapshot {
   // Right-sizing recommendations from observed utilization (axis 2). Proposals
   // only — accepting changes the shared shape, so it goes through the gate.
   rightSizing: RightSizingProposal[];
+  // Cost-effectiveness per Service (axis 3): the denominator made visible —
+  // cost vs *value served*, not cost vs budget. Only Services with demand
+  // telemetry appear.
+  value: ServiceValue[];
+  // Aggregate cost per unit of (Criticality-weighted) value served — the
+  // headline effectiveness number; null when no value is being served.
+  costPerValue: number | null;
 }
 
 /** A right-sizing proposal for a Service, from its observed peak utilization. */
@@ -138,6 +145,18 @@ export interface RightSizingProposal {
   from: Size;
   to: Size;
   reason: string;
+}
+
+/** Cost-effectiveness for a Service (axis 3): what its spend actually buys. */
+export interface ServiceValue {
+  service: string; // display name
+  slug: string;
+  offered: number; // demand offered now (units)
+  servedFraction: number; // served ÷ offered over the window (1 when no demand)
+  value: number; // served units × Criticality weight
+  monthlyCost: number; // spend attributed to this Service
+  costPerValue: number | null; // cost ÷ value; null = serving no value (infinite)
+  ineffective: boolean; // costs money but serves ~no value — spend buying nothing
 }
 
 /** Ownership roll-up (§6): a Service's state (worst-of its managed children) and
@@ -200,6 +219,12 @@ const DOW_LIMIT = 3;
 // axis 1). Must exceed the cold-start window so the resource is live before the
 // scheduled demand arrives.
 const PREWARM_LEAD = 4;
+// The value denominator (docs: Cost & parity axis 3). "Effective" needs a
+// denominator: value = demand *served* (not merely offered), weighted by
+// Criticality so a C0 unit served is worth more than a C3 one. Cost ÷ value is
+// the headline — cost-vs-value, not numerator-only cost-vs-budget.
+const CRIT_WEIGHT: Record<Criticality, number> = { C0: 4, C1: 3, C2: 2, C3: 1 };
+const VALUE_WINDOW = 10; // trailing ticks over which served/offered are summed
 
 export class Engine {
   private cloud = new SimCloud({ applyLatency: 2 });
@@ -228,6 +253,12 @@ export class Engine {
   // guard) and the set the guard has pinned warm to stop resume thrash.
   private resumeLog = new Map<ResourceID, number[]>();
   private pinnedWarm = new Set<ResourceID>();
+  // Value accounting (axis 3): offered demand per Service (slug → units), and a
+  // trailing window of {offered, served} so cost-effectiveness reads off served
+  // value, not provisioned capacity. Only Services with demand telemetry count.
+  private offered = new Map<string, number>();
+  private hasDemand = new Set<string>();
+  private valueHist = new Map<string, { offered: number; served: number }[]>();
 
   constructor(posture: Posture = DEFAULT_POSTURE) {
     this.posture = posture;
@@ -336,6 +367,9 @@ export class Engine {
       // Loop down: still observe (the topology shows reality) but never converge.
       this.statuses = this.rec.observeStates(this.manifest, this.cloud.now());
     }
+    // Value accounting (axis 3): now that this tick's states are known, record
+    // how much of each Service's offered demand its serving compute met.
+    this.accountValue();
     // The app-delivery inner loop runs at its own cadence, independent of the
     // outer reconcile loop above (§11). The team's tool drives it; here the sim
     // ticks it on the team's behalf, and Trellis observes the resulting state.
@@ -501,6 +535,39 @@ export class Engine {
     this.cloud.setLoad(id, load);
   }
 
+  /** Inject the demand offered to a Service (units) — the value signal axis 3
+   *  reads. Value is what's *served* of this, not what's offered. */
+  setDemand(service: string, level: number) {
+    const sl = serviceSlug(service);
+    this.offered.set(sl, level);
+    this.hasDemand.add(sl);
+  }
+
+  /** Per-tick value accounting (axis 3): how much of each Service's offered
+   *  demand its *serving* compute actually met. Parked, cold, or degraded compute
+   *  serves nothing; under-capacity serves only what it can. Accumulated over a
+   *  trailing window so cost-effectiveness reads served value, not provisioning. */
+  private accountValue() {
+    if (!this.manifest) return;
+    const stateById = new Map(this.statuses.map((s) => [s.id, s.state]));
+    for (const sl of this.hasDemand) {
+      const offered = this.offered.get(sl) ?? 0;
+      let servingCapacity = 0;
+      for (const r of Object.values(this.manifest.resources)) {
+        if (r.service !== sl || r.kind !== "compute") continue;
+        if (stateById.get(r.id) !== "Converged") continue; // only live compute serves
+        if (isSize(r.spec.size)) {
+          servingCapacity += SIZE_CAPACITY[r.spec.size].cpu * Number(r.spec.replicas ?? "1");
+        }
+      }
+      const served = Math.min(offered, servingCapacity);
+      const hist = this.valueHist.get(sl) ?? [];
+      hist.push({ offered, served });
+      if (hist.length > VALUE_WINDOW) hist.shift();
+      this.valueHist.set(sl, hist);
+    }
+  }
+
   /** Right-sizing proposals from observed peak utilization, per Service. A
    *  Service's sized resources share one size, so we recommend the size that
    *  covers the *peak across them* (size to the peak you must serve) — only for
@@ -528,8 +595,19 @@ export class Engine {
       }
       if (!seen) continue; // no telemetry → no recommendation
       const rec = recommendSize(current, { cpu, mem });
-      if (rec)
-        out.push({ service: s.name, slug: sl, from: rec.from, to: rec.to, reason: rec.reason });
+      if (!rec) continue;
+      // Value consult (axis 3): never propose a shrink that would undersize the
+      // Service below the demand it is serving — protect served value, not just
+      // chase utilization. (Up-sizes always pass.)
+      const shrinking = SIZE_CAPACITY[rec.to].cpu < SIZE_CAPACITY[rec.from].cpu;
+      if (shrinking && this.hasDemand.has(sl)) {
+        const replicas = sized
+          .filter((r) => r.kind === "compute")
+          .reduce((a, r) => a + Number(r.spec.replicas ?? "1"), 0);
+        const capAfter = SIZE_CAPACITY[rec.to].cpu * replicas;
+        if ((this.offered.get(sl) ?? 0) > capAfter) continue; // would drop served value
+      }
+      out.push({ service: s.name, slug: sl, from: rec.from, to: rec.to, reason: rec.reason });
     }
     return out;
   }
@@ -589,8 +667,12 @@ export class Engine {
       // its neighbours. Pre-warm ahead of predicted demand and refuse to park
       // into it — not the blind reactive floor that parks right before the job.
       const warm = warmNeeded(demandWindowsFor(this.manifest, d), nowTick, PREWARM_LEAD);
+      // Value consult (axis 3): never park a resource whose Service is serving
+      // value right now — the demand signal overrides a stale idle flag, so we
+      // don't drop served value for a few dollars.
+      const serving = (this.offered.get(d.service) ?? 0) > 0;
       if (!this.cloud.isDormant(d.id)) {
-        if (!warm && idle >= threshold && !this.pinnedWarm.has(d.id)) {
+        if (!warm && !serving && idle >= threshold && !this.pinnedWarm.has(d.id)) {
           this.cloud.park(d.id);
           this.log(
             "Observe",
@@ -888,6 +970,36 @@ export class Engine {
         rolloutShare: active ? active.share : 0,
       };
     });
+
+    // Cost-effectiveness (axis 3): cost vs value *served*, per Service. The
+    // denominator is what makes "effective" measurable — without it the system
+    // can't tell cost-effective from cheap.
+    const costBySlug = new Map(serviceRollups.map((r) => [r.slug, r.monthlyCost]));
+    const value: ServiceValue[] = servicesOf(this.posture)
+      .filter((s) => this.hasDemand.has(serviceSlug(s.name)))
+      .map((s) => {
+        const sl = serviceSlug(s.name);
+        const hist = this.valueHist.get(sl) ?? [];
+        const offeredSum = hist.reduce((a, h) => a + h.offered, 0);
+        const servedSum = hist.reduce((a, h) => a + h.served, 0);
+        const servedFraction = offeredSum > 0 ? servedSum / offeredSum : 1;
+        const val = servedSum * CRIT_WEIGHT[s.criticality];
+        const cost = costBySlug.get(sl) ?? 0;
+        return {
+          service: s.name,
+          slug: sl,
+          offered: this.offered.get(sl) ?? 0,
+          servedFraction,
+          value: val,
+          monthlyCost: cost,
+          costPerValue: val > 0 ? cost / val : null,
+          ineffective: cost > 0 && val <= 0, // paying, serving ~nothing
+        };
+      });
+    const totalCost = value.reduce((a, v) => a + v.monthlyCost, 0);
+    const totalValue = value.reduce((a, v) => a + v.value, 0);
+    const costPerValue = totalValue > 0 ? totalCost / totalValue : null;
+
     return {
       tMs: this.cloud.now(),
       phase,
@@ -916,6 +1028,8 @@ export class Engine {
       controlPlane: this.cp.view(),
       walletGuard: [...this.pinnedWarm],
       rightSizing: this.rightSizingProposals(),
+      value,
+      costPerValue,
     };
   }
 

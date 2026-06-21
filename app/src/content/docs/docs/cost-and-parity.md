@@ -221,6 +221,12 @@ The first slice — the two guardrails everything else depends on — is now in 
   resource and the distribution (never the naive "50% = waste"). `snapshot().rightSizing` surfaces the
   proposal; `acceptRightSizing()` is the owner's gate action that sets a **shared** size override and
   re-plans — so a shrink cascades with parity preserved, and cost drops for the same workload.
+- **The value term (axis 3): cost ÷ value served.** `engine.setDemand()` feeds offered demand; the engine
+  records how much each Service's *serving* compute actually met (parked/cold/degraded serves nothing),
+  Criticality-weighted. `snapshot().value` + `costPerValue` make the headline **cost-vs-value** (not
+  numerator-only cost-vs-budget), flag spend that serves nothing as `ineffective`, and the levers consult
+  it — the autoscaler won't park a serving Service, right-sizing won't shrink below served demand. Now
+  right-sizing for the same workload *measurably* raises effectiveness (lower cost per value).
 
 Effectiveness requires reading three signals **through time** and acting on each, surfacing every decision
 to the owner as a proposal (the machine proposes from observed reality; the owner ratifies at the gate —
@@ -249,21 +255,29 @@ schedule). **Axis 1 now has its declared half; axes 2 and 3 are still open.**
    preserved, never a per-env shrink. **Still open:** per-cell granularity (one size covers a Service's
    compute and data today) and driving the proposal from **prod's** utilization in the fleet.
 
-3. **Output vs outcome → the value term (the *what for*).** Even fully utilized, is the work worth it?
-   This is the **denominator** that makes "effective" measurable at all. We surface **budget vs cost** —
-   numerator only; we surface no value/outcome, so neither the loop nor the owner can tell *cost-effective*
-   from *cheap*. Utilization is a decent proxy for "using what you bought," but a box pinned at 100% on
-   retry storms is fully utilized and useless.
+3. **Output vs outcome → the value term (the *what for*) — *built (demand-served, Criticality-weighted)*.**
+   Even fully utilized, is the work worth it? This is the **denominator** that makes "effective" measurable.
+   `engine.setDemand()` feeds the demand offered to a Service; each tick the engine records how much its
+   *serving* compute actually met (parked, cold, or degraded compute serves nothing; under-capacity serves
+   only what it can), weighted by Criticality so a C0 unit served outweighs a C3 one. The headline is no
+   longer numerator-only: `snapshot().value` and `costPerValue` surface **cost ÷ value served**, a service
+   serving nothing is flagged **`ineffective`**, and the levers consult it — the autoscaler **won't park a
+   service that's serving**, and right-sizing **won't shrink below the demand it's serving**. So
+   right-sizing a service that serves the same demand for less money *measurably raises* effectiveness
+   (lower cost per value). **Still open:** demand is injected, not yet derived from real traffic/SLOs, and
+   value is *quantity* served (an SLO/quality term — "served *well*" — is the natural next refinement); a
+   fully-utilized box doing worthless work still isn't caught unless its demand is recorded as low-value.
 
 Across all three the control action is to **regulate** — hold cost-against-value in band as demand,
 prices, and business drivers move — **not** to re-run an optimizer on a timer (which would chase the
 cheapest point and strip the very slack effectiveness must preserve). The cost setpoint must **move** with
 business drivers (Black Friday spends more, on purpose), as an owner-ratified proposal, not a static
-budget. What ships today is the *declared* half of axis 1 (honour schedules; pre-warm, don't park into
-demand) and axis 2 (right-size from observed peak utilization, gate-ratified). What's still missing is
-axis 1's **inference** of undeclared patterns and — the deepest gap — axis 3's **value term**: until
-there's a denominator, the system still can't tell *cost-effective* from *cheap*. **Closer, but not yet
-effectiveness.**
+budget. All three axes now have a first cut: axis 1 honours declared schedules (pre-warm, don't park into
+demand), axis 2 right-sizes from observed peak utilization (gate-ratified), and axis 3 measures **cost ÷
+value served** and makes the levers protect it. The system can finally tell *cost-effective* from *cheap* —
+the denominator exists. What remains is making the signals **observed rather than injected** (infer demand
+patterns and value from real traffic/SLOs, not `setDemand`/`setLoad`/`setIdle`) and letting the cost
+**setpoint move on its own** with business drivers. **The loop is closed; the inputs are still hand-fed.**
 
 One smaller, separate gap: **resume-as-failure is coarse** — a cold resume degrades the resource itself;
 it doesn't yet model the *clients'* dropped in-flight transactions as a path the calling service must
