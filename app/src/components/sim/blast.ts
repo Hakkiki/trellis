@@ -21,6 +21,34 @@ export const DIVISION_SERVICES = ["API", "Web app", "Database"] as const;
  *  turns one bad change into an org-wide outage until you give each division its own. */
 export const PLATFORM = "PAM / secrets";
 
+/** The async call graph between LOBs (caller → the LOBs it calls). Calls are
+ *  asynchronous and designed to fail gracefully: a callee outage *browns out* the
+ *  edge — degraded, still serving — rather than blacking out the caller. Contrast
+ *  the shared platform (beats 1-3), a *synchronous* dependency whose outage blacks
+ *  out every caller at once. */
+export const LOB_DEPS: Record<string, readonly string[]> = {
+  Retail: [],
+  Wealth: ["Retail"],
+  Markets: ["Retail"],
+  Commercial: ["Markets"],
+};
+
+export type EdgeHealth = "good" | "brownout" | "blackout";
+
+/** Health of a dependency edge given whether its callee is down.
+ *  - sync (the shared platform): a downed callee blacks out the caller.
+ *  - async (LOB→LOB): a downed callee only browns the edge out; the caller serves. */
+export function edgeHealth(calleeDown: boolean, sync: boolean): EdgeHealth {
+  if (!calleeDown) return "good";
+  return sync ? "blackout" : "brownout";
+}
+
+/** LOBs that stay up but lose an async dependency to a downed LOB — degraded
+ *  (brownout), not down. They don't count toward the blast radius: that's the point. */
+export function degradedLobs(down: ReadonlySet<string>): string[] {
+  return DIVISIONS.filter((d) => !down.has(d) && (LOB_DEPS[d] ?? []).some((t) => down.has(t)));
+}
+
 /** 1/N as a percentage — the blast radius a partitioned system bounds itself to. */
 export const CONTAINED_PCT = Math.round(100 / DIVISIONS.length);
 
@@ -105,7 +133,7 @@ export const BEAT_COPY: Record<BeatId, BeatCopy> = {
     action: "Roll out the same bad change",
     undo: "Roll back",
     verdict:
-      "Only the architecture moved the number. Blast radius is now 1/N — chosen at design time, guaranteed by construction, no matter how the change got in. This is a magnitude bound, not a bet.",
+      "Only the architecture moved the number. Blast radius is now 1/N — chosen at design time, guaranteed by construction, no matter how the change got in. The LOBs still talk — asynchronously, designed to fail gracefully — so a neighbour's outage browns out one edge (degraded, still serving), it doesn't cascade. This is a magnitude bound, not a bet.",
   },
   recover: {
     step: 5,
