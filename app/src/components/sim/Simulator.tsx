@@ -2,6 +2,7 @@ import {
   Activity,
   AlertTriangle,
   Boxes,
+  Check,
   CircleSlash,
   Clock,
   Cloud,
@@ -10,12 +11,15 @@ import {
   Database,
   DollarSign,
   Eye,
+  Gauge,
   Layers,
+  Moon,
   Network,
   Server,
   ShieldAlert,
   Siren,
   Snowflake,
+  TrendingDown,
   Wrench,
   Zap,
 } from "lucide-react";
@@ -44,7 +48,9 @@ import {
   type EngineSnapshot,
   type Incident,
   type ResourceView,
+  type RightSizingProposal,
   type ServiceRollup,
+  type ServiceValue,
 } from "@/sim/engine";
 import {
   type BudgetPolicy,
@@ -55,7 +61,9 @@ import {
   type Resilience,
   type ServiceSpec,
   servicesOf,
+  type Tier,
 } from "@/sim/model";
+import { isSize, SIZE_CAPACITY } from "@/sim/rightsizing";
 import { ALL_STATES, type State, stateColorVar } from "@/sim/state";
 import { clearSession, loadSession, saveSession } from "@/sim/store";
 import Stage3D from "./Stage3D";
@@ -74,6 +82,11 @@ import {
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 const ALL_REGIONS = ["us-east-1", "eu-west-1", "ap-south-1"];
 const CRITS: Criticality[] = ["C0", "C1", "C2", "C3"];
+const TIER_OPTS: [string, string][] = [
+  ["conservative", "conservative"],
+  ["balanced", "balanced"],
+  ["aggressive", "aggressive"],
+];
 const ALL_SERVICES: { kind: Kind; label: string }[] = [
   { kind: "load-balancer", label: "load balancer" },
   { kind: "compute", label: "compute" },
@@ -101,6 +114,26 @@ function fmtClock(ms: number) {
   return `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`;
 }
 
+// Seed illustrative demand + utilization so the Cost & value panel is alive out
+// of the box: ~35% utilization (so a high-Criticality service shows a right-size
+// proposal) and demand at ~35% of serving capacity (comfortably served, SLO ~1).
+function seedTelemetry(e: Engine) {
+  const snap = e.snapshot();
+  const capBySlug = new Map<string, number>();
+  for (const r of snap.resources) {
+    if (!isSize(r.size)) continue;
+    const cap = SIZE_CAPACITY[r.size].cpu;
+    e.setLoad(r.id, { cpu: 0.35 * cap, mem: 0.35 * cap });
+    if (r.kind === "compute") {
+      capBySlug.set(r.service, (capBySlug.get(r.service) ?? 0) + cap * r.replicas);
+    }
+  }
+  for (const s of snap.serviceRollups) {
+    const cap = capBySlug.get(s.slug) ?? 0;
+    if (cap > 0) e.setDemand(s.service, Math.max(1, Math.round(cap * 0.35)));
+  }
+}
+
 export default function Simulator() {
   const engineRef = React.useRef<Engine | null>(null);
   const [snap, setSnap] = React.useState<EngineSnapshot | null>(null);
@@ -112,6 +145,9 @@ export default function Simulator() {
   const [cpTarget, setCpTarget] = React.useState<TcbId>("reconciler");
   // Topology service focus: "all" = grouped overview; a slug drills into one service.
   const [serviceFocus, setServiceFocus] = React.useState<string>("all");
+  // Seed demand/utilization once resources are live (load needs the sim resource
+  // to exist, which only happens after the first converge).
+  const seededRef = React.useRef(false);
 
   const refresh = React.useCallback(() => {
     if (engineRef.current) setSnap(engineRef.current.snapshot());
@@ -146,6 +182,7 @@ export default function Simulator() {
         e.approve();
         // Restore the live running version(s) so a reload doesn't reset to v1.
         if (s.deploy) e.restoreDeploy(s.deploy);
+        seededRef.current = false; // demand/load aren't persisted — re-seed once live
         setRunning(true);
       }
       refresh();
@@ -161,6 +198,12 @@ export default function Simulator() {
     const iv = setInterval(() => {
       const e = engineRef.current;
       const settled = e?.tick() ?? false;
+      // Once the env is first live, seed illustrative demand/utilization so the
+      // Value tab is alive (load only sticks once the sim resources exist).
+      if (e && !seededRef.current && e.snapshot().converged) {
+        seedTelemetry(e);
+        seededRef.current = true;
+      }
       refresh();
       // A deploy settled this tick (running version advanced / rollout finished):
       // persist so a reload restores the live running version, not v1.
@@ -196,7 +239,9 @@ export default function Simulator() {
     refresh();
   };
   const onApprove = () => {
-    if (!engineRef.current?.approve()) return;
+    const e = engineRef.current;
+    if (!e?.approve()) return;
+    seededRef.current = false; // re-seed the Value tab once the env converges
     setRunning(true);
     persist(true);
     refresh();
@@ -212,6 +257,7 @@ export default function Simulator() {
   const resetAll = () => {
     void clearSession();
     engineRef.current = new Engine(DEFAULT_POSTURE);
+    seededRef.current = false;
     setForm(DEFAULT_POSTURE);
     setRunning(false);
     setSelected(null);
@@ -316,6 +362,28 @@ export default function Simulator() {
                   ["maximize-resilience", "maximize resilience"],
                 ]}
               />
+            </Field>
+            <Field label="Cost levers — how eagerly idle capacity is parked">
+              <div id="tour-tiers" className="grid grid-cols-2 gap-2">
+                <div>
+                  <div className="text-muted-foreground mb-1 text-[11px]">
+                    elasticity · stateless
+                  </div>
+                  <Select
+                    value={form.elasticity ?? "conservative"}
+                    onChange={(v) => setForm({ ...form, elasticity: v as Tier })}
+                    options={TIER_OPTS}
+                  />
+                </div>
+                <div>
+                  <div className="text-muted-foreground mb-1 text-[11px]">dormancy · stateful</div>
+                  <Select
+                    value={form.dormancy ?? "conservative"}
+                    onChange={(v) => setForm({ ...form, dormancy: v as Tier })}
+                    options={TIER_OPTS}
+                  />
+                </div>
+              </div>
             </Field>
             <Field label="Governance — allowed services">
               <div className="flex flex-wrap gap-1.5">
@@ -541,6 +609,20 @@ export default function Simulator() {
                   onClick={() => sel && act((e) => e.hardFailure(sel.id))}
                 />
                 <EventButton
+                  icon={Moon}
+                  label={sel?.state === "Dormant" ? "Wake" : "Park (idle)"}
+                  hint={sel?.id}
+                  onClick={() =>
+                    sel && act((e) => (sel.state === "Dormant" ? e.wake(sel.id) : e.park(sel.id)))
+                  }
+                />
+                <EventButton
+                  icon={Database}
+                  label="Cold resume"
+                  hint={sel?.id}
+                  onClick={() => sel && act((e) => e.coldResume(sel.id))}
+                />
+                <EventButton
                   icon={sel?.costDrifted ? Wrench : DollarSign}
                   label={sel?.costDrifted ? "Reconcile cost" : "Cost spike"}
                   hint={sel?.id}
@@ -675,6 +757,35 @@ export default function Simulator() {
             </Card>
           )}
 
+          {phase === "applied" && (snap?.walletGuard.length ?? 0) > 0 && (
+            <Card className="border-destructive">
+              <CardContent className="flex items-center gap-3 pt-6 text-sm">
+                <DollarSign className="text-destructive size-5 shrink-0" />
+                <div className="flex-1">
+                  <div className="text-destructive font-semibold">
+                    Denial-of-wallet guard tripped
+                  </div>
+                  <p className="text-muted-foreground">
+                    Resume thrash detected — {snap!.walletGuard.length} resource(s) pinned warm to
+                    cap cost, because churn costs more than a warm floor (guardrail 7). Resolve once
+                    the churn stops.
+                  </p>
+                </div>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() =>
+                    act((e) => {
+                      for (const id of snap!.walletGuard) e.resolveWalletGuard(id);
+                    })
+                  }
+                >
+                  Resolve
+                </Button>
+              </CardContent>
+            </Card>
+          )}
+
           {phase === "applied" &&
             ((snap?.incidents.length ?? 0) > 0 ||
               (snap?.frozenDebts.length ?? 0) > 0 ||
@@ -715,6 +826,9 @@ export default function Simulator() {
                 <TabsTrigger id="tour-owners" value="owners" className="flex-1">
                   Owners
                 </TabsTrigger>
+                <TabsTrigger id="tour-effectiveness" value="value" className="flex-1">
+                  Value
+                </TabsTrigger>
                 <TabsTrigger value="audit" className="flex-1">
                   Audit
                 </TabsTrigger>
@@ -733,6 +847,15 @@ export default function Simulator() {
                     if (first) setSelected(first.id);
                   }}
                   onShip={(slug, broken) => act((e) => e.ship(slug, broken))}
+                />
+              </TabsContent>
+              <TabsContent value="value" className="mt-3">
+                <EffectivenessPanel
+                  value={snap?.value ?? []}
+                  costPerValue={snap?.costPerValue ?? null}
+                  rightSizing={snap?.rightSizing ?? []}
+                  onAccept={(slug) => act((e) => e.acceptRightSizing(slug))}
+                  onDemand={(service, n) => act((e) => e.setDemand(service, n))}
                 />
               </TabsContent>
               <TabsContent value="audit" className="mt-3">
@@ -799,7 +922,7 @@ function Guide({ onTour, onReset }: { onTour: () => void; onReset: () => void })
               <ol className="list-decimal space-y-1 pl-4">
                 <li>
                   Edit the <b>Posture</b> on the left — services and their criticality, resilience,
-                  regions, budget.
+                  regions, budget, and the <b>cost levers</b> (elasticity · dormancy).
                 </li>
                 <li>
                   Click <b>Plan</b> to compile it, then read the proof on the right.
@@ -808,8 +931,12 @@ function Guide({ onTour, onReset }: { onTour: () => void; onReset: () => void })
                   Click <b>Approve &amp; apply</b> to start the loop and watch it converge.
                 </li>
                 <li>
-                  Use <b>Inject reality</b> to break things, and watch the loop heal or raise an
-                  incident.
+                  Use <b>Inject reality</b> to break things (or <b>Park</b> a resource to scale it
+                  to zero), and watch the loop heal, hold, or raise an incident.
+                </li>
+                <li>
+                  Open the <b>Value</b> tab for cost ÷ value served, and accept a{" "}
+                  <b>right-sizing</b> proposal to make a service cheaper for the same workload.
                 </li>
                 <li>
                   Switch the <b>lens</b> (state · cost · health · security) and open <b>Owners</b>.
@@ -853,6 +980,10 @@ function Guide({ onTour, onReset }: { onTour: () => void; onReset: () => void })
                     "cost drift, budget-breach, and an alert-or-block policy.",
                   ],
                   [
+                    "Cost-effectiveness, not optimization",
+                    "elasticity/dormancy tiers park idle capacity, right-sizing proposals shrink the shared shape at the gate, and the Value tab measures cost ÷ value served — served well, not just cheap.",
+                  ],
+                  [
                     "Self-upgrade",
                     "the control plane manages itself with dual-control and meta-DR recovery.",
                   ],
@@ -870,6 +1001,106 @@ function Guide({ onTour, onReset }: { onTour: () => void; onReset: () => void })
         </Accordion>
       </CardContent>
     </Card>
+  );
+}
+
+function EffectivenessPanel({
+  value,
+  costPerValue,
+  rightSizing,
+  onAccept,
+  onDemand,
+}: {
+  value: ServiceValue[];
+  costPerValue: number | null;
+  rightSizing: RightSizingProposal[];
+  onAccept: (slug: string) => void;
+  onDemand: (service: string, n: number) => void;
+}) {
+  if (!value.length && !rightSizing.length)
+    return (
+      <p className="text-muted-foreground text-xs">
+        Approve a plan to see cost vs <em>value served</em> — what a service's spend actually buys,
+        not just what it costs.
+      </p>
+    );
+  return (
+    <div className="space-y-3 text-xs">
+      <div className="border-border/60 flex items-center justify-between border-b pb-2">
+        <span className="flex items-center gap-1.5 font-medium">
+          <Gauge className="text-primary size-3.5" /> cost ÷ value served
+        </span>
+        <span className="text-muted-foreground tabular-nums">
+          {costPerValue != null ? `$${costPerValue.toFixed(0)} / value-unit` : "—"}
+        </span>
+      </div>
+      <p className="text-muted-foreground">
+        Effectiveness is cost over <em>value served</em>, not cost over budget. Value is demand met
+        by live serving capacity (parked, cold, or degraded serves nothing), weighted by Criticality
+        and discounted when run hot — served <em>well</em>, not just served (axis 3).
+      </p>
+      {rightSizing.length > 0 && (
+        <div className="space-y-1.5">
+          {rightSizing.map((p) => (
+            <div
+              key={p.slug}
+              className="border-border/60 flex items-start justify-between gap-2 rounded-md border border-dashed p-2"
+            >
+              <div className="min-w-0">
+                <div className="flex items-center gap-1.5 font-medium">
+                  <TrendingDown className="text-primary size-3.5 shrink-0" /> right-size {p.service}
+                  : {p.from} → {p.to}
+                </div>
+                <div className="text-muted-foreground text-[10px] leading-snug">{p.reason}</div>
+              </div>
+              <Button
+                size="sm"
+                variant="secondary"
+                className="h-7 shrink-0 text-[11px]"
+                onClick={() => onAccept(p.slug)}
+              >
+                Accept at gate
+              </Button>
+            </div>
+          ))}
+        </div>
+      )}
+      {value.map((v) => (
+        <div key={v.slug} className="border-border/60 space-y-1.5 rounded-md border p-2">
+          <div className="flex items-center justify-between">
+            <span className="font-medium">{v.service}</span>
+            {v.ineffective ? (
+              <Badge variant="destructive" className="px-1 py-0 text-[9px]">
+                ineffective
+              </Badge>
+            ) : (
+              <span className="text-muted-foreground tabular-nums">
+                {v.costPerValue != null ? `$${v.costPerValue.toFixed(0)}/value` : "—"}
+              </span>
+            )}
+          </div>
+          <div className="text-muted-foreground flex flex-wrap gap-x-3 gap-y-0.5 text-[10px] tabular-nums">
+            <span>cost ${v.monthlyCost}/mo</span>
+            <span>value {v.value.toFixed(0)}</span>
+            <span>served {Math.round(v.servedFraction * 100)}%</span>
+            <span>SLO {Math.round(v.sloAttainment * 100)}%</span>
+          </div>
+          <label className="text-muted-foreground flex items-center gap-2 text-[10px]">
+            demand
+            <input
+              type="range"
+              min={0}
+              max={30}
+              step={1}
+              value={Math.min(30, v.offered)}
+              onChange={(ev) => onDemand(v.service, Number(ev.target.value))}
+              className="flex-1 accent-[var(--primary)]"
+            />
+            <span className="w-5 text-right tabular-nums">{v.offered}</span>
+          </label>
+        </div>
+      ))}
+    </div>
   );
 }
 
@@ -1002,7 +1233,7 @@ function OwnersPanel({
               onClick={() => onSelect(r.slug)}
               className={cn(
                 "border-border/60 w-full space-y-1 rounded-md border p-2 text-left transition",
-                selectedSlug === r.slug ? "ring-1 ring-[var(--ring)]" : "hover:bg-accent/40",
+                selectedSlug === r.slug ? "sel-halo" : "hover:bg-accent/40",
               )}
             >
               <div className="flex items-center justify-between">
@@ -1454,7 +1685,7 @@ function ResourceCard({
       style={{ borderColor: color }}
       className={cn(
         "flex w-full items-center gap-3 rounded-md border bg-black/20 px-3 py-2 text-left transition",
-        selected ? "ring-2 ring-[var(--ring)]" : "",
+        selected ? "sel-halo" : "",
       )}
     >
       <Icon className="size-4 shrink-0" style={{ color }} />
@@ -1745,13 +1976,38 @@ function EventButton({
   hint?: string;
   onClick: () => void;
 }) {
+  // A momentary "fired" flash so a click clearly registers — these trigger an
+  // instantaneous event, so the feedback is the acknowledgement, not a spinner.
+  const [fired, setFired] = React.useState(false);
+  const timer = React.useRef<number | null>(null);
+  React.useEffect(() => () => void (timer.current && window.clearTimeout(timer.current)), []);
+  const handle = () => {
+    onClick();
+    setFired(true);
+    if (timer.current) window.clearTimeout(timer.current);
+    timer.current = window.setTimeout(() => setFired(false), 600);
+  };
   return (
     <button
-      onClick={onClick}
-      className="border-input hover:bg-accent flex flex-col items-start gap-1 rounded-md border px-3 py-2 text-left transition"
+      type="button"
+      onClick={handle}
+      className={cn(
+        "focus-visible:ring-ring relative flex flex-col items-start gap-1 rounded-md border px-3 py-2 text-left transition-all duration-150 focus-visible:ring-2 focus-visible:outline-none active:scale-[0.97]",
+        fired
+          ? "border-primary bg-primary/15 ring-primary/40 ring-1"
+          : "border-input hover:bg-accent hover:border-primary/40",
+      )}
     >
-      <Icon className="size-4" />
-      <span className="text-xs font-medium">{label}</span>
+      <Icon className={cn("size-4 transition-colors", fired && "text-primary")} />
+      <span className="flex items-center gap-1 text-xs font-medium">
+        {label}
+        <Check
+          className={cn(
+            "size-3 text-primary transition-opacity duration-150",
+            fired ? "opacity-100" : "opacity-0",
+          )}
+        />
+      </span>
       {hint && <span className="text-muted-foreground truncate text-[10px]">{hint}</span>}
     </button>
   );
