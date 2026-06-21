@@ -227,6 +227,10 @@ The first slice — the two guardrails everything else depends on — is now in 
   numerator-only cost-vs-budget), flag spend that serves nothing as `ineffective`, and the levers consult
   it — the autoscaler won't park a serving Service, right-sizing won't shrink below served demand. Now
   right-sizing for the same workload *measurably* raises effectiveness (lower cost per value).
+- **Value is served *well*, not just served (SLO/quality term).** A `sloAttainment` factor discounts
+  demand met while serving capacity runs **hot** (latency degrades above ~80% utilization), so a
+  no-headroom service keeps its quantity (`servedFraction`) but loses value — making **"headroom isn't
+  waste" quantitative**: shrinking away the slack lowers value even as it lowers cost.
 
 Effectiveness requires reading three signals **through time** and acting on each, surfacing every decision
 to the owner as a proposal (the machine proposes from observed reality; the owner ratifies at the gate —
@@ -264,8 +268,11 @@ schedule). **Axis 1 now has its declared half; axes 2 and 3 are still open.**
    serving nothing is flagged **`ineffective`**, and the levers consult it — the autoscaler **won't park a
    service that's serving**, and right-sizing **won't shrink below the demand it's serving**. So
    right-sizing a service that serves the same demand for less money *measurably raises* effectiveness
-   (lower cost per value). **Still open:** demand is injected, not yet derived from real traffic/SLOs, and
-   value is *quantity* served (an SLO/quality term — "served *well*" — is the natural next refinement); a
+   (lower cost per value). Value is served *well*, not just served: a `sloAttainment` term discounts
+   demand met while the serving capacity runs **hot** (above ~80% utilization latency degrades), so a
+   no-headroom service keeps its `servedFraction` (quantity) but loses value (quality) — which makes
+   **"headroom isn't waste" quantitative**: shrinking away the slack lowers value even as it lowers cost.
+   **Still open:** the inputs are injected (`setDemand`), not yet inferred from real traffic, and a
    fully-utilized box doing worthless work still isn't caught unless its demand is recorded as low-value.
 
 Across all three the control action is to **regulate** — hold cost-against-value in band as demand,
