@@ -23,6 +23,7 @@ import {
 import { manifestCost, resourceCost, plan as runPlanner, serviceSlug } from "./planner";
 import { Reconciler, type Status } from "./reconcile";
 import { type Bake, isTerminal, type RolloutState, type Strategy, TeamRollout } from "./release";
+import { demandWindowsFor, warmNeeded } from "./schedule";
 import { SimCloud } from "./sim";
 import { rollup, type State } from "./state";
 
@@ -182,6 +183,10 @@ const IDLE_THRESHOLD: Record<Tier, number> = {
 // floor, so the cost-effective response is to stop the churn, not the workload.
 const DOW_WINDOW_MS = 10_000;
 const DOW_LIMIT = 3;
+// How early (ticks) to pre-warm ahead of predicted demand (docs: Cost & parity
+// axis 1). Must exceed the cold-start window so the resource is live before the
+// scheduled demand arrives.
+const PREWARM_LEAD = 4;
 
 export class Engine {
   private cloud = new SimCloud({ applyLatency: 2 });
@@ -495,14 +500,20 @@ export class Engine {
    *  a wallet-guard-pinned resource stays warm. */
   private autoscale() {
     if (!this.manifest) return;
+    const nowTick = Math.floor(this.cloud.now() / 1000);
     for (const d of Object.values(this.manifest.resources)) {
       const cls = parkClass(d);
       if (cls !== "elasticity" && cls !== "dormancy") continue; // fixed/none never auto-park
       const tier = cls === "elasticity" ? this.posture.elasticity : this.posture.dormancy;
       const threshold = IDLE_THRESHOLD[tier ?? "conservative"];
+      if (threshold === Number.POSITIVE_INFINITY) continue; // conservative — hands-off warm floor
       const idle = this.cloud.idleTicks(d.id);
+      // Temporal demand model (docs: Cost & parity axis 1): a scheduled job warms
+      // its neighbours. Pre-warm ahead of predicted demand and refuse to park
+      // into it — not the blind reactive floor that parks right before the job.
+      const warm = warmNeeded(demandWindowsFor(this.manifest, d), nowTick, PREWARM_LEAD);
       if (!this.cloud.isDormant(d.id)) {
-        if (idle >= threshold && !this.pinnedWarm.has(d.id)) {
+        if (!warm && idle >= threshold && !this.pinnedWarm.has(d.id)) {
           this.cloud.park(d.id);
           this.log(
             "Observe",
@@ -514,8 +525,12 @@ export class Engine {
               : `idle ${idle}t — scaled to zero (elasticity/${tier})`,
           );
         }
+      } else if (warm) {
+        // Anticipate scheduled demand — wake before it arrives, not after. Leave
+        // the idle flag set (markBusy=false) so it re-parks once the window passes.
+        this.resumeWithGuard(d.id, false, "pre-warming ahead of scheduled demand", false);
       } else if (!this.cloud.isIdle(d.id)) {
-        this.resumeWithGuard(d.id, false); // demand returned → resume
+        this.resumeWithGuard(d.id, false); // unpredicted demand returned (reactive floor)
       }
     }
   }
@@ -523,14 +538,16 @@ export class Engine {
   /** Resume a resource, enforcing the denial-of-wallet guard (guardrail 7): too
    *  many resumes in the trailing window is thrash — pin warm and alert rather
    *  than keep paying cold-start churn. The request is still served. */
-  private resumeWithGuard(id: ResourceID, cold: boolean) {
+  private resumeWithGuard(id: ResourceID, cold: boolean, reason?: string, markBusy = true) {
     const d = this.manifest?.resources[id];
     if (!d || !this.cloud.isDormant(id)) return;
     const now = this.cloud.now();
     const times = (this.resumeLog.get(id) ?? []).filter((t) => now - t <= DOW_WINDOW_MS);
     times.push(now);
     this.resumeLog.set(id, times);
-    this.cloud.setIdle(id, false); // resuming means demand is present now
+    // A reactive/manual resume means demand is here now; a *pre-warm* is
+    // anticipatory — leave the idle flag set so it re-parks once the window passes.
+    if (markBusy) this.cloud.setIdle(id, false);
     if (times.length > DOW_LIMIT) {
       if (!this.pinnedWarm.has(id)) {
         this.pinnedWarm.add(id);
@@ -553,7 +570,7 @@ export class Engine {
       id,
       cold
         ? "demand returned — cold resume (dropped connections, self-heal recovering)"
-        : "demand returned — resumed",
+        : (reason ?? "demand returned — resumed"),
     );
   }
 

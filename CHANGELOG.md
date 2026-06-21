@@ -20,6 +20,16 @@ The simulator deploys continuously from `main`, so entries are grouped by date r
 
 ### Added
 
+- **Engine: a temporal demand model (Cost & parity axis 1, declared half).** The autoscaler stops parking
+  blind to time. A new `schedule.ts` turns the `schedule` Trellis already carries on a Job (e.g.
+  `nightly`) into a recurring **demand window** on the job's same-Service, same-region neighbours;
+  `autoscale()` reads it to **pre-warm ahead of predicted demand** and **refuse to park into** it — so the
+  DB is no longer parked at 11:58 and cold-started by the midnight job, and a parked DB wakes *before* the
+  window so it's live when demand lands. A reactive floor still catches unpredicted demand; conservative
+  tiers stay a hands-off warm floor. Tests cover the schedule calendar (pure) and the wired behaviour
+  (refuse-to-park-into-demand, pre-warm-before-the-window). Still open: *inferring* undeclared patterns
+  (the month-end spike) from observed telemetry — the other half of axis 1.
+
 - **Engine: a demand-driven utilization loop + cold-resume + denial-of-wallet guard.** The remaining
   [Cost & parity](https://hakkiki.github.io/trellis/docs/cost-and-parity) follow-ups land. `autoscale()`
   runs each tick: it **parks** a parkable resource once observed idle past its **tier** threshold
