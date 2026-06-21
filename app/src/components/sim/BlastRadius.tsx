@@ -8,14 +8,17 @@ import {
   BLAST_TRAIL,
   blastColorVar,
   blastForBeat,
+  DIVISION_SERVICES,
   DIVISIONS,
+  PLATFORM,
 } from "./blast";
 
 // A purpose-built illustration (not the full engine): a guided, five-beat
-// walkthrough of one bad change. A blast-radius counter stays pinned at 100%
-// while you apply the two fixes leaders reach for — redundancy, then process —
-// and only drops when the architecture changes (share-nothing partitioning).
-// The number refusing to move is the whole argument.
+// walkthrough of one bad change. Four divisions, each running its own stack of
+// services, are coupled only by a shared platform dependency. A blast-radius
+// counter stays pinned at 100% while you apply the two fixes leaders reach for —
+// redundancy, then process — and only drops when the architecture changes
+// (share-nothing partitioning). The number refusing to move is the argument.
 
 const GREEN = "var(--state-converged)";
 const RED = "var(--state-stalled)";
@@ -44,7 +47,8 @@ export default function BlastRadius() {
   const pct = blastForBeat(beat, fired);
   const color = blastColorVar(pct);
   const down = downSet(beat, fired);
-  const substrateDown = beat !== "partition" && beat !== "recover" && fired;
+  const shared = beat === "shared" || beat === "redundant" || beat === "process";
+  const platformDown = shared && fired;
 
   const go = (next: number) => {
     setIdx(next);
@@ -55,7 +59,7 @@ export default function BlastRadius() {
 
   return (
     <div className="text-foreground">
-      {/* Counter + trail: the argument, always on screen. */}
+      {/* Counter + per-attempt trail: the argument, always on screen. */}
       <div className="border-border/60 mb-5 rounded-lg border p-4">
         <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
           <span className="text-sm font-medium">Blast radius</span>
@@ -64,7 +68,7 @@ export default function BlastRadius() {
           </span>
           <span className="text-muted-foreground text-sm">of the org affected</span>
         </div>
-        <Trail current={idx} firedPct={pct} />
+        <Trail current={idx} firedPct={pct} onJump={go} />
         <p className="text-muted-foreground mt-3 text-sm">
           <b className="text-foreground">Redundancy and process are probability levers.</b> Blast
           radius is a magnitude problem. Only partitioning bounds the worst case.
@@ -91,14 +95,19 @@ export default function BlastRadius() {
         )}
       </div>
 
-      {/* Scene. */}
-      <div className="mb-5 min-h-[12rem]">
-        {beat === "shared" && <SharedScene down={substrateDown} divisions={down} />}
-        {beat === "redundant" && (
-          <RedundantScene down={substrateDown} divisions={down} board={false} />
+      {/* Scene: the org is always four divisions, each owning its own services. */}
+      <div className="mb-5">
+        {shared && (
+          <>
+            <SharedPlatform
+              down={platformDown}
+              replicas={beat !== "shared"}
+              board={beat === "process"}
+            />
+            <Connector down={platformDown} />
+          </>
         )}
-        {beat === "process" && <RedundantScene down={substrateDown} divisions={down} board />}
-        {(beat === "partition" || beat === "recover") && <PartitionScene down={down} />}
+        <DivisionGrid down={down} withOwnPlatform={!shared} />
       </div>
 
       {/* Action + navigation. */}
@@ -123,78 +132,74 @@ export default function BlastRadius() {
   );
 }
 
-/** The five settled values, current beat highlighted — "the number didn't move
- *  until the architecture did," made permanent. */
-function Trail({ current, firedPct }: { current: number; firedPct: number }) {
+/** The five attempts and the blast radius each one left behind — current
+ *  highlighted, clickable to jump. "The number didn't move until the
+ *  architecture did," made permanent and legible. */
+function Trail({
+  current,
+  firedPct,
+  onJump,
+}: {
+  current: number;
+  firedPct: number;
+  onJump: (i: number) => void;
+}) {
   return (
-    <div className="mt-3 flex items-end gap-1.5">
-      {BLAST_TRAIL.map((settled, i) => {
-        const active = i === current;
-        // Show the live value for the active beat; the settled value elsewhere.
-        const value = active ? firedPct : settled;
-        const c = blastColorVar(value);
-        return (
-          <div key={BEATS[i]} className="flex flex-1 flex-col items-center gap-1">
-            <div
+    <div className="mt-3">
+      <div className="text-muted-foreground mb-1.5 text-xs">Blast radius after each attempt</div>
+      <div className="flex gap-1.5">
+        {BEATS.map((b, i) => {
+          const active = i === current;
+          // Show the live value for the active beat; the settled value elsewhere.
+          const value = active ? firedPct : BLAST_TRAIL[i];
+          const c = blastColorVar(value);
+          return (
+            <button
+              key={b}
+              type="button"
+              onClick={() => onJump(i)}
               className={cn(
-                "w-full rounded-sm transition-all",
-                active ? "ring-2 ring-offset-1 ring-offset-background" : "opacity-50",
+                "flex-1 rounded-md border px-1 py-1.5 text-center transition-all",
+                active ? "" : "opacity-60 hover:opacity-100",
               )}
               style={{
-                height: `${Math.max(6, value * 0.32)}px`,
-                background: c,
-                ...(active ? { boxShadow: `0 0 10px -2px ${c}` } : {}),
+                borderColor: `color-mix(in srgb, ${c} ${active ? 70 : 35}%, transparent)`,
+                background: `color-mix(in srgb, ${c} ${active ? 18 : 8}%, transparent)`,
+                ...(active ? { boxShadow: `0 0 10px -3px ${c}` } : {}),
               }}
-            />
-            <span
-              className={cn(
-                "text-[10px] tabular-nums",
-                active ? "text-foreground font-medium" : "text-muted-foreground",
-              )}
             >
-              {value}%
-            </span>
-          </div>
-        );
-      })}
-    </div>
-  );
-}
-
-function SharedScene({ down, divisions }: { down: boolean; divisions: Set<string> }) {
-  return (
-    <div className="space-y-4">
-      <div className="flex flex-col items-center gap-2">
-        <Node
-          label="Shared PAM / secrets service"
-          sub="one instance · everyone depends on it"
-          down={down}
-          wide
-        />
-        <div className="text-muted-foreground text-xs">
-          every division wires to the one instance ↓
-        </div>
-      </div>
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        {DIVISIONS.map((d) => (
-          <DivisionCard key={d} name={d} down={divisions.has(d)} />
-        ))}
+              <div className="text-sm font-semibold tabular-nums" style={{ color: c }}>
+                {value}%
+              </div>
+              <div
+                className={cn(
+                  "mt-0.5 truncate text-[10px]",
+                  active ? "text-foreground font-medium" : "text-muted-foreground",
+                )}
+              >
+                {BEAT_COPY[b].short}
+              </div>
+            </button>
+          );
+        })}
       </div>
     </div>
   );
 }
 
-function RedundantScene({
+/** The shared dependency every division reaches into — one instance (shared) or
+ *  three active-active replicas of the *same* service (redundant / process). */
+function SharedPlatform({
   down,
-  divisions,
+  replicas,
   board,
 }: {
   down: boolean;
-  divisions: Set<string>;
+  replicas: boolean;
   board: boolean;
 }) {
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
       {board && (
         <div className="flex flex-wrap justify-center gap-2">
           {["Change Approval Board ✓", "Freeze window ✓", "Runbook signed off ✓"].map((b) => (
@@ -207,68 +212,116 @@ function RedundantScene({
           ))}
         </div>
       )}
-      <div className="flex flex-col items-center gap-2">
-        <div className="grid w-full max-w-2xl grid-cols-1 gap-3 sm:grid-cols-3">
+      <div className="text-muted-foreground text-center text-xs font-medium tracking-wide uppercase">
+        Shared platform — every division depends on it
+      </div>
+      {replicas ? (
+        <div className="grid grid-cols-3 gap-2">
           {["Region A", "Region B", "Region C"].map((r) => (
-            <Node key={r} label={r} sub="active-active replica" down={down} />
+            <Node key={r} label={r} sub={`${PLATFORM} · active-active`} down={down} />
           ))}
         </div>
-        <div className="text-muted-foreground text-xs">
-          one shared service, three regions — the bad change ships to all of them ↓
+      ) : (
+        <div className="flex justify-center">
+          <Node
+            label={`Shared ${PLATFORM}`}
+            sub="one instance · everyone depends on it"
+            down={down}
+            wide
+          />
         </div>
-      </div>
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        {DIVISIONS.map((d) => (
-          <DivisionCard key={d} name={d} down={divisions.has(d)} />
-        ))}
-      </div>
+      )}
     </div>
   );
 }
 
-function PartitionScene({ down }: { down: Set<string> }) {
+function Connector({ down }: { down: boolean }) {
   return (
-    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-      {DIVISIONS.map((d) => {
-        const isDown = down.has(d);
-        return (
-          <div
-            key={d}
-            className="border-border/60 flex flex-col gap-2 rounded-lg border p-3"
-            style={{
-              borderColor: `color-mix(in srgb, ${isDown ? RED : GREEN} 40%, transparent)`,
-            }}
-          >
-            <DivisionCard name={d} down={isDown} />
-            <Node label="own PAM / secrets service" sub="this cell only" down={isDown} />
-          </div>
-        );
-      })}
+    <div
+      className="mx-auto my-2 h-5 w-px"
+      style={{ background: `color-mix(in srgb, ${down ? RED : GREEN} 60%, transparent)` }}
+      aria-hidden
+    />
+  );
+}
+
+/** The org as four divisions, each its own stack of services. */
+function DivisionGrid({ down, withOwnPlatform }: { down: Set<string>; withOwnPlatform: boolean }) {
+  return (
+    <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+      {DIVISIONS.map((d) => (
+        <DivisionStack key={d} name={d} down={down.has(d)} withOwnPlatform={withOwnPlatform} />
+      ))}
     </div>
   );
 }
 
-function DivisionCard({ name, down }: { name: string; down: boolean }) {
+/** One division: a header + the set of services it runs. When partitioned it also
+ *  owns its copy of the platform — no shared substrate for a fault to cross. */
+function DivisionStack({
+  name,
+  down,
+  withOwnPlatform,
+}: {
+  name: string;
+  down: boolean;
+  withOwnPlatform: boolean;
+}) {
   const color = down ? RED : GREEN;
   return (
     <div
-      className="flex items-center gap-2 rounded-md border bg-black/20 px-3 py-2"
-      style={{ borderColor: color }}
+      className="flex flex-col gap-2 rounded-lg border bg-black/20 p-2.5"
+      style={{
+        borderColor: `color-mix(in srgb, ${color} ${down ? 65 : 45}%, transparent)`,
+      }}
     >
-      <span
-        className="size-2.5 shrink-0 rounded-full"
-        style={{ background: color, boxShadow: `0 0 8px ${color}` }}
-      />
-      <div className="min-w-0">
-        <div className="truncate text-sm font-medium">{name}</div>
-        <div
-          className="text-xs font-medium"
-          style={{ color: down ? RED : "var(--muted-foreground)" }}
-        >
-          {down ? "DOWN" : "serving"}
+      <div className="flex items-center gap-2">
+        <Dot color={color} />
+        <div className="min-w-0">
+          <div className="truncate text-sm font-semibold">{name}</div>
+          <div
+            className="text-[11px] font-medium"
+            style={{ color: down ? RED : "var(--muted-foreground)" }}
+          >
+            {down ? "DOWN" : "serving"}
+          </div>
         </div>
       </div>
+      <div className="flex flex-wrap gap-1">
+        {DIVISION_SERVICES.map((s) => (
+          <Chip key={s} label={s} down={down} />
+        ))}
+        {withOwnPlatform && <Chip label={`${PLATFORM} (own)`} down={down} own />}
+      </div>
     </div>
+  );
+}
+
+function Chip({ label, down, own }: { label: string; down: boolean; own?: boolean }) {
+  const color = down ? RED : GREEN;
+  return (
+    <span
+      className={cn(
+        "rounded border px-1.5 py-0.5 text-[10px] whitespace-nowrap",
+        own ? "font-medium" : "",
+      )}
+      style={{
+        borderColor: `color-mix(in srgb, ${color} ${own ? 60 : 30}%, transparent)`,
+        background: own ? `color-mix(in srgb, ${color} 12%, transparent)` : "transparent",
+        color: down ? RED : own ? "var(--foreground)" : "var(--muted-foreground)",
+      }}
+    >
+      {label}
+    </span>
+  );
+}
+
+function Dot({ color }: { color: string }) {
+  return (
+    <span
+      className="size-2.5 shrink-0 rounded-full"
+      style={{ background: color, boxShadow: `0 0 8px ${color}` }}
+    />
   );
 }
 
@@ -293,10 +346,7 @@ function Node({
       style={{ borderColor: color, boxShadow: `0 0 16px -6px ${color}` }}
     >
       <div className="flex items-center justify-center gap-2">
-        <span
-          className="size-2.5 rounded-full"
-          style={{ background: color, boxShadow: `0 0 8px ${color}` }}
-        />
+        <Dot color={color} />
         <span className="text-sm font-semibold">{label}</span>
       </div>
       <div className="mt-0.5 text-xs" style={{ color: down ? RED : "var(--muted-foreground)" }}>
