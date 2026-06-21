@@ -1,3 +1,4 @@
+import { AlertTriangle, CheckCircle2, XCircle } from "lucide-react";
 import * as React from "react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -28,8 +29,36 @@ const GREEN = "var(--state-converged)";
 const AMBER = "var(--state-degraded)";
 const RED = "var(--state-stalled)";
 
-function edgeColor(h: EdgeHealth): string {
-  return h === "good" ? GREEN : h === "brownout" ? AMBER : RED;
+/** Status, paired with an icon so meaning never rides on color alone (WCAG AA):
+ *  a check for healthy, a triangle for degraded, an x-circle for down. */
+type StatusKind = "ok" | "degraded" | "down";
+
+const STATUS: Record<StatusKind, { color: string; Icon: typeof CheckCircle2; label: string }> = {
+  ok: { color: GREEN, Icon: CheckCircle2, label: "OK" },
+  degraded: { color: AMBER, Icon: AlertTriangle, label: "Degraded" },
+  down: { color: RED, Icon: XCircle, label: "Down" },
+};
+
+function edgeKind(h: EdgeHealth): StatusKind {
+  return h === "good" ? "ok" : h === "brownout" ? "degraded" : "down";
+}
+
+/** The corner tag: icon + label, so the state reads without relying on color. */
+function StatusTag({ kind }: { kind: StatusKind }) {
+  const { color, Icon, label } = STATUS[kind];
+  return (
+    <span
+      className="inline-flex shrink-0 items-center gap-1 rounded-full border px-1.5 py-0.5 text-[10px] font-medium"
+      style={{
+        color,
+        borderColor: `color-mix(in srgb, ${color} 50%, transparent)`,
+        background: `color-mix(in srgb, ${color} 12%, transparent)`,
+      }}
+    >
+      <Icon className="size-3" aria-hidden />
+      {label}
+    </span>
+  );
 }
 
 /** Which divisions are dark for a given beat — kept in lockstep with
@@ -79,9 +108,15 @@ export default function BlastRadius() {
           <span className="text-muted-foreground text-sm">of the org affected</span>
         </div>
         {degraded.length > 0 && (
-          <div className="mt-1 text-sm font-medium" style={{ color: AMBER }}>
-            + {degraded.length} LOB{degraded.length > 1 ? "s" : ""} degraded (brownout) — still
-            serving, not counted
+          <div
+            className="mt-1 flex items-center gap-1.5 text-sm font-medium"
+            style={{ color: AMBER }}
+          >
+            <AlertTriangle className="size-3.5 shrink-0" aria-hidden />
+            <span>
+              + {degraded.length} LOB{degraded.length > 1 ? "s" : ""} degraded (brownout) — still
+              serving, not counted
+            </span>
           </div>
         )}
         <Trail current={idx} firedPct={pct} onJump={go} />
@@ -290,19 +325,22 @@ function DivisionGrid({
 /** What the edge colors mean — healthy, browned-out (degraded but serving), or
  *  blacked-out (down). */
 function Legend() {
-  const items: [string, string][] = [
-    [GREEN, "healthy"],
-    [AMBER, "brownout — degraded, still serving"],
-    [RED, "blackout — down"],
+  const items: [StatusKind, string][] = [
+    ["ok", "healthy"],
+    ["degraded", "brownout — degraded, still serving"],
+    ["down", "blackout — down"],
   ];
   return (
     <div className="text-muted-foreground mb-3 flex flex-wrap justify-center gap-x-3 gap-y-1 text-[10px]">
-      {items.map(([c, t]) => (
-        <span key={t} className="inline-flex items-center gap-1">
-          <span className="size-2 rounded-full" style={{ background: c }} />
-          {t}
-        </span>
-      ))}
+      {items.map(([kind, t]) => {
+        const { color, Icon } = STATUS[kind];
+        return (
+          <span key={kind} className="inline-flex items-center gap-1">
+            <Icon className="size-3" style={{ color }} aria-hidden />
+            {t}
+          </span>
+        );
+      })}
     </div>
   );
 }
@@ -331,7 +369,8 @@ function DivisionStack({
         sync: false,
       }));
   const degraded = !isDown && edges.some((e) => e.health === "brownout");
-  const tone = isDown ? RED : degraded ? AMBER : GREEN;
+  const kind: StatusKind = isDown ? "down" : degraded ? "degraded" : "ok";
+  const tone = STATUS[kind].color;
   const status = isDown ? "DOWN" : degraded ? "serving · degraded" : "serving";
 
   return (
@@ -341,17 +380,20 @@ function DivisionStack({
         borderColor: `color-mix(in srgb, ${tone} ${isDown ? 65 : degraded ? 55 : 45}%, transparent)`,
       }}
     >
-      <div className="flex items-center gap-2">
-        <Dot color={tone} />
-        <div className="min-w-0">
-          <div className="truncate text-sm font-semibold">{name}</div>
-          <div
-            className="text-[11px] font-medium"
-            style={{ color: isDown || degraded ? tone : "var(--muted-foreground)" }}
-          >
-            {status}
+      <div className="flex items-start justify-between gap-2">
+        <div className="flex min-w-0 items-center gap-2">
+          <Dot color={tone} />
+          <div className="min-w-0">
+            <div className="truncate text-sm font-semibold">{name}</div>
+            <div
+              className="text-[11px] font-medium"
+              style={{ color: isDown || degraded ? tone : "var(--muted-foreground)" }}
+            >
+              {status}
+            </div>
           </div>
         </div>
+        <StatusTag kind={kind} />
       </div>
       <div className="flex flex-wrap gap-1">
         {DIVISION_SERVICES.map((s) => (
@@ -382,7 +424,7 @@ function DivisionStack({
  *  tagged sync/async — the sync/async distinction is why one blacks out and the
  *  other only browns out. */
 function EdgeChip({ label, health, sync }: { label: string; health: EdgeHealth; sync: boolean }) {
-  const color = edgeColor(health);
+  const { color, Icon } = STATUS[edgeKind(health)];
   return (
     <span
       className="inline-flex items-center gap-1 rounded border px-1.5 py-0.5 text-[10px] whitespace-nowrap"
@@ -392,6 +434,7 @@ function EdgeChip({ label, health, sync }: { label: string; health: EdgeHealth; 
         color,
       }}
     >
+      <Icon className="size-3" aria-hidden />
       <span aria-hidden>→</span>
       {label}
       <span className="opacity-70">· {sync ? "sync" : "async"}</span>
@@ -438,7 +481,8 @@ function Node({
   down: boolean;
   wide?: boolean;
 }) {
-  const color = down ? RED : GREEN;
+  const kind: StatusKind = down ? "down" : "ok";
+  const color = STATUS[kind].color;
   return (
     <div
       className={cn(
@@ -447,9 +491,10 @@ function Node({
       )}
       style={{ borderColor: color, boxShadow: `0 0 16px -6px ${color}` }}
     >
-      <div className="flex items-center justify-center gap-2">
+      <div className="flex flex-wrap items-center justify-center gap-x-2 gap-y-1">
         <Dot color={color} />
         <span className="text-sm font-semibold">{label}</span>
+        <StatusTag kind={kind} />
       </div>
       <div className="mt-0.5 text-xs" style={{ color: down ? RED : "var(--muted-foreground)" }}>
         {down ? "bricked by a bad upgrade" : sub}
