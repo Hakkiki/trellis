@@ -14,7 +14,7 @@ The simulator deploys continuously from `main`, so entries are grouped by date r
   dial, break-glass that buys time not permission, the one Criticality dial, legibility as a correctness
   property, and self-service that isn't self-operate. Each principle's *claim is its heading*, so the
   table of contents reads as the whole philosophy. Distilled from the spec and its invariants; linked from
-  a top-of-sidebar "Principles" group.
+  a top-of-sidebar "Principles" group and the landing-page "Explore" grid.
 
 - **Roles & responsibilities — a day in the life.** A new page mapping the nine personas (Platform Owner,
   Security/Governance author, Division/Product lead, Platform Operator, Service/Eng teams, Break-glass
