@@ -7,11 +7,16 @@ The simulator deploys continuously from `main`, so entries are grouped by date r
 
 ### Fixed
 
-- **Cost & parity: stop saying "re-optimization."** The Status section described the remaining gap as
-  "continuous re-optimization," which smuggles optimization back in as the goal — the exact framing the
-  page repudiates. The loop's job is to **hold cost-effectiveness** (regulate the cost/value ratio toward
-  a moving setpoint), not to re-run an optimizer on a timer; re-optimizing every tick would reintroduce
-  the over-optimization trap. Reworded the two offending spots.
+- **Cost & parity: stop saying "re-optimization," and map what effectiveness really requires.** The
+  Status section described the remaining gap as "continuous re-optimization," which smuggles optimization
+  back in as the goal — the exact framing the page repudiates. The loop's job is to **hold
+  cost-effectiveness** (regulate the cost/value ratio toward a moving setpoint), not to re-run an
+  optimizer on a timer. Reworded the offending spots, and rewrote the follow-ups as the honest **three
+  axes** effectiveness must read *through time*: temporal idle → **park** (aware of patterns, not blind —
+  we even ignore the `schedule: nightly` we already carry), low utilization → **right-size** (against
+  required headroom, the binding resource, and the load distribution — never blindly), and output →
+  **value term** (the denominator; we surface budget-vs-cost, which is numerator-only). All three surface
+  to the owner as gate-ratified proposals.
 
 ### Added
 
