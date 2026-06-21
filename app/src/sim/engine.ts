@@ -152,8 +152,9 @@ export interface ServiceValue {
   service: string; // display name
   slug: string;
   offered: number; // demand offered now (units)
-  servedFraction: number; // served ÷ offered over the window (1 when no demand)
-  value: number; // served units × Criticality weight
+  servedFraction: number; // served ÷ offered over the window (1 when no demand) — quantity
+  sloAttainment: number; // quality of what was served (1 = within SLO; lower = run hot)
+  value: number; // served *well* (quality-adjusted units) × Criticality weight
   monthlyCost: number; // spend attributed to this Service
   costPerValue: number | null; // cost ÷ value; null = serving no value (infinite)
   ineffective: boolean; // costs money but serves ~no value — spend buying nothing
@@ -225,6 +226,19 @@ const PREWARM_LEAD = 4;
 // the headline — cost-vs-value, not numerator-only cost-vs-budget.
 const CRIT_WEIGHT: Record<Criticality, number> = { C0: 4, C1: 3, C2: 2, C3: 1 };
 const VALUE_WINDOW = 10; // trailing ticks over which served/offered are summed
+// Quality term (axis 3 refinement): value is demand served *well*, not just
+// served. Latency degrades as serving capacity runs hot — above SLO_TARGET
+// utilization, quality falls toward SLO_FLOOR at 100%. This makes "headroom is
+// not waste" quantitative: a no-headroom shrink serves the same quantity at
+// lower quality, so value drops even though cost does.
+const SLO_TARGET = 0.8;
+const SLO_FLOOR = 0.4;
+function sloFactor(utilization: number): number {
+  if (utilization <= SLO_TARGET) return 1;
+  if (utilization >= 1) return SLO_FLOOR;
+  const t = (utilization - SLO_TARGET) / (1 - SLO_TARGET);
+  return 1 - t * (1 - SLO_FLOOR);
+}
 
 export class Engine {
   private cloud = new SimCloud({ applyLatency: 2 });
@@ -258,7 +272,7 @@ export class Engine {
   // value, not provisioned capacity. Only Services with demand telemetry count.
   private offered = new Map<string, number>();
   private hasDemand = new Set<string>();
-  private valueHist = new Map<string, { offered: number; served: number }[]>();
+  private valueHist = new Map<string, { offered: number; served: number; quality: number }[]>();
 
   constructor(posture: Posture = DEFAULT_POSTURE) {
     this.posture = posture;
@@ -561,8 +575,12 @@ export class Engine {
         }
       }
       const served = Math.min(offered, servingCapacity);
+      // Served *well*: discount by SLO attainment, which falls as the serving
+      // capacity runs hot (no headroom → high latency → breach).
+      const utilization = servingCapacity > 0 ? served / servingCapacity : 0;
+      const quality = served * sloFactor(utilization);
       const hist = this.valueHist.get(sl) ?? [];
-      hist.push({ offered, served });
+      hist.push({ offered, served, quality });
       if (hist.length > VALUE_WINDOW) hist.shift();
       this.valueHist.set(sl, hist);
     }
@@ -982,14 +1000,18 @@ export class Engine {
         const hist = this.valueHist.get(sl) ?? [];
         const offeredSum = hist.reduce((a, h) => a + h.offered, 0);
         const servedSum = hist.reduce((a, h) => a + h.served, 0);
+        const qualitySum = hist.reduce((a, h) => a + h.quality, 0);
         const servedFraction = offeredSum > 0 ? servedSum / offeredSum : 1;
-        const val = servedSum * CRIT_WEIGHT[s.criticality];
+        const sloAttainment = servedSum > 0 ? qualitySum / servedSum : 1;
+        // Value is served *well*: quantity × quality × Criticality weight.
+        const val = qualitySum * CRIT_WEIGHT[s.criticality];
         const cost = costBySlug.get(sl) ?? 0;
         return {
           service: s.name,
           slug: sl,
           offered: this.offered.get(sl) ?? 0,
           servedFraction,
+          sloAttainment,
           value: val,
           monthlyCost: cost,
           costPerValue: val > 0 ? cost / val : null,

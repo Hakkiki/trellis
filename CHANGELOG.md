@@ -20,6 +20,14 @@ The simulator deploys continuously from `main`, so entries are grouped by date r
 
 ### Added
 
+- **Engine: value is served *well*, not just served (Cost & parity axis 3, SLO/quality term).** Refines
+  the value denominator: a `sloAttainment` factor discounts demand met while the serving capacity runs
+  **hot** — above ~80% utilization latency degrades toward an SLO floor at 100%. So a no-headroom service
+  keeps its quantity (`servedFraction` ≈ 1) but loses value (quality), which makes the recurring "headroom
+  isn't waste" point **quantitative**: shrinking away the slack lowers value even as it lowers cost.
+  Surfaced as `value[].sloAttainment`; value is now quantity × quality × Criticality weight. Test locks
+  that a hot service serves full quantity at reduced per-unit value vs a service with headroom.
+
 - **Engine: the value term — cost ÷ value served (Cost & parity axis 3).** The denominator that makes
   "effective" measurable. `engine.setDemand()` feeds the demand offered to a Service; each tick the engine
   records how much its *serving* compute actually met (parked, cold, or degraded compute serves nothing;

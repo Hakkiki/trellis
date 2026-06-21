@@ -1156,3 +1156,34 @@ describe("the value term — cost vs value served (axis 3)", () => {
     expect(after.costPerValue!).toBeLessThan(before.costPerValue!); // cheaper per unit value
   });
 });
+
+describe("value is served *well* — the SLO/quality term (axis 3)", () => {
+  function converged() {
+    const e = new Engine(DEFAULT_POSTURE);
+    e.declare(DEFAULT_POSTURE);
+    e.approve();
+    for (let i = 0; i < 30 && !e.snapshot().converged; i++) e.tick();
+    return e;
+  }
+  const valueFor = (e: Engine, slug: string) => e.snapshot().value.find((v) => v.slug === slug)!;
+
+  it("running hot keeps quantity served but cuts SLO-adjusted value (headroom isn't waste)", () => {
+    // payments-api serving capacity is ~20 units (large compute, 3+2 replicas).
+    const hotE = converged();
+    hotE.setDemand("payments-api", 18); // ~90% utilization → hot, latency degrades
+    for (let i = 0; i < 12; i++) hotE.tick();
+    const hot = valueFor(hotE, "payments-api");
+    expect(hot.servedFraction).toBeCloseTo(1, 5); // every request served (quantity fine)
+    expect(hot.sloAttainment).toBeLessThan(0.95); // but served outside SLO (quality hit)
+
+    const coolE = converged();
+    coolE.setDemand("payments-api", 6); // ~30% utilization → comfortable headroom
+    for (let i = 0; i < 12; i++) coolE.tick();
+    const cool = valueFor(coolE, "payments-api");
+    expect(cool.sloAttainment).toBeCloseTo(1, 5);
+
+    // Same service: the hot one delivers less value per unit served — the
+    // headroom it lacks was not waste.
+    expect(hot.value / hot.offered).toBeLessThan(cool.value / cool.offered);
+  });
+});
