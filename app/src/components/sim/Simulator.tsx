@@ -144,6 +144,9 @@ export default function Simulator() {
   const [cpTarget, setCpTarget] = React.useState<TcbId>("reconciler");
   // Topology service focus: "all" = grouped overview; a slug drills into one service.
   const [serviceFocus, setServiceFocus] = React.useState<string>("all");
+  // Seed demand/utilization once resources are live (load needs the sim resource
+  // to exist, which only happens after the first converge).
+  const seededRef = React.useRef(false);
 
   const refresh = React.useCallback(() => {
     if (engineRef.current) setSnap(engineRef.current.snapshot());
@@ -178,7 +181,7 @@ export default function Simulator() {
         e.approve();
         // Restore the live running version(s) so a reload doesn't reset to v1.
         if (s.deploy) e.restoreDeploy(s.deploy);
-        seedTelemetry(e); // demand/load aren't persisted — re-seed on restore
+        seededRef.current = false; // demand/load aren't persisted — re-seed once live
         setRunning(true);
       }
       refresh();
@@ -194,6 +197,12 @@ export default function Simulator() {
     const iv = setInterval(() => {
       const e = engineRef.current;
       const settled = e?.tick() ?? false;
+      // Once the env is first live, seed illustrative demand/utilization so the
+      // Value tab is alive (load only sticks once the sim resources exist).
+      if (e && !seededRef.current && e.snapshot().converged) {
+        seedTelemetry(e);
+        seededRef.current = true;
+      }
       refresh();
       // A deploy settled this tick (running version advanced / rollout finished):
       // persist so a reload restores the live running version, not v1.
@@ -231,7 +240,7 @@ export default function Simulator() {
   const onApprove = () => {
     const e = engineRef.current;
     if (!e?.approve()) return;
-    seedTelemetry(e); // bring the Cost & value panel alive
+    seededRef.current = false; // re-seed the Value tab once the env converges
     setRunning(true);
     persist(true);
     refresh();
@@ -247,6 +256,7 @@ export default function Simulator() {
   const resetAll = () => {
     void clearSession();
     engineRef.current = new Engine(DEFAULT_POSTURE);
+    seededRef.current = false;
     setForm(DEFAULT_POSTURE);
     setRunning(false);
     setSelected(null);
@@ -1222,7 +1232,7 @@ function OwnersPanel({
               onClick={() => onSelect(r.slug)}
               className={cn(
                 "border-border/60 w-full space-y-1 rounded-md border p-2 text-left transition",
-                selectedSlug === r.slug ? "ring-1 ring-[var(--ring)]" : "hover:bg-accent/40",
+                selectedSlug === r.slug ? "sel-halo" : "hover:bg-accent/40",
               )}
             >
               <div className="flex items-center justify-between">
@@ -1674,7 +1684,7 @@ function ResourceCard({
       style={{ borderColor: color }}
       className={cn(
         "flex w-full items-center gap-3 rounded-md border bg-black/20 px-3 py-2 text-left transition",
-        selected ? "ring-2 ring-[var(--ring)]" : "",
+        selected ? "sel-halo" : "",
       )}
     >
       <Icon className="size-4 shrink-0" style={{ color }} />
