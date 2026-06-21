@@ -20,6 +20,16 @@ The simulator deploys continuously from `main`, so entries are grouped by date r
 
 ### Added
 
+- **Simulator: the cost-effectiveness loop is now on screen.** The whole Cost & parity chapter — built in
+  the engine over the prior PRs — is surfaced in the simulator UI and the guided tour, which previously
+  predated all of it. The Posture form gains **cost levers** (elasticity · dormancy tiers); the **Inject**
+  panel gains **Park / Wake** (a parked resource reads Dormant, not down) and **Cold resume**; a new
+  **Value** tab shows **cost ÷ value served** (per-service value, served %, SLO %, the `ineffective` flag)
+  with accept-at-the-gate **right-sizing** proposals and a per-service demand slider; a **denial-of-wallet
+  guard** alert surfaces resume thrash with a resolve action. Demand/utilization are seeded on approve so
+  the Value tab is alive out of the box. The intro ("How to drive it", "What's included") and the tour
+  (now 10 steps, with cost-levers, park/cold-resume, and cost-vs-value) are refreshed to match.
+
 - **Engine: value is served *well*, not just served (Cost & parity axis 3, SLO/quality term).** Refines
   the value denominator: a `sloAttainment` factor discounts demand met while the serving capacity runs
   **hot** — above ~80% utilization latency degrades toward an SLO floor at 100%. So a no-headroom service
