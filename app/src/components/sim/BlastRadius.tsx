@@ -362,7 +362,7 @@ function DivisionStack({
 }) {
   const isDown = down.has(name);
   const edges: { label: string; health: EdgeHealth; sync: boolean }[] = shared
-    ? [{ label: `Shared ${PLATFORM}`, health: edgeHealth(platformDown, true), sync: true }]
+    ? [{ label: "Shared platform", health: edgeHealth(platformDown, true), sync: true }]
     : (LOB_DEPS[name] ?? []).map((t) => ({
         label: t,
         health: edgeHealth(down.has(t), false),
@@ -409,7 +409,7 @@ function DivisionStack({
           <span className="text-muted-foreground text-[9px] tracking-wide uppercase">
             depends on
           </span>
-          <div className="flex flex-wrap gap-1">
+          <div className="flex flex-col gap-1">
             {edges.map((e) => (
               <EdgeChip key={e.label} label={e.label} health={e.health} sync={e.sync} />
             ))}
@@ -427,17 +427,19 @@ function EdgeChip({ label, health, sync }: { label: string; health: EdgeHealth; 
   const { color, Icon } = STATUS[edgeKind(health)];
   return (
     <span
-      className="inline-flex items-center gap-1 rounded border px-1.5 py-0.5 text-[10px] whitespace-nowrap"
+      className="flex w-full min-w-0 items-center gap-1 rounded border px-1.5 py-0.5 text-[10px]"
       style={{
         borderColor: `color-mix(in srgb, ${color} 50%, transparent)`,
         background: `color-mix(in srgb, ${color} 10%, transparent)`,
         color,
       }}
     >
-      <Icon className="size-3" aria-hidden />
-      <span aria-hidden>→</span>
-      {label}
-      <span className="opacity-70">· {sync ? "sync" : "async"}</span>
+      <Icon className="size-3 shrink-0" aria-hidden />
+      <span className="shrink-0" aria-hidden>
+        →
+      </span>
+      <span className="truncate">{label}</span>
+      <span className="ml-auto shrink-0 opacity-70">{sync ? "sync" : "async"}</span>
     </span>
   );
 }
