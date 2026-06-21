@@ -32,6 +32,10 @@ interface SimResource {
   resumeIn: number; // ticks of cold-start remaining after a wake (0 = warm)
   idle: boolean; // observed: no demand right now (the autoscaler's input signal)
   idleTicks: number; // consecutive ticks observed idle (drives demand-based parking)
+  loadCpu: number; // observed current load (units), per dimension — for right-sizing
+  loadMem: number;
+  loadSamples: { cpu: number; mem: number }[]; // trailing window, to take a peak
+  hasLoad: boolean; // whether utilization telemetry has been seen at all
   broken: boolean; // root-cause failure that self-heal cannot fix
   costFactor: number; // billed ÷ planned — 1 normally; >1 is cost drift (§13)
   observedAtMs: number;
@@ -52,6 +56,11 @@ const JOB_COOLDOWN = 4; // succeeded → pending again (cron)
 // resume is data-consistent (storage was retained) but not instant — guardrail
 // 4: the "DB came back" path is real and observable, not free.
 const RESUME_LATENCY = 3;
+
+// Trailing window (ticks) over which a resource's *peak* load is taken, so
+// right-sizing sizes to the peak you must serve, not the average (Cost & parity
+// axis 2).
+const UTIL_WINDOW = 10;
 
 export class SimCloud implements Provider {
   private applyLatency: number;
@@ -94,6 +103,11 @@ export class SimCloud implements Provider {
       if (r.resumeIn > 0) r.resumeIn--;
       // Accrue observed idleness — the demand signal the autoscaler controls on.
       r.idleTicks = r.idle ? r.idleTicks + 1 : 0;
+      // Sample load into the trailing window so right-sizing can take a peak.
+      if (r.hasLoad) {
+        r.loadSamples.push({ cpu: r.loadCpu, mem: r.loadMem });
+        if (r.loadSamples.length > UTIL_WINDOW) r.loadSamples.shift();
+      }
       if (!r.stale) r.observedAtMs = this.nowMs;
     }
   }
@@ -140,6 +154,10 @@ export class SimCloud implements Provider {
         resumeIn: 0,
         idle: false,
         idleTicks: 0,
+        loadCpu: 0,
+        loadMem: 0,
+        loadSamples: [],
+        hasLoad: false,
         broken: false,
         costFactor: 1,
         observedAtMs: this.nowMs,
@@ -203,6 +221,10 @@ export class SimCloud implements Provider {
       resumeIn: 0,
       idle: false,
       idleTicks: 0,
+      loadCpu: 0,
+      loadMem: 0,
+      loadSamples: [],
+      hasLoad: false,
       broken: false,
       costFactor: 1,
       observedAtMs: this.nowMs,
@@ -309,6 +331,29 @@ export class SimCloud implements Provider {
   /** Whether a resource is currently observed idle (no demand). */
   isIdle(id: ResourceID): boolean {
     return this.res.get(id)?.idle ?? false;
+  }
+
+  /** Inject observed utilization (load units per dimension) for a resource. */
+  setLoad(id: ResourceID, load: { cpu: number; mem: number }) {
+    const r = this.res.get(id);
+    if (r) {
+      r.loadCpu = load.cpu;
+      r.loadMem = load.mem;
+      r.hasLoad = true;
+    }
+  }
+
+  /** The peak observed load over the trailing window (null when no telemetry). */
+  peakLoad(id: ResourceID): { cpu: number; mem: number } | null {
+    const r = this.res.get(id);
+    if (!r || !r.hasLoad) return null;
+    let cpu = r.loadCpu;
+    let mem = r.loadMem;
+    for (const s of r.loadSamples) {
+      cpu = Math.max(cpu, s.cpu);
+      mem = Math.max(mem, s.mem);
+    }
+    return { cpu, mem };
   }
 
   /** Whether a resource is currently parked. */

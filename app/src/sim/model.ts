@@ -75,6 +75,10 @@ export type Tier = "aggressive" | "balanced" | "conservative";
 export interface ServiceSpec {
   name: string;
   criticality: Criticality;
+  /** A right-sized compute/data size accepted by the owner (docs: Cost & parity
+   *  axis 2), overriding the Criticality default. A *shared* shape decision —
+   *  cascaded to every environment, so parity holds. */
+  sizeOverride?: string;
 }
 
 export interface Posture {

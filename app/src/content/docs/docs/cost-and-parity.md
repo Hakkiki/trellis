@@ -216,6 +216,11 @@ The first slice — the two guardrails everything else depends on — is now in 
   the `schedule` on a Job (`schedule.ts` turns it into a recurring demand window on the job's same-Frame
   neighbours) and **pre-warms ahead of predicted demand** and **refuses to park into it** — so the DB
   isn't parked at 11:58 and cold-started by the midnight job. Conservative stays a hands-off warm floor.
+- **Right-sizing from observed utilization (axis 2), as a gate-ratified proposal.** `rightsizing.ts`
+  recommends the smallest size covering the observed **peak** load + headroom, honouring the binding
+  resource and the distribution (never the naive "50% = waste"). `snapshot().rightSizing` surfaces the
+  proposal; `acceptRightSizing()` is the owner's gate action that sets a **shared** size override and
+  re-plans — so a shrink cascades with parity preserved, and cost drops for the same workload.
 
 Effectiveness requires reading three signals **through time** and acting on each, surfacing every decision
 to the owner as a proposal (the machine proposes from observed reality; the owner ratifies at the gate —
@@ -231,15 +236,18 @@ schedule). **Axis 1 now has its declared half; axes 2 and 3 are still open.**
    patterns nobody declared — the month-end spike, the weekday ramp — from observed telemetry, rather than
    only honouring declared schedules.
 
-2. **Low utilization → right-size (the *how much*).** A resource used continuously but at 50% of a
-   `large` isn't idle — it's **overprovisioned**; the action is not park but **shrink the SKU / drop a
-   replica**. Today the planner sizes purely by Criticality (`C0→large`), blind to observed utilization —
-   there is no right-sizing loop. The catch: "50% used = 50% waste" is the naive claim. You can't call it
-   waste without the **required headroom** (burst / failover / p99 — cutting it breaks SLA), the
-   **binding resource** (50% CPU at 95% memory is *not* overprovisioned), and the **distribution** (a 50%
-   average may be 10% nights / 90% peak — size to the peak you must serve). And because right-sizing
-   changes the **shape**, it is a *shared* decision driven by **prod's** utilization, proposed at the
-   gate and cascaded with parity preserved — never a per-env shrink.
+2. **Low utilization → right-size (the *how much*) — *built, as a gate-ratified proposal*.** A resource
+   used continuously but at 50% of a `large` isn't idle — it's **overprovisioned**; the action is not park
+   but **shrink the SKU**. `rightsizing.ts` recommends the smallest size that still covers the observed
+   **peak** load plus headroom, and `engine.setLoad()` feeds it utilization telemetry. It is **not** the
+   naive "50% used = 50% waste": it honours the **required headroom** (25% burst room — cut it and the
+   next spike breaks SLA), the **binding resource** (it sizes on `max(cpu, mem)`, so 25% CPU at 75% memory
+   does *not* shrink), and the **distribution** (it sizes to the windowed **peak**, so a spike blocks a
+   shrink the average would wrongly suggest). Crucially it only **proposes** (`snapshot().rightSizing`):
+   because the size *is* the parity-held shape, accepting it (`acceptRightSizing()`) is an owner action at
+   the gate that sets a **shared** size override and re-plans — cascaded to every environment, parity
+   preserved, never a per-env shrink. **Still open:** per-cell granularity (one size covers a Service's
+   compute and data today) and driving the proposal from **prod's** utilization in the fleet.
 
 3. **Output vs outcome → the value term (the *what for*).** Even fully utilized, is the work worth it?
    This is the **denominator** that makes "effective" measurable at all. We surface **budget vs cost** —
@@ -252,8 +260,10 @@ prices, and business drivers move — **not** to re-run an optimizer on a timer 
 cheapest point and strip the very slack effectiveness must preserve). The cost setpoint must **move** with
 business drivers (Black Friday spends more, on purpose), as an owner-ratified proposal, not a static
 budget. What ships today is the *declared* half of axis 1 (honour schedules; pre-warm, don't park into
-demand), the reactive floor beneath it, and numerator-only visibility — real progress, but inference,
-right-sizing, and the value term are still missing: **not yet effectiveness**.
+demand) and axis 2 (right-size from observed peak utilization, gate-ratified). What's still missing is
+axis 1's **inference** of undeclared patterns and — the deepest gap — axis 3's **value term**: until
+there's a denominator, the system still can't tell *cost-effective* from *cheap*. **Closer, but not yet
+effectiveness.**
 
 One smaller, separate gap: **resume-as-failure is coarse** — a cold resume degrades the resource itself;
 it doesn't yet model the *clients'* dropped in-flight transactions as a path the calling service must

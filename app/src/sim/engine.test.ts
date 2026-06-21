@@ -998,3 +998,72 @@ describe("temporal demand model wired into the autoscaler (axis 1)", () => {
     expect(stateOf(e, db.id)).not.toBe("Dormant"); // pre-warmed, not cold at demand
   });
 });
+
+describe("right-sizing from observed utilization (axis 2)", () => {
+  function converged() {
+    const e = new Engine(DEFAULT_POSTURE);
+    e.declare(DEFAULT_POSTURE);
+    e.approve();
+    for (let i = 0; i < 30 && !e.snapshot().converged; i++) e.tick();
+    return e;
+  }
+  // Inject load on every sized resource of a Service (its compute + data).
+  const loadService = (e: Engine, slug: string, cpu: number, mem: number) => {
+    for (const r of e.snapshot().resources) {
+      if (r.service === slug && (r.size === "small" || r.size === "medium" || r.size === "large")) {
+        e.setLoad(r.id, { cpu, mem });
+      }
+    }
+  };
+  const propFor = (e: Engine, slug: string) =>
+    e.snapshot().rightSizing.find((p) => p.slug === slug);
+
+  it("surfaces a shrink proposal for an overprovisioned service, only with telemetry", () => {
+    const e = converged();
+    // payments-api is C0 → large; run it at ~37% of large.
+    loadService(e, "payments-api", 1.5, 1.5);
+    e.tick();
+    expect(propFor(e, "payments-api")).toMatchObject({ from: "large", to: "medium" });
+    // internal-dashboard has no telemetry → no recommendation (never blind).
+    expect(propFor(e, "internal-dashboard")).toBeUndefined();
+  });
+
+  it("does not propose a shrink when memory binds (low CPU is not enough)", () => {
+    const e = converged();
+    loadService(e, "payments-api", 1.0, 3.0); // 25% CPU but 75% memory of large
+    e.tick();
+    expect(propFor(e, "payments-api")).toBeUndefined();
+  });
+
+  it("sizes to the peak, not the average — a spike in the window blocks the shrink", () => {
+    const e = converged();
+    loadService(e, "payments-api", 0.5, 0.5); // mostly quiet
+    for (let i = 0; i < 3; i++) e.tick();
+    loadService(e, "payments-api", 3.0, 3.0); // a brief spike
+    e.tick();
+    loadService(e, "payments-api", 0.5, 0.5); // back to quiet (low average)
+    for (let i = 0; i < 3; i++) e.tick();
+    // The windowed peak still holds the spike → no shrink despite the low average.
+    expect(propFor(e, "payments-api")).toBeUndefined();
+  });
+
+  it("accepting a proposal shrinks the shared shape and drops cost", () => {
+    const e = converged();
+    loadService(e, "payments-api", 1.5, 1.5);
+    e.tick();
+    const before = e.snapshot().costNow;
+
+    expect(e.acceptRightSizing("payments-api")).toBe(true);
+    for (let i = 0; i < 30 && !e.snapshot().converged; i++) e.tick();
+
+    const after = e.snapshot();
+    const sizes = after.resources
+      .filter((r) => r.service === "payments-api" && r.kind === "compute")
+      .map((r) => r.size);
+    expect(sizes.length).toBeGreaterThan(0);
+    expect(sizes.every((s) => s === "medium")).toBe(true); // shrank, on every region
+    expect(after.costNow).toBeLessThan(before); // cheaper for the same workload
+    expect(after.converged).toBe(true);
+    expect(propFor(e, "payments-api")).toBeUndefined(); // now right-sized
+  });
+});
