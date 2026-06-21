@@ -86,10 +86,13 @@ function buildCandidate(
   resilience: Resilience,
   headroom: number,
   gen: Generation,
+  sizeOverride?: string,
 ): Candidate {
   const svc = slug(svcName);
   const c = criticality;
-  const size = SIZE_FOR[c];
+  // Size follows Criticality unless the owner has accepted a right-sizing
+  // recommendation (docs: Cost & parity axis 2) — a shared, parity-preserved override.
+  const size = sizeOverride ?? SIZE_FOR[c];
   const replicas = REPLICAS_FOR[c] + headroom;
   const multiAZ = c === "C0" || c === "C1";
   const regions = posture.regions.length ? posture.regions : ["us-east-1"];
@@ -196,7 +199,17 @@ function candidatesFor(
   const out: Candidate[] = [];
   for (let i = floorIdx; i <= maxIdx; i++) {
     for (const headroom of [0, 1]) {
-      out.push(buildCandidate(svc.name, svc.criticality, posture, RES_LEVELS[i], headroom, gen));
+      out.push(
+        buildCandidate(
+          svc.name,
+          svc.criticality,
+          posture,
+          RES_LEVELS[i],
+          headroom,
+          gen,
+          svc.sizeOverride,
+        ),
+      );
     }
   }
   return out.sort((a, b) => a.cost - b.cost);

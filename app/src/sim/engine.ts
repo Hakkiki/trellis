@@ -23,6 +23,7 @@ import {
 import { manifestCost, resourceCost, plan as runPlanner, serviceSlug } from "./planner";
 import { Reconciler, type Status } from "./reconcile";
 import { type Bake, isTerminal, type RolloutState, type Strategy, TeamRollout } from "./release";
+import { isSize, recommendSize, type Size } from "./rightsizing";
 import { demandWindowsFor, warmNeeded } from "./schedule";
 import { SimCloud } from "./sim";
 import { rollup, type State } from "./state";
@@ -125,6 +126,18 @@ export interface EngineSnapshot {
   // Resources the denial-of-wallet guard has pinned warm (guardrail 7): resume
   // thrash detected, so the autoscaler stops parking them until resolved.
   walletGuard: ResourceID[];
+  // Right-sizing recommendations from observed utilization (axis 2). Proposals
+  // only — accepting changes the shared shape, so it goes through the gate.
+  rightSizing: RightSizingProposal[];
+}
+
+/** A right-sizing proposal for a Service, from its observed peak utilization. */
+export interface RightSizingProposal {
+  service: string; // display name
+  slug: string;
+  from: Size;
+  to: Size;
+  reason: string;
 }
 
 /** Ownership roll-up (§6): a Service's state (worst-of its managed children) and
@@ -480,6 +493,70 @@ export class Engine {
    *  parity) — the demand-driven signal, not an env label. */
   setIdle(id: ResourceID, idle: boolean) {
     this.cloud.setIdle(id, idle);
+  }
+
+  /** Inject observed utilization (load units per dimension) for a resource —
+   *  the telemetry right-sizing reads (docs: Cost & parity axis 2). */
+  setLoad(id: ResourceID, load: { cpu: number; mem: number }) {
+    this.cloud.setLoad(id, load);
+  }
+
+  /** Right-sizing proposals from observed peak utilization, per Service. A
+   *  Service's sized resources share one size, so we recommend the size that
+   *  covers the *peak across them* (size to the peak you must serve) — only for
+   *  Services with utilization telemetry, never blind. */
+  private rightSizingProposals(): RightSizingProposal[] {
+    if (!this.manifest) return [];
+    const m = this.manifest;
+    const out: RightSizingProposal[] = [];
+    for (const s of servicesOf(this.posture)) {
+      const sl = serviceSlug(s.name);
+      const sized = Object.values(m.resources).filter(
+        (r) => r.service === sl && isSize(r.spec.size),
+      );
+      const current = sized[0]?.spec.size;
+      if (!isSize(current)) continue;
+      let cpu = 0;
+      let mem = 0;
+      let seen = false;
+      for (const r of sized) {
+        const peak = this.cloud.peakLoad(r.id);
+        if (!peak) continue;
+        seen = true;
+        cpu = Math.max(cpu, peak.cpu);
+        mem = Math.max(mem, peak.mem);
+      }
+      if (!seen) continue; // no telemetry → no recommendation
+      const rec = recommendSize(current, { cpu, mem });
+      if (rec)
+        out.push({ service: s.name, slug: sl, from: rec.from, to: rec.to, reason: rec.reason });
+    }
+    return out;
+  }
+
+  /** Accept a right-sizing proposal (the owner ratifies at the gate). Sets a
+   *  shared size override and re-plans — cascading to every environment, so
+   *  parity is preserved; never a per-resource autonomous shrink. */
+  acceptRightSizing(service: string): boolean {
+    const rec = this.rightSizingProposals().find(
+      (p) => p.service === service || p.slug === service,
+    );
+    if (!rec) return false;
+    // Build a fresh posture (don't mutate the shared one): override the accepted
+    // Service's size; every environment re-plans to it, so parity holds.
+    const services = servicesOf(this.posture).map((s) =>
+      s.name === rec.service ? { ...s, sizeOverride: rec.to } : s,
+    );
+    this.log(
+      "Gate",
+      "owner",
+      "accept-right-sizing",
+      `${rec.service} ${rec.from}→${rec.to}`,
+      `${rec.reason} — re-planning the shared shape`,
+    );
+    this.declare({ ...this.posture, services });
+    this.approve();
+    return true;
   }
 
   /** Resolve a denial-of-wallet incident: un-pin so the resource may park again. */
@@ -838,6 +915,7 @@ export class Engine {
       envNote,
       controlPlane: this.cp.view(),
       walletGuard: [...this.pinnedWarm],
+      rightSizing: this.rightSizingProposals(),
     };
   }
 

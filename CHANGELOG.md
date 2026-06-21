@@ -20,6 +20,18 @@ The simulator deploys continuously from `main`, so entries are grouped by date r
 
 ### Added
 
+- **Engine: right-sizing from observed utilization (Cost & parity axis 2).** A new `rightsizing.ts`
+  recommends the smallest size that still covers a resource's observed **peak** load plus headroom — never
+  the naive "50% used = 50% waste": it sizes on the **binding resource** (`max(cpu, mem)`, so 25% CPU at
+  75% memory does not shrink), keeps **25% headroom** (cut it and the next spike breaks SLA), and sizes to
+  the windowed **peak** (a spike blocks a shrink the average would suggest). The sim grows a load model
+  (`setLoad` + a trailing-window peak); the engine surfaces proposals in `snapshot().rightSizing` and —
+  because the size *is* the parity-held shape — applies them only via `acceptRightSizing()`, an owner gate
+  action that sets a **shared** size override and re-plans, cascading with parity preserved (cost drops
+  for the same workload). Tests cover the recommender (pure) and the wired flow (telemetry-gated, refuse a
+  memory-bound shrink, size to peak not average, accept → shrink + cheaper). Still open: per-cell
+  granularity and driving the proposal from prod's utilization in the fleet.
+
 - **Engine: a temporal demand model (Cost & parity axis 1, declared half).** The autoscaler stops parking
   blind to time. A new `schedule.ts` turns the `schedule` Trellis already carries on a Job (e.g.
   `nightly`) into a recurring **demand window** on the job's same-Service, same-region neighbours;
