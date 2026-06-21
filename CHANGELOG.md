@@ -7,6 +7,15 @@ The simulator deploys continuously from `main`, so entries are grouped by date r
 
 ### Added
 
+- **Principles — the twelve convictions.** A new front-of-house page stating, in plain spoken language,
+  why Trellis is shaped the way it is: containment as the spine, the path-not-just-target view of safe
+  change, the boundary-is-the-guarantee rule, the enforcer that obeys its own rule, the one law (only a
+  human authors; everything else converges), plan-as-proof and loud failure, governance as a wall not a
+  dial, break-glass that buys time not permission, the one Criticality dial, legibility as a correctness
+  property, and self-service that isn't self-operate. Each principle's *claim is its heading*, so the
+  table of contents reads as the whole philosophy. Distilled from the spec and its invariants; linked from
+  a top-of-sidebar "Principles" group.
+
 - **Roles & responsibilities — a day in the life.** A new page mapping the nine personas (Platform Owner,
   Security/Governance author, Division/Product lead, Platform Operator, Service/Eng teams, Break-glass
   responders, Auditor, FinOps, External vendor) to the model: each one's mandate, what it owns, what it
