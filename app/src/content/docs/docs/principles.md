@@ -6,9 +6,9 @@ description: The twelve convictions that shape Trellis — why the platform is b
 > **The convictions** — why Trellis is built the way it is, in plain language. The rigor lives in the
 > [specification](/trellis/docs/spec).
 
-Trellis runs on a short list of convictions, not preferences. Each one states a claim and backs it up right
-underneath, the same shape as a Trellis plan. Read the twelve and you'll see the system isn't a pile of
-features. It's the few things Trellis won't give up.
+Trellis runs on a short list of convictions, not preferences. Each one makes a claim, then backs it up right
+underneath, the same shape as a Trellis plan. The twelve aren't features. They're the few things Trellis
+won't give up.
 
 ## The twelve
 
