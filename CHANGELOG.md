@@ -7,6 +7,9 @@ The simulator deploys continuously from `main`, so entries are grouped by date r
 
 ### Changed
 
+- **Principles polish.** Retitled #1 to "One bad day shouldn't become everyone's bad day" so the heading
+  carries the same team → org → company scale as its body, and tightened #5 and #9 by a sentence each.
+
 - **Principles rewritten in principle voice, plain English.** Reworked all twelve so each reads as a
   conviction rather than a feature description: lead with the rule, drop "Trellis does X" narration, cut
   insider shorthand and stray metaphors ("the keys"), and put the threat at the right scale (a failure can

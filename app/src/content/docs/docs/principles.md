@@ -12,7 +12,7 @@ won't give up.
 
 ## The twelve
 
-### 1. One team's bad day should stay one team's bad day
+### 1. One bad day shouldn't become everyone's bad day
 
 A failure should stay where it starts. Share the same systems and it never does: one wrong move from
 someone who never should have had that access takes out a team, then an org, then the whole company. So box
@@ -45,8 +45,8 @@ the exception.
 Off hours, people are off living their lives. A system that needs someone awake at 2 a.m. to stay healthy is
 a system you built wrong. Plan for that. Don't blame them for it. So the machine does the tireless work on
 its own: it watches everything, fixes what slips, and holds the line all night. But it never invents the
-goal. It only steers toward what a person already decided. People decide what should be true. The machine
-keeps it true.
+goal, only carries out what a person already decided. People decide what should be true. The machine keeps
+it true.
 
 ### 6. Every change shows its work
 
@@ -68,8 +68,8 @@ no matter what else has to give. Build inside those walls. Don't bargain with th
 
 ### 9. Break glass to act now, not to skip the rules
 
-When the normal process can't run and something's on fire, you need to act right now. So you break the
-glass: an emergency override, signed by two people, that changes things this second. It doesn't make the
+When the normal process can't run and something's on fire, you break the glass: an emergency override,
+signed by two people, that changes things this second. It doesn't make the
 change approved. Once the fire's out, you owe an answer: make it official the normal way, or undo it.
 Recovering from one of these can take days, and the people at home pay for that week too. It's a last
 resort, not a shortcut.
