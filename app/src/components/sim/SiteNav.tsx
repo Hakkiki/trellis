@@ -28,7 +28,7 @@ const links = [
   { href: `${BASE}/simulator`, label: "Simulator" },
   { href: `${BASE}/blast-radius`, label: "Blast radius" },
   { href: `${BASE}/promotion`, label: "Promotion" },
-  { href: `${BASE}/docs/overview`, label: "Docs" },
+  { href: `${BASE}/docs/the-case`, label: "Docs" },
 ];
 
 function useActivePath() {

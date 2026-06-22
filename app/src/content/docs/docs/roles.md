@@ -1,11 +1,9 @@
 ---
 title: "Roles & responsibilities — a day in the life"
-description: Who does what in a Trellis world. Nine personas — platform owner, platform operator, service teams, break-glass responders, auditor, security and governance author, FinOps, division lead, and external vendor — with what each owns, what each must not touch, and a day in each life.
+description: Who does what in a Trellis world. Nine personas (platform owner, platform operator, service teams, break-glass responders, auditor, security and governance author, FinOps, division lead, and external vendor) with what each owns, what each must not touch, and a day in each life.
 ---
 
-> **Applied decision & guidance** — extends and applies the [specification](/trellis/docs/spec) (the source of truth); not itself normative.
-
-Trellis works only when responsibility is clear. The model is simple: the enterprise sets the rails and the divisions drive. That is a statement about people as much as software. This page names each persona, says what they own and what they must not touch, and walks through a normal day for each one.
+Trellis works only when responsibility is clear. The model is simple: the enterprise sets the rails and the divisions drive. That is a statement about people as much as software. This page applies the [specification](/trellis/docs/spec) (the source of truth) to people. It names each persona, says what they own and what they must not touch, and walks through a normal day for each one.
 
 The whole idea fits in one line:
 
@@ -13,7 +11,7 @@ The whole idea fits in one line:
 
 ## The map of responsibility
 
-Here is who touches what. Look at how few arrows carry write power into a division's cloud. Only two do: the division's own reconciler, and a scoped break-glass. Both stay inside that division.
+Here is who touches what. Few arrows carry write power into a division's cloud. Only two do: the division's own reconciler, and a scoped break-glass. Both stay inside that division.
 
 ```mermaid
 flowchart TB
@@ -57,7 +55,7 @@ flowchart TB
 
 Start with the journey before the people. Almost every change is a change to desired state, and every change travels the same path. An engineer proposes it in a pull request. The planner proves it. A gate approves it, and the gate gets stricter as the blast radius grows. The reconciler rolls it out in stages. The audit log records it for good.
 
-One point clears up the confusion that trips most people first. **The engineer authors changes in Git, and Git is the front door of the control plane, not a way around it.** The planner and the reconciler in the diagram below *are* the control plane. A pull request does nothing on its own. The planner has to prove it, a gate has to clear it, and only then does the reconciler apply it. The engineer never touches the cloud directly. The reconciler is the one thing that holds standing write into the cloud.
+One point clears up the confusion that trips most people first. The engineer authors changes in Git, and Git is the front door of the control plane, not a way around it. The planner and the reconciler in the diagram below are the control plane. A pull request does nothing on its own. The planner has to prove it, a gate has to clear it, and only then does the reconciler apply it. The engineer never touches the cloud directly. The reconciler holds standing write into the cloud.
 
 So "using Git directly" and "going through the control plane" are the same act here. There is no separate console an engineer visits instead of Git. Git, the planner, the gate, and the reconciler are the control plane, and the pull request is the only door in.
 
@@ -87,11 +85,11 @@ That single path is the backbone. Each persona below has a place on it. Some aut
 
 ---
 
-## Enterprise personas — set the rails
+## Enterprise personas: set the rails
 
 ### Platform Owner
 
-**Mandate:** make it safe for divisions to run their own cloud without touching raw AWS. The platform owner owns the **signed catalog** (the approved set of privileged-access, CI/CD, DNS, source-control, and cloud services), the **SCP and governance floor**, and the org root.
+**Mandate:** make it safe for divisions to run their own cloud without touching raw AWS. The platform owner owns the signed catalog (the approved set of privileged-access, CI/CD, DNS, source-control, and cloud services), the SCP and governance floor, and the org root.
 
 - **Owns:** catalog contents and versions, the org-wide guardrail floor, and the account-factory and landing zone.
 - **Does *not*:** operate any division's control plane, approve day-to-day changes, or hold standing write into a division's cloud. Publishing a catalog version deploys nothing on its own.
@@ -109,7 +107,7 @@ flowchart LR
 
 ### Security / Governance author
 
-**Mandate:** own the rules, not the changes. The security author defines the trust vocabulary and adjacency (which Cells may talk to which) and the data-residency and compliance constraints (hard pre-filters, never objectives). The security author also acts as the independent **second approver** for high-blast-radius and catalog changes. This is the *checker* half of maker-checker: the person who proposes a change is never the person who clears it.
+**Mandate:** own the rules, not the changes. The security author defines the trust vocabulary and adjacency (which Cells may talk to which) and the data-residency and compliance constraints (hard pre-filters, never objectives). The security author also acts as the independent second approver for high-blast-radius and catalog changes. This is the *checker* half of maker-checker: the person who proposes a change is never the person who clears it.
 
 - **Owns:** the governance floor content, the trust and adjacency policy, and catalog change-approval (shared with the owner).
 - **Does *not*:** write service intent, or loosen the floor alone. Loosening the floor is itself a change that needs two people and a full audit trail (Inv 14).
@@ -117,7 +115,7 @@ flowchart LR
 
 ---
 
-## Division personas — operate & ship
+## Division personas: operate and ship
 
 ### Division / Product lead
 
@@ -129,7 +127,7 @@ flowchart LR
 
 ### Platform Operator
 
-**Mandate:** run *this division's* Trellis instance. The operator keeps the control loop healthy, drives its canaried self-upgrades, and holds the **kill-switch** that the system cannot disable ([Inv 13](/trellis/docs/spec)).
+**Mandate:** run *this division's* Trellis instance. The operator keeps the control loop healthy, drives its canaried self-upgrades, and holds the kill-switch that the system cannot disable ([Inv 13](/trellis/docs/spec)).
 
 - **Owns:** the control-plane lifecycle (upgrade and recover), the reconciler's health, the kill-switch, and meta-DR drills.
 - **Does *not*:** approve service changes (the gate does that) or hold god-write. Even the operator works through earned, scoped, ephemeral authority, and upgrading one division cannot touch another.
@@ -152,7 +150,7 @@ sequenceDiagram
   CP->>Audit: record the whole ceremony
 ```
 
-The same day, read as a journey (how each step *feels* — 1 tense, 5 calm):
+The same day, read as a journey (how each step *feels*, where 1 is tense and 5 is calm):
 
 ```mermaid
 journey
@@ -186,7 +184,7 @@ flowchart LR
   classDef good fill:#7fb06929,stroke:#6fae6a;
 ```
 
-And as a journey — declare, ship, converge:
+And as a journey, from declare to ship to converge:
 
 ```mermaid
 journey
@@ -226,7 +224,7 @@ sequenceDiagram
   R1->>Audit: full record — divergence reconciled back
 ```
 
-The night, as a journey (it starts tense, ends sealed):
+The night, as a journey that starts tense and ends sealed:
 
 ```mermaid
 journey
@@ -243,11 +241,11 @@ journey
 
 ---
 
-## Cross-cutting personas — read (and one that's scoped)
+## Cross-cutting personas: read (and one that's scoped)
 
 ### Auditor
 
-**Mandate:** prove what happened, independently. The auditor reads the **external append-only audit** and the compliance Views, and never writes. Because the record lives outside the control plane, the platform cannot rewrite its own history.
+**Mandate:** prove what happened, independently. The auditor reads the external append-only audit and the compliance Views, and never writes. Because the record lives outside the control plane, the platform cannot rewrite its own history.
 
 - **Owns:** evidence, attestation, and compliance reporting over time.
 - **Does *not*:** approve or change anything. The role is read-only by design.
@@ -271,7 +269,7 @@ journey
 
 ---
 
-## The whole point, in one table
+## Responsibility at a glance
 
 | Persona | Authors? | Approves? | Operates? | Writes to cloud? |
 |---|---|---|---|---|
@@ -285,4 +283,4 @@ journey
 | FinOps | budgets | — | — | no |
 | External vendor | — | — | — | **scoped, time-boxed** |
 
-Here is the shape to remember. Many people author changes and approve them. Exactly one loop holds standing write into the cloud, alongside a sealed break-glass and the one-time sealed bootstrap, and that loop stays inside its own division. That containment is what makes Trellis safe to hand to a division.
+Many people author changes and approve them. Exactly one loop holds standing write into the cloud, alongside a sealed break-glass and the one-time sealed bootstrap, and that loop stays inside its own division. That containment is what makes Trellis safe to hand to a division.
