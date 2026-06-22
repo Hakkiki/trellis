@@ -5,6 +5,16 @@ The simulator deploys continuously from `main`, so entries are grouped by date r
 
 ## Unreleased
 
+### Changed
+
+- **Docs review: fewer pages, plainer voice.** Red-teamed the docs site and cut it to pages that earn
+  their keep. Merged "The case", "Why Trellis — use case", and the overview into one `Why Trellis`
+  narrative (`docs/the-case`); removed the now-empty `docs/use-case` and `docs/overview` pages and
+  repointed all nav/links. Regrouped the sidebar into Start here / The model / Architecture & decisions /
+  Reference. Dropped the per-page genre banners, stopped the FAQ from re-deriving the bootstrap and
+  security pages, condensed the changelog, and rewrote every page in plain active voice with far less
+  bold and roughly two-thirds fewer em-dashes.
+
 ### Added
 
 - **Roles & responsibilities — a day in the life.** A new page mapping the nine personas (Platform Owner,

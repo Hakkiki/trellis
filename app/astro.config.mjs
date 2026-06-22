@@ -29,36 +29,28 @@ export default defineConfig({
       social: [{ icon: "github", label: "GitHub", href: "https://github.com/hakkiki/trellis" }],
       disable404Route: true,
       pagefind: false,
-      // Sidebar is organized by *genre* so it's obvious what each page is:
-      // the story (narrative), orientation, model primers, applied decisions,
-      // and the normative specification (the source of truth).
+      // Sidebar is grouped so each page's job is obvious: where to start,
+      // the model's concepts, the applied architecture decisions, and the
+      // normative reference (the spec is the source of truth).
       sidebar: [
         {
-          label: "The case (start here)",
+          label: "Start here",
           items: [
-            { label: "The case", slug: "docs/the-case" },
-            { label: "Why Trellis — use case", slug: "docs/use-case" },
+            { label: "Why Trellis", slug: "docs/the-case" },
+            { label: "FAQ", slug: "docs/faq" },
             // Standalone page (not a docs entry), so use an absolute `link` —
             // Starlight does not prepend the base path to sidebar `link`s.
             { label: "Blast radius (demo)", link: "/trellis/blast-radius" },
           ],
         },
         {
-          label: "Orientation",
-          items: [
-            { label: "Overview", slug: "docs/overview" },
-            { label: "Roles & responsibilities", slug: "docs/roles" },
-            { label: "FAQ", slug: "docs/faq" },
-            { label: "What's new", slug: "docs/changelog" },
-          ],
-        },
-        {
-          label: "Concepts (the model)",
+          label: "The model",
           items: [
             { label: "Posture & Criticality", slug: "docs/posture" },
             { label: "Structure & State", slug: "docs/state" },
             { label: "The reconcile loop", slug: "docs/reconcile" },
             { label: "Promotion", slug: "docs/promotion" },
+            { label: "Roles & responsibilities", slug: "docs/roles" },
           ],
         },
         {
@@ -72,8 +64,11 @@ export default defineConfig({
           ],
         },
         {
-          label: "Specification (source of truth)",
-          items: [{ label: "Full spec", slug: "docs/spec" }],
+          label: "Reference",
+          items: [
+            { label: "Full spec", slug: "docs/spec" },
+            { label: "What's new", slug: "docs/changelog" },
+          ],
         },
       ],
       customCss: ["./src/styles/starlight.css"],

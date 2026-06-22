@@ -3,10 +3,8 @@ title: Posture & Criticality
 description: What a human declares, and the one dial that moves it all together.
 ---
 
-> **Concept primer** — explains a piece of the model; the normative version is in the [specification](/trellis/docs/spec).
-
-A **Posture** is what a human declares — the desired intent and constraints for an environment,
-expressed as four **orthogonal, independently-swappable** axes, each owned by a distinct audience.
+A **Posture** is what a human declares: the desired intent and constraints for an environment. It has
+four axes, each independently swappable and each owned by a distinct audience.
 
 | Axis | The question | Owned by |
 |---|---|---|
@@ -15,20 +13,20 @@ expressed as four **orthogonal, independently-swappable** axes, each owned by a 
 | **Budget** | what may it cost? | owner / finance |
 | **Governance** | what is *allowed*? | security / compliance |
 
-**Governance is always a hard constraint** — never traded away. The operator declares which input is
-the *objective* and which are *bounds*; Governance is always a hard pre-filter, never an objective term.
+Governance is always a hard constraint, never traded away. The operator declares which input is the
+objective and which are bounds; Governance stays a hard pre-filter, never an objective term.
 
-## Criticality — the magnitude facet
+## Criticality — the magnitude dial
 
-**Criticality** (C0 = mission-critical → C3 = best-effort) is a **posture preset**: one dial that
+Criticality (C0 = mission-critical through C3 = best-effort) is a posture preset: one dial that
 expands into a coordinated bundle across the other axes. In the simulator it sets:
 
-- resilience aggressiveness (C0 → multi-AZ, more replicas, larger sizes),
-- the default `isolation` granularity (C0 → isolate-per-service; C3 → colocate),
+- resilience aggressiveness (C0 means multi-AZ, more replicas, larger sizes),
+- the default `isolation` granularity (C0 isolates per service; C3 colocates),
 - gate rigor and break-glass scope.
 
-> Precedence is explicit: an operator's explicit `optimize:` declaration overrides the Criticality
-> preset, which overrides the system default.
+Precedence is explicit. An operator's explicit `optimize:` declaration overrides the Criticality
+preset, which overrides the system default.
 
-Try it in the [simulator](/trellis/simulator/): switch C0 → C3 and re-plan to see the structure and cost
-move together.
+Try it in the [simulator](/trellis/simulator/): switch C0 to C3 and re-plan to see the structure and
+cost move together. The [specification](/trellis/docs/spec) is the normative version of all of this.
