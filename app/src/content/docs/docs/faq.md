@@ -60,7 +60,7 @@ Walk it through the four action classes above:
   it away.
 - **One chat surface everyone shares rebuilds the single point of failure.** Trellis slices the blast
   radius per division, so one team's bad day stays contained. Route everyone through one assistant and a
-  single bad — or merely confident — action reaches the whole company again.
+  single bad (or merely confident) action reaches the whole company again.
 
 Put the model where it earns its keep: helping a person write the Posture and read the proof. Those are the
 declare and explain ends of the loop. Seat it as the unaudited actuator instead and you get a fast, fluent,
@@ -75,7 +75,7 @@ noticing only afterward:
 were gone, and fell back to re-applying them from memory. No plan, no approval, no proof, and nothing to
 roll back to. Move that same hand from a working tree to a cloud organization and you have the outage. The
 point is not "don't use agents." It is that an agent's reach over live state belongs behind declare, prove,
-and reconcile — not in place of them.*
+and reconcile, not in place of them.*
 
 ## Who it's for
 
@@ -378,11 +378,11 @@ pipeline that ships their code.
 
 ### Does Trellis own baseline security, and does it set up OUs, accounts, VPCs, and Kubernetes?
 
-Yes — laying down the **governed foundation** is precisely Trellis's job, not a prerequisite you bring.
-The whole point is that you declare intent and Trellis owns the structure underneath it: the org layout,
+Yes. Laying down the governed foundation is precisely Trellis's job, not a prerequisite you bring.
+You declare intent and Trellis owns the structure underneath it: the org layout,
 the accounts, the network boundaries, the security baseline, and clusters-as-resources are all reconciled
-through the same **Posture → plan → reconcile** loop as everything else. The one boundary worth memorizing
-is on Kubernetes — Trellis owns the cluster, not what runs inside it.
+through the same **Posture → plan → reconcile** loop as everything else. The boundary worth memorizing
+is on Kubernetes: Trellis owns the cluster, not what runs inside it.
 
 | Layer | Does Trellis own it? | What that means — and where it stops |
 |---|---|---|
@@ -392,15 +392,15 @@ is on Kubernetes — Trellis owns the cluster, not what runs inside it.
 | **VPCs / networking** | **Yes** | A VPC / network boundary is a Frame; the planner provisions it and the typed connectivity (the **Weave** — DNS, LB, peering, transit) drawn over the placement tree, and heals it through the same loop. |
 | **Kubernetes** | **The cluster, yes — workloads, no** | Trellis owns the cluster *as a resource*: its existence, version, node groups, networking, pod-identity (IRSA), and platform add-ons (CNI, CSI, DNS, autoscaler, the GitOps agent). It **stops at the cluster API**; the in-cluster loop (Argo/Flux) owns Deployments, pods, and Services. Slice at the **cluster**, not the namespace. See [Trellis and Kubernetes](/trellis/docs/operating-model#trellis-and-kubernetes-where-the-line-is). |
 
-Two honest qualifiers:
+Two qualifiers:
 
 - **Greenfield vs. brownfield.** On a fresh org Trellis lays the foundation down cleanly. Adopting it into
-  an *existing* org with live accounts is a **discovery-and-reconcile** exercise first — it maps what's
+  an *existing* org with live accounts is a **discovery-and-reconcile** exercise first; it maps what's
   already there before it holds it. See [Bootstrap & footprint](/trellis/docs/bootstrap).
 - **Spec design vs. the simulator.** Everything above is the **spec** (the source of truth). The
   client-side simulator on this site deliberately models the *loop* at the resource level (compute, data,
   load balancers, jobs, stateful clusters) and **does not** simulate the org / account / VPC / cluster
-  provisioning — the cloud is simulated, the dynamics are real.
+  provisioning. The cloud is simulated, the dynamics are real.
 
 ### Is it really provider-neutral, or is that marketing?
 
@@ -426,18 +426,18 @@ slices the control plane to the division, so each division runs its own Trellis 
 accounts, with its own desired state and its own bootstrap. Put the two together and "one provider at a
 time" becomes a per-instance rule: each instance runs one provider richly, and nothing forces every
 division onto the same one. So divisions can pick their own cloud. Call it **federated single-cloud
-divisions**. No single desired state spans clouds, and nothing drops to a lowest common denominator — each
+divisions**. No single desired state spans clouds, and nothing drops to a lowest common denominator; each
 division gets one cloud's primitives in full.
 
 The bill is real, and every line of it pushes you toward a separate-org boundary:
 
 - **You pay for every adapter you use.** A GCP division means someone builds the GCP column and brings it
-  to parity with AWS, including the credential mint — the
+  to parity with AWS, including the credential mint, the
   [least-portable piece](/trellis/docs/provider-crosswalk). Mixing clouds doesn't dodge that cost; it
   commits you to several rich implementations instead of one.
 - **You lose the single governance floor.** The operating model shares one set of rails: the org root and
   its SCPs, under one tenancy root. AWS and GCP share no root and no common policy floor, so governance
-  becomes a multi-root, trust-federation problem — the kind the
+  becomes a multi-root, trust-federation problem, the kind the
   [grain ladder](/trellis/docs/operating-model) reserves for strict-regulatory or M&A splits. You go from
   one floor to one floor per cloud, each held to parity.
 - **The shared catalog splits or doubles.** Blueprints carry provider bindings, so a cross-cloud catalog
