@@ -70,8 +70,8 @@ value-add, and doing it badly is how you get the next outage. So Trellis splits 
 team curates a vetted catalog and sets guardrails once; divisions declare intent and drive. Divisions
 never touch raw AWS, never install GitLab, never write the IAM, never chase drift.
 
-The thesis in one line: **centralized governance, decentralized blast radius, self-service that is not
-self-operate.** Land in one division, prove it, expand across the org.
+The thesis: centralized governance, decentralized blast radius, self-service that is not
+self-operate. Land in one division, prove it, expand across the org.
 
 ## Two framings to carry into everything
 

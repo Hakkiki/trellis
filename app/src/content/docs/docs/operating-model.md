@@ -36,7 +36,7 @@ Strongest isolation first. Read the third column as "the blast radius that remai
 If you're splitting because a shared service's upgrade took everyone down, look at the
 last row. Every namespace shares one cluster control plane and one upgrade cycle. A cluster upgrade,
 an etcd corruption, an API-server outage, or a bad operator rollout takes all namespaces down at
-once. That isn't isolation. It's the original shared single point of failure wearing a Kubernetes hat,
+once. That isn't isolation. It's the original shared single point of failure again,
 and the cluster upgrade is the new company-wide change.
 
 Namespaces are a fine answer to a *different* question: density and cost under multi-tenancy. They are
@@ -111,7 +111,7 @@ Two things to keep in mind:
 ## Slice the control plane too
 
 Here is the step most designs miss. If shared services are the danger, then one central Trellis
-governing every division is the mother of all shared single points of failure. It holds standing
+governing every division is itself a company-wide single point of failure. It holds standing
 god-write across the whole company, and a bad Trellis upgrade would be the same company-wide outage at
 the meta-level. The control plane cannot be exempt from the rule it enforces.
 

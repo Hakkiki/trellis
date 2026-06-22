@@ -128,7 +128,7 @@ genuinely remains is named plainly:
   to the planner. That closes the easy failures; the remainder is that two implementations can share a
   blind spot, or the blueprint itself can be wrong. Still the genuine research risk, now bounded rather
   than solved.
-- **Social defeat — now Invariant 18.** A proof nobody reads is magic by another name; alarm fatigue and
+- **Social defeat — now Invariant 18.** A proof nobody reads is no proof at all; alarm fatigue and
   rubber-stamping defeat any uniform gate. Invariant 18 rations attention by blast radius: trivial,
   reversible, in-catalog changes run under a standing, human-authored auto-merge policy, while
   high-blast-radius changes escalate (independent second, dual-control), and proof legibility is a hard
