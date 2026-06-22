@@ -28,6 +28,14 @@ interface SimResource {
   convergeIn: number; // ticks until target becomes observed
   exists: boolean;
   stale: boolean;
+  dormant: boolean; // intentionally parked (scaled-to-zero / paused) to save cost
+  resumeIn: number; // ticks of cold-start remaining after a wake (0 = warm)
+  idle: boolean; // observed: no demand right now (the autoscaler's input signal)
+  idleTicks: number; // consecutive ticks observed idle (drives demand-based parking)
+  loadCpu: number; // observed current load (units), per dimension — for right-sizing
+  loadMem: number;
+  loadSamples: { cpu: number; mem: number }[]; // trailing window, to take a peak
+  hasLoad: boolean; // whether utilization telemetry has been seen at all
   broken: boolean; // root-cause failure that self-heal cannot fix
   costFactor: number; // billed ÷ planned — 1 normally; >1 is cost drift (§13)
   observedAtMs: number;
@@ -43,6 +51,16 @@ interface SimResource {
 const JOB_START = 1; // pending → running
 const JOB_RUN = 3; // running → succeeded
 const JOB_COOLDOWN = 4; // succeeded → pending again (cron)
+
+// Cold-start: ticks a parked resource takes to warm back up after a wake. The
+// resume is data-consistent (storage was retained) but not instant — guardrail
+// 4: the "DB came back" path is real and observable, not free.
+const RESUME_LATENCY = 3;
+
+// Trailing window (ticks) over which a resource's *peak* load is taken, so
+// right-sizing sizes to the peak you must serve, not the average (Cost & parity
+// axis 2).
+const UTIL_WINDOW = 10;
 
 export class SimCloud implements Provider {
   private applyLatency: number;
@@ -79,6 +97,16 @@ export class SimCloud implements Provider {
           // A stateful cluster restores its downed nodes on convergence.
           if (!r.broken) r.nodesDown = 0;
         }
+      }
+      // Burn down a cold-start: while resumeIn > 0 the resource reads as warming
+      // (Converging); when it hits 0 it is live again.
+      if (r.resumeIn > 0) r.resumeIn--;
+      // Accrue observed idleness — the demand signal the autoscaler controls on.
+      r.idleTicks = r.idle ? r.idleTicks + 1 : 0;
+      // Sample load into the trailing window so right-sizing can take a peak.
+      if (r.hasLoad) {
+        r.loadSamples.push({ cpu: r.loadCpu, mem: r.loadMem });
+        if (r.loadSamples.length > UTIL_WINDOW) r.loadSamples.shift();
       }
       if (!r.stale) r.observedAtMs = this.nowMs;
     }
@@ -122,6 +150,14 @@ export class SimCloud implements Provider {
         convergeIn: 0,
         exists: false,
         stale: false,
+        dormant: false,
+        resumeIn: 0,
+        idle: false,
+        idleTicks: 0,
+        loadCpu: 0,
+        loadMem: 0,
+        loadSamples: [],
+        hasLoad: false,
         broken: false,
         costFactor: 1,
         observedAtMs: this.nowMs,
@@ -181,6 +217,14 @@ export class SimCloud implements Provider {
       convergeIn: 0,
       exists: true,
       stale: false,
+      dormant: false,
+      resumeIn: 0,
+      idle: false,
+      idleTicks: 0,
+      loadCpu: 0,
+      loadMem: 0,
+      loadSamples: [],
+      hasLoad: false,
       broken: false,
       costFactor: 1,
       observedAtMs: this.nowMs,
@@ -212,13 +256,17 @@ export class SimCloud implements Provider {
 
   private toObservation(id: ResourceID, r: SimResource): Observation {
     const stateful = r.lifecycle === "stateful";
-    const health: Health = !r.exists
-      ? "Unknown"
-      : stateful
-        ? r.nodesDown > 0
-          ? "Degraded"
-          : "Healthy"
-        : r.health;
+    // A parked resource is intentionally suspended, not unhealthy — report it
+    // Healthy so the dormant flag (not a degraded reading) carries the meaning.
+    const health: Health = r.dormant
+      ? "Healthy"
+      : !r.exists
+        ? "Unknown"
+        : stateful
+          ? r.nodesDown > 0
+            ? "Degraded"
+            : "Healthy"
+          : r.health;
     return {
       id,
       exists: r.exists,
@@ -228,7 +276,89 @@ export class SimCloud implements Provider {
       observedAtMs: r.observedAtMs,
       phase: r.lifecycle === "job" ? r.phase : undefined,
       quorum: stateful ? { healthy: r.nodesTotal - r.nodesDown, total: r.nodesTotal } : undefined,
+      dormant: r.dormant || undefined,
+      resuming: r.resumeIn > 0 || undefined,
     };
+  }
+
+  // ---- Utilization levers: park idle capacity, resume on demand ------------
+
+  /** Park a resource: scale-to-zero (elasticity) or pause (dormancy). Durable
+   *  state is retained — this suspends compute, it does not delete (docs: Cost
+   *  & parity). The reconciler reads the result as Dormant, not down. */
+  park(id: ResourceID) {
+    const r = this.res.get(id);
+    if (r) r.dormant = true;
+  }
+
+  /** Resume a parked resource. Durable state is intact, so it comes back as the
+   *  same shape (data-consistent) — but not instantly: it warms through a
+   *  cold-start window (RESUME_LATENCY) before it is live again. A `cold` resume
+   *  surfaces the behaviour-divergent path (dropped connections / cold buffers,
+   *  guardrail 4): it comes back Degraded and the reconciler must self-heal it
+   *  — a tested failure path, not a free wake. */
+  wake(id: ResourceID, cold = false) {
+    const r = this.res.get(id);
+    if (!r?.dormant) return;
+    r.dormant = false;
+    r.nodesDown = 0;
+    if (cold) {
+      r.resumeIn = 0;
+      r.health = "Degraded"; // came back unhealthy — the loop must recover it
+      if (r.lifecycle === "stateful") r.nodesDown = 1; // a node slow to rejoin
+    } else {
+      r.resumeIn = RESUME_LATENCY;
+      r.health = "Healthy"; // data retained; the warm-up is latency, not a fault
+    }
+  }
+
+  /** Mark a resource's observed demand: idle (no traffic) or busy. The autoscaler
+   *  reads the accrued idleness to decide when to park, and treats returning
+   *  demand as the trigger to resume. */
+  setIdle(id: ResourceID, idle: boolean) {
+    const r = this.res.get(id);
+    if (r) {
+      r.idle = idle;
+      if (!idle) r.idleTicks = 0;
+    }
+  }
+
+  /** Consecutive ticks a resource has been observed idle (0 = busy now). */
+  idleTicks(id: ResourceID): number {
+    return this.res.get(id)?.idleTicks ?? 0;
+  }
+
+  /** Whether a resource is currently observed idle (no demand). */
+  isIdle(id: ResourceID): boolean {
+    return this.res.get(id)?.idle ?? false;
+  }
+
+  /** Inject observed utilization (load units per dimension) for a resource. */
+  setLoad(id: ResourceID, load: { cpu: number; mem: number }) {
+    const r = this.res.get(id);
+    if (r) {
+      r.loadCpu = load.cpu;
+      r.loadMem = load.mem;
+      r.hasLoad = true;
+    }
+  }
+
+  /** The peak observed load over the trailing window (null when no telemetry). */
+  peakLoad(id: ResourceID): { cpu: number; mem: number } | null {
+    const r = this.res.get(id);
+    if (!r || !r.hasLoad) return null;
+    let cpu = r.loadCpu;
+    let mem = r.loadMem;
+    for (const s of r.loadSamples) {
+      cpu = Math.max(cpu, s.cpu);
+      mem = Math.max(mem, s.mem);
+    }
+    return { cpu, mem };
+  }
+
+  /** Whether a resource is currently parked. */
+  isDormant(id: ResourceID): boolean {
+    return this.res.get(id)?.dormant ?? false;
   }
 
   // ---- Fault injection (sim-only; the dynamics the loop must survive) ------

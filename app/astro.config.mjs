@@ -29,36 +29,29 @@ export default defineConfig({
       social: [{ icon: "github", label: "GitHub", href: "https://github.com/hakkiki/trellis" }],
       disable404Route: true,
       pagefind: false,
-      // Sidebar is organized by *genre* so it's obvious what each page is:
-      // the story (narrative), orientation, model primers, applied decisions,
-      // and the normative specification (the source of truth).
+      // Sidebar is grouped so each page's job is obvious: where to start,
+      // the model's concepts, the applied architecture decisions, and the
+      // normative reference (the spec is the source of truth).
       sidebar: [
         {
-          label: "The case (start here)",
+          label: "Start here",
           items: [
-            { label: "The case", slug: "docs/the-case" },
-            { label: "Why Trellis — use case", slug: "docs/use-case" },
-            // Standalone page (not a docs entry), so use an absolute `link` —
-            // Starlight does not prepend the base path to sidebar `link`s.
-            { label: "Blast radius (demo)", link: "/trellis/blast-radius" },
-          ],
-        },
-        {
-          label: "Orientation",
-          items: [
-            { label: "Overview", slug: "docs/overview" },
-            { label: "Roles & responsibilities", slug: "docs/roles" },
+            { label: "Why Trellis", slug: "docs/the-case" },
+            { label: "The twelve principles", slug: "docs/principles" },
             { label: "FAQ", slug: "docs/faq" },
-            { label: "What's new", slug: "docs/changelog" },
+            // Standalone page (not a docs entry). Starlight prepends the base
+            // path to sidebar `link`s, so give it the base-relative path.
+            { label: "Blast radius (demo)", link: "/blast-radius/" },
           ],
         },
         {
-          label: "Concepts (the model)",
+          label: "The model",
           items: [
             { label: "Posture & Criticality", slug: "docs/posture" },
             { label: "Structure & State", slug: "docs/state" },
             { label: "The reconcile loop", slug: "docs/reconcile" },
             { label: "Promotion", slug: "docs/promotion" },
+            { label: "Roles & responsibilities", slug: "docs/roles" },
           ],
         },
         {
@@ -67,13 +60,17 @@ export default defineConfig({
             { label: "Operating model", slug: "docs/operating-model" },
             { label: "Bootstrap & footprint", slug: "docs/bootstrap" },
             { label: "Inversion stress test", slug: "docs/hardening" },
+            { label: "Cost & parity", slug: "docs/cost-and-parity" },
             { label: "Provider crosswalk", slug: "docs/provider-crosswalk" },
             { label: "Architecture", slug: "docs/architecture" },
           ],
         },
         {
-          label: "Specification (source of truth)",
-          items: [{ label: "Full spec", slug: "docs/spec" }],
+          label: "Reference",
+          items: [
+            { label: "Full spec", slug: "docs/spec" },
+            { label: "What's new", slug: "docs/changelog" },
+          ],
         },
       ],
       customCss: ["./src/styles/starlight.css"],

@@ -1,24 +1,23 @@
 ---
 title: "Inversion stress test: how we tried to kill Trellis"
-description: We didn't ask how Trellis succeeds. We applied Munger's inversion — how would we guarantee Trellis causes the exact catastrophe it exists to prevent? — enumerated every kill-path, and designed each one shut. The genuine gaps became new spec invariants.
+description: We applied Munger's inversion — how would we guarantee Trellis causes the exact catastrophe it exists to prevent? — enumerated every kill-path, and designed each one shut. The genuine gaps became new spec invariants.
 ---
-
-> **Applied decision & guidance** — extends and applies the [specification](/trellis/docs/spec) (the source of truth); not itself normative. The invariants it produced **are** normative — see [§17](/trellis/docs/spec).
 
 Charlie Munger's rule: *"All I want to know is where I'm going to die, so I'll never go there. Invert,
 always invert."* So we did not ask "how does Trellis win?" We asked the opposite:
 
-> **How would we *guarantee* Trellis causes the very catastrophe it exists to prevent — a company-wide
+> **How would we guarantee Trellis causes the very catastrophe it exists to prevent — a company-wide
 > outage, an unrecoverable control plane, an unauthorized change that looks authorized?**
 
 Then we walked every kill-path and made sure the design forecloses it. The genuine gaps this surfaced
-became **new normative invariants** (spec [§17](/trellis/docs/spec), Invariants 11–16, plus later passes
-that hardened the honest residuals into Invariants 17–19). This page is the
-distilled version; the raw red-team enumeration lives in the off-site design bundle.
+became new normative invariants (spec [§17](/trellis/docs/spec), Invariants 11–16, plus later passes
+that hardened the honest residuals into Invariants 17–19). This page is the distilled version; the raw
+red-team enumeration lives in the off-site design bundle. The invariants it produced are normative; the
+[specification](/trellis/docs/spec) is the source of truth.
 
 ## The promises an attacker would target
 
-Inversion only works if you name what success *is*, then attack each promise:
+Inversion only works if you name what success is, then attack each promise:
 
 1. **Containment** — no shared failure can take the whole company down.
 2. **No magic** — every change traces to a plan a human authorized.
@@ -26,116 +25,119 @@ Inversion only works if you name what success *is*, then attack each promise:
 4. **Convergence** — self-healing drives reality to the declared state.
 5. **Recoverability** — if the control plane dies, it comes back (meta-DR).
 
-Each kill-path below is one concrete way to defeat one promise. Each is marked **✓ already foreclosed**
-(the model already shut it) or **➕ newly hardened** (the inversion found a real gap; we added an invariant).
+Each kill-path below is one concrete way to defeat one promise. Each is marked *already foreclosed* (the
+model already shut it) or *newly hardened* (the inversion found a real gap, and we added an invariant).
 
 ## Kill-path 1 — Re-centralize the single point of failure without noticing
 
-This is the original sin — the shared service whose upgrade took everyone down, sneaking back in.
+This is the original sin: the shared service whose upgrade took everyone down, sneaking back in.
 
-- **Make a shared surface a live, synchronous dependency** — divisions pull the catalog at runtime, or pin
-  drifts to `latest`, so one bad publish auto-deploys everywhere. **➕ newly hardened (Inv 12):** every
-  shared reference is an immutable signed version, **never a floating tag**, pins are **transitive**, and
-  consumers run from **last-known-good when the source is unreachable**. Shared surfaces are
-  pull-and-cache, **never synchronous-fate**. No shared service sits on a division's critical write path.
-- **Make the audit or governance floor a hard runtime dependency** — the reconciler freezes when the audit
-  is unreachable, so an audit outage becomes a company-wide freeze. **➕ newly hardened (Inv 12):** the
-  same fail-static rule — shared surfaces may not block liveness.
-- **Centralize the operators** — slice the control planes but have one team push upgrades to all of them on
-  one toolchain. **➕ newly hardened (Inv 12 + [§16](/trellis/docs/spec)):** anything with standing push
-  power across domains — *including human/operator tooling* — is sliced too; the shared tooling is
+- **Make a shared surface a live, synchronous dependency.** Divisions pull the catalog at runtime, or
+  pins drift to `latest`, so one bad publish auto-deploys everywhere. *Newly hardened (Inv 12):* every
+  shared reference is an immutable signed version, never a floating tag; pins are transitive; and
+  consumers run from last-known-good when the source is unreachable. Shared surfaces are pull-and-cache,
+  never synchronous-fate. No shared service sits on a division's critical write path.
+- **Make the audit or governance floor a hard runtime dependency.** The reconciler freezes when the
+  audit is unreachable, so an audit outage becomes a company-wide freeze. *Newly hardened (Inv 12):* the
+  same fail-static rule, where shared surfaces may not block liveness.
+- **Centralize the operators.** Slice the control planes but have one team push upgrades to all of them
+  on one toolchain. *Newly hardened (Inv 12 + [§16](/trellis/docs/spec)):* anything with standing push
+  power across domains, including human and operator tooling, is sliced too; shared tooling is
   pulled-and-pinned, never pushed fleet-wide.
 
 ## Kill-path 2 — Turn self-healing into self-harm
 
 The subtlest one. The gate approved a change; it just happened to be bad.
 
-- **Push an approved-but-bad generation and let the reconciler roll it out everywhere it owns, instantly.**
-  This is the original outage reproduced *inside a single division* — careful approval doesn't help if the
-  rollout is simultaneous. **➕ newly hardened (Inv 11):** convergence is **progressive and reversible** —
-  canary → waves, **health-gated**, with **automatic rollback** on regression and a blast-radius breaker
-  that halts the wave. **An approved change still may not reach a whole blast radius at once.** This is the
-  most important hardening on the page: even a mistake that passes the gate must not be company-wide.
+- **Push an approved-but-bad generation and let the reconciler roll it out everywhere it owns,
+  instantly.** This is the original outage reproduced inside a single division: careful approval doesn't
+  help if the rollout is simultaneous. *Newly hardened (Inv 11):* convergence is progressive and
+  reversible — canary, then waves, health-gated, with automatic rollback on regression and a
+  blast-radius breaker that halts the wave. An approved change still may not reach a whole blast radius
+  at once. This is the most important hardening on the page: even a mistake that passes the gate must
+  not be company-wide.
 
 ## Kill-path 3 — Make the gate a rubber stamp
 
-- **Bypass the gate through the reconciler** — mutate desired state out of band so the standing-write
-  reconciler "heals" toward your change. **✓ already foreclosed:** desired state changes only through
-  Author ([Inv 3](/trellis/docs/spec)); out-of-band repo writes are caught by signed commits + branch
+- **Bypass the gate through the reconciler.** Mutate desired state out of band so the standing-write
+  reconciler "heals" toward your change. *Already foreclosed:* desired state changes only through Author
+  ([Inv 3](/trellis/docs/spec)); out-of-band repo writes are caught by signed commits and branch
   protection; the reconciler is converge-only.
-- **Confused deputy at credential mint** — hand the mint an attacker-chosen scope inside a benign-looking
-  proof. **✓ already foreclosed ([Inv 4](/trellis/docs/spec)):** the mint **re-derives** scope from the
-  signed generation; it never consumes a scope the planner asserts.
-- **Compromise a maintainer, or leave branch protection misconfigured on one repo** — a malicious merge is
-  "authorized" because merge *is* the gate. **➕ newly hardened (Inv 14):** **separation of duties** — the
-  approver is never the author; above a blast-radius threshold the second approver is **outside the owning
-  team**; and the repo-protection posture is a **governed, non-loosenable floor**, not a per-repo option.
+- **Confused deputy at credential mint.** Hand the mint an attacker-chosen scope inside a benign-looking
+  proof. *Already foreclosed ([Inv 4](/trellis/docs/spec)):* the mint re-derives scope from the signed
+  generation; it never consumes a scope the planner asserts.
+- **Compromise a maintainer, or leave branch protection misconfigured on one repo.** A malicious merge
+  is "authorized" because merge is the gate. *Newly hardened (Inv 14):* separation of duties — the
+  approver is never the author; above a blast-radius threshold the second approver is outside the owning
+  team; and the repo-protection posture is a governed, non-loosenable floor, not a per-repo option.
 
 ## Kill-path 4 — Brick the control plane and defeat recovery
 
-- **Ship a self-upgrade that disables the thing that would heal it, with the kill-switch or the recovery
-  path living *inside* the system that's down.** **➕ newly hardened (Inv 13):** every recovery dependency
-  — the external seed, a known-good prior generation, the kill-switch, the audit — must be reachable and
-  operable **with the control plane fully down**; recovery never transits the failed system.
-- **Lose the root, or the catalog signing key, to a single person or a single key.** **➕ newly hardened
-  (Inv 13):** root and signing authority are **M-of-N** — no single human, no single key.
-- **Make Git the new SPOF** — one shared manifest store; if it's down, every reconcile is blind. **◑ /
-  ➕:** desired state is **per-domain** (Git is a role, not shared infra), and Inv 12's fail-static rule
-  means the reconciler keeps converging to its last-good generation when the store is unreachable.
+- **Ship a self-upgrade that disables the thing that would heal it,** with the kill-switch or the
+  recovery path living inside the system that's down. *Newly hardened (Inv 13):* every recovery
+  dependency — the external seed, a known-good prior generation, the kill-switch, the audit — must be
+  reachable and operable with the control plane fully down; recovery never transits the failed system.
+- **Lose the root, or the catalog signing key, to a single person or a single key.** *Newly hardened
+  (Inv 13):* root and signing authority are M-of-N. No single human, no single key.
+- **Make Git the new SPOF.** One shared manifest store; if it's down, every reconcile is blind. *Partly
+  foreclosed, partly newly hardened:* desired state is per-domain (Git is a role, not shared infra), and
+  Inv 12's fail-static rule means the reconciler keeps converging to its last-good generation when the
+  store is unreachable.
 
 ## Kill-path 5 — Make Trellis observe a lie
 
 - **Spoof telemetry** so the reconciler believes "converged" when it isn't (stops healing) or "drifted"
-  when it isn't (stomps good state). **➕ newly hardened (Inv 15):** observed signals are **authenticated**;
-  unauthenticated or anomalous telemetry is treated as **Unknown, never trusted** ([Inv 7](/trellis/docs/spec));
-  a destructive converge needs **corroborating** signals, not one source.
-- **Break the read path so the console shows green during a real outage** — operators blind exactly when it
-  matters. **➕ newly hardened (Inv 15):** Trellis **observes itself** on an independent channel, so a
-  broken or lying telemetry path is itself visible. **No component is the sole verifier of its own
-  correctness** — the checker sits outside the blast radius.
+  when it isn't (stomps good state). *Newly hardened (Inv 15):* observed signals are authenticated;
+  unauthenticated or anomalous telemetry is treated as Unknown, never trusted
+  ([Inv 7](/trellis/docs/spec)); a destructive converge needs corroborating signals, not one source.
+- **Break the read path so the console shows green during a real outage,** blinding operators exactly
+  when it matters. *Newly hardened (Inv 15):* Trellis observes itself on an independent channel, so a
+  broken or lying telemetry path is itself visible. No component is the sole verifier of its own
+  correctness; the checker sits outside the blast radius.
 
 ## Kill-path 6 — Erode governance from the top
 
-- **Hold root and quietly loosen the SCP floor** — the "can't be escaped" guardrail is escapable by
-  whoever holds root. **➕ newly hardened (Inv 14):** loosening the org governance floor is itself a
-  **reflexive, highest-gate, dual-controlled, externally-audited** change ([§16](/trellis/docs/spec)) —
-  never a single root action.
+- **Hold root and quietly loosen the SCP floor.** The "can't be escaped" guardrail is escapable by
+  whoever holds root. *Newly hardened (Inv 14):* loosening the org governance floor is itself a
+  reflexive, highest-gate, dual-controlled, externally-audited change ([§16](/trellis/docs/spec)), never
+  a single root action.
 
 ## Kill-path 7 — Run out of authority mid-change
 
-- **Hand the actuator a credential that expires mid-apply** — a long migration or a slow provider
+- **Hand the actuator a credential that expires mid-apply.** A long migration or a slow provider
   operation (a database or cluster taking 20+ minutes) outlives the plan-scoped credential's lifetime,
-  leaving reality half-changed. **➕ newly hardened (Inv 16):** an apply is **leased**. A step never starts
-  unless its worst-case duration fits the credential's remaining lifetime plus a buffer — otherwise the
-  actuator **re-mints a fresh credential, waits for one, or refuses and flags**, never start-and-hope. And
-  because every step is **idempotent and reversible**, a credential that *does* expire mid-flight can only
-  leave a **resumable** state, never a half-applied one. Unavoidably long provider operations are
-  **initiate-then-poll under a refreshed lease**, the operation itself idempotent. (The credential in question is the plan-scoped
-  ephemeral mint credential of [Inv 4](/trellis/docs/spec) — the actuator's short-lived STS session — not
-  the auto-rotated workload identity.)
+  leaving reality half-changed. *Newly hardened (Inv 16):* an apply is leased. A step never starts
+  unless its worst-case duration fits the credential's remaining lifetime plus a buffer; otherwise the
+  actuator re-mints a fresh credential, waits for one, or refuses and flags, never start-and-hope. And
+  because every step is idempotent and reversible, a credential that does expire mid-flight can only
+  leave a resumable state, never a half-applied one. Unavoidably long provider operations are
+  initiate-then-poll under a refreshed lease, the operation itself idempotent. (The credential here is
+  the plan-scoped ephemeral mint credential of [Inv 4](/trellis/docs/spec), the actuator's short-lived
+  STS session, not the auto-rotated workload identity.)
 
 ## The residuals — bounded, not eliminated
 
 Inversion hardens; it doesn't make a system invincible. Each former residual now has an invariant; what
-*genuinely* remains is named honestly:
+genuinely remains is named plainly:
 
-- **The compiler bet is shrunk, not gone.** A Posture→Structure compiler can emit a subtly wrong Structure
-  that *passes* its proof — a proof shows internal consistency, not real-world correctness. **Invariant 17**
-  now requires, above a blast-radius threshold, a **second independent planner to reproduce the same
-  realized diff** plus **named real-world checks** (quota, residency, dependency-criticality,
-  re-validate-against-observed) — the checker outside the blast radius, applied to the planner. That closes
-  the easy failures; the honest remainder is that two implementations can share a blind spot, or the
-  blueprint itself can be wrong. Still the genuine research risk — now **bounded, not solved.**
-- **Social defeat — now Invariant 18.** A proof nobody reads is magic by another name; alarm fatigue and
-  rubber-stamping defeat any *uniform* gate. **Invariant 18** rations attention by blast radius — trivial,
+- **The compiler bet is shrunk, not gone.** A Posture→Structure compiler can emit a subtly wrong
+  Structure that passes its proof, because a proof shows internal consistency, not real-world
+  correctness. Invariant 17 now requires, above a blast-radius threshold, a second independent planner
+  to reproduce the same realized diff, plus named real-world checks (quota, residency,
+  dependency-criticality, re-validate-against-observed) — the checker outside the blast radius, applied
+  to the planner. That closes the easy failures; the remainder is that two implementations can share a
+  blind spot, or the blueprint itself can be wrong. Still the genuine research risk, now bounded rather
+  than solved.
+- **Social defeat — now Invariant 18.** A proof nobody reads is no proof at all; alarm fatigue and
+  rubber-stamping defeat any uniform gate. Invariant 18 rations attention by blast radius: trivial,
   reversible, in-catalog changes run under a standing, human-authored auto-merge policy, while
-  high-blast-radius changes **escalate** (independent second, dual-control) — and makes **proof legibility
-  a hard gate** (an unreadable proof fails). The honest remainder: someone still has to set the policy well
-  and write legible proofs. Design removes the structural trap; discipline keeps it removed.
+  high-blast-radius changes escalate (independent second, dual-control), and proof legibility is a hard
+  gate (an unreadable proof fails). The remainder: someone still has to set the policy well and write
+  legible proofs. Design removes the structural trap; discipline keeps it removed.
 - **Economic re-centralization — now Invariant 19.** If running N control planes costs too much, teams
-  collapse them back into one SPOF. **Invariant 19** keeps each instance **near-stateless and
-  scale-to-zero** (so N cost ≈ one mostly-idle one) and surfaces its **own cost as a first-class signal** —
-  the temptation is visible and governed, not silent. The honest remainder: a determined org can still
+  collapse them back into one SPOF. Invariant 19 keeps each instance near-stateless and scale-to-zero
+  (so N cost is close to one mostly-idle one) and surfaces its own cost as a first-class signal, so the
+  temptation is visible and governed rather than silent. The remainder: a determined org can still
   choose to re-centralize; the invariant makes that a deliberate, costed decision rather than a default
   drift.
 
@@ -155,4 +157,4 @@ Folded into the normative spec ([§17](/trellis/docs/spec), 11–19):
 | 18 | **Gate rigor scales to blast radius; the proof must be legible** — ration attention, escalate the significant, fail unreadable proofs | Social defeat: alarm fatigue, rubber-stamping |
 | 19 | **The control plane is cheap by construction; its cost is a first-class signal** — near-stateless, scale-to-zero, cost observed | Economic pressure to re-centralize into one SPOF |
 
-In one line: **we found where Trellis would die, and built so it can't go there.**
+We found where Trellis would die, and built so it can't go there.
