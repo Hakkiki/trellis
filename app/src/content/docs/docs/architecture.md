@@ -11,16 +11,21 @@ this simulator. The simulator implements the spec, and building it is partly how
 The whole engine hinges on a single seam. The control loop — state model, reconciler, planner — talks
 only to a `Provider` interface.
 
-```
-   CONTROL LOOP  (provider-neutral)
-   posture → planner → structure
-   state = f(desired, observed, health)
-   reconciler (converge toward desired)
-            │  Provider  (the port)
-            │  apply / delete / observe / observeAll
-      ┌─────┴─────┐
-   SimCloud      (a real cloud, later)
-   (today)
+```mermaid
+flowchart TB
+  subgraph LOOP["CONTROL LOOP — provider-neutral"]
+    direction LR
+    P["posture → planner → structure"]
+    ST["state = f(desired, observed, health)"]
+    RC["reconciler<br/>(converge toward desired)"]
+  end
+  PORT{{"Provider — the port<br/>apply · delete · observe · observeAll"}}
+  SIM[("SimCloud<br/>(today)")]
+  REAL[("a real cloud<br/>(later)")]:::later
+  LOOP --> PORT
+  PORT --> SIM
+  PORT -.-> REAL
+  classDef later fill:#c8a04024,stroke:#c8a040,stroke-dasharray:4;
 ```
 
 Going from demo to production is "add a provider," not "rewrite the core." That is the spec's provider

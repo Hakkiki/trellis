@@ -3,8 +3,15 @@ title: The reconcile loop
 description: The one law, the four action classes, and self-healing.
 ---
 
-```
-solve → PLAN (+ proof) → human approves → apply → reconcile → (drift / change) → re-solve
+```mermaid
+flowchart LR
+  SOLVE([solve]) --> PLAN["PLAN<br/>(+ proof)"]
+  PLAN --> APPROVE{{human approves}}
+  APPROVE --> APPLY[apply]
+  APPLY --> RECONCILE[reconcile]
+  RECONCILE -->|drift / change| SOLVE
+  classDef gate fill:#c8a04024,stroke:#c8a040,stroke-width:2px;
+  class APPROVE gate;
 ```
 
 The human-approves-the-plan step is the platform's one gate. Prior approval never carries forward to a
