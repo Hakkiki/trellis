@@ -5,6 +5,16 @@ The simulator deploys continuously from `main`, so entries are grouped by date r
 
 ## Unreleased
 
+### Fixed
+
+- **Mermaid diagrams no longer render as invisible empty boxes.** When the lazy-loaded Mermaid chunk
+  failed to load or run — a blocked/proxied desktop, a stale cached page pointing at an old chunk hash,
+  a flaky connection, or an older browser engine — the diagram source stayed in the DOM but the
+  "hide until rendered" CSS kept it permanently transparent, leaving a blank panel whose text was only
+  visible when selected. The runtime now renders each diagram independently (one bad block can't blank
+  the rest), retries the chunk import once, and falls back to showing the diagram source legibly (with
+  a safety-net timeout) so a diagram can never end up invisible-but-present.
+
 ### Added
 
 - **Roles & responsibilities — a day in the life.** A new page mapping the nine personas (Platform Owner,
