@@ -22,14 +22,28 @@
   text-align: center;
   line-height: normal;
 }
-/* Hide the raw source until the runtime has rendered the SVG (avoid a flash). */
-.mermaid:not([data-processed]) {
+/* Hide the raw source until the runtime has rendered the SVG (avoid a flash).
+   Crucially this only applies while a render is still expected: the runtime
+   marks a block [data-mermaid-error] if it can't render it (failed/blocked
+   chunk load, parse error, unsupported browser) so the source is shown legibly
+   instead of an invisible-but-selectable empty box. */
+.mermaid:not([data-processed]):not([data-mermaid-error]) {
   color: transparent;
   min-height: 3rem;
 }
 .mermaid svg {
   max-width: 100%;
   height: auto;
+}
+/* Fallback: the SVG couldn't be produced — show the diagram source readably
+   rather than a blank panel, so the content is never lost. */
+.mermaid[data-mermaid-error] {
+  text-align: left;
+  white-space: pre;
+  overflow-x: auto;
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  font-size: 0.8125rem;
+  color: var(--sl-color-gray-2);
 }
 
 /* --- Interactive diagram viewer (diagram-viewer.ts) ------------------------ */
