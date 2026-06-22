@@ -14,23 +14,24 @@ won't give up.
 
 ### 1. One team's bad day should stay one team's bad day
 
-When everyone shares the same systems, one team's mistake becomes everyone's outage. One wrong command from
-someone who never should have had the keys, and the whole company is down. So Trellis gives each team its
-own setup, walled off from the rest. Now when something breaks, it breaks in one place.
+A failure should stay where it starts. Share the same systems and it never does: one wrong move from
+someone who never should have had that access takes out a team, then an org, then the whole company. So box
+every failure inside its own team or org. Then a break stays a break in one place, not a company-wide
+outage.
 
 ### 2. The danger is the jump, not the landing
 
-Two setups can both be perfectly healthy, and the move between them can still take you down. The switch
-itself is where things break. You can't rebuild a running database in place. You stand up a new one, copy the data
-over, move the traffic, then retire the old. So Trellis doesn't just pick the end state. It plans a safe
-route there: small steps, and you can undo each one if it goes wrong.
+Every change to a running system moves it from one working state to another, and both ends can be perfectly
+safe while the move between them is not. The risk lives in the change itself, not the before or the after.
+You can't swap a database under live traffic and hope. So never jump to the new state. Get there in small
+steps, each one safe on its own, each one you can undo.
 
 ### 3. Where you draw the line decides what fails together
 
-How much goes down when something breaks depends on where you put the walls. Put two teams in the same
-Kubernetes cluster and they share one fate: when the cluster goes, they both go. Give each team its own
-account and they fail on their own. Where you put the wall is the whole decision. There's nothing else to
-set.
+Anything inside the same boundary fails together. When one part goes, all of it goes. So the boundary you
+draw is the size of your worst outage. Put many teams inside one and a single failure takes them all. Give
+each team its own and a failure stays with that team. There's no separate dial for how much can fail at
+once. You set that when you decide where the boundary goes.
 
 ### 4. Trellis has to follow its own rules
 
@@ -41,43 +42,44 @@ the exception.
 
 ### 5. Only a human moves the goalposts
 
-Don't count on anyone at 2 a.m. Your job is forty hours a week, not the pager going off at three. So the
-machine does the tireless work: it watches everything, fixes what slips, and holds the line all night. But
-it only ever steers toward what a person already decided. People decide what should be true. The system
+Off hours, people are off living their lives. A system that needs someone awake at 2 a.m. to stay healthy is
+a system you built wrong. Plan for that. Don't blame them for it. So the machine does the tireless work on
+its own: it watches everything, fixes what slips, and holds the line all night. But it never invents the
+goal. It only steers toward what a person already decided. People decide what should be true. The machine
 keeps it true.
 
 ### 6. Every change shows its work
 
-A plan should be an argument you can check, not a claim you just trust. Every piece of it points back to a
-reason: why this exists, and what allowed it. So you approve the reasoning, not just the result. Nothing
-reaches your cloud that the plan can't explain.
+Don't change anything just because you trust it. Every change has to show why it exists and what allowed it.
+You approve the reasoning, not just the result. A change that can't explain itself doesn't happen.
 
 ### 7. A plan that can't be built tells you why
 
-Ask for something that won't fit, like full redundancy on a tiny budget, and Trellis won't quietly hand you
-something close and let you assume it's what you asked for. It stops. It tells you what's blocking it, and
-what would clear the block: *add $500 and this becomes possible.* A tool that hides what it can't do can't
-be trusted with what it can.
+When a system can't do what you asked, it owes you a straight answer. The dangerous move is the quiet one:
+handing you something close and letting you believe it's what you wanted. So a plan that can't be built says
+so out loud. It names what's blocking it, and what would change the answer: raise the budget by $500 and it
+fits. If a tool hides what it can't do, don't trust what it can.
 
 ### 8. Safety rules are walls, not dials
 
-Trade cost against reliability, or speed against budget; those choices are yours. But the security and
-compliance rules are not on the table. Trellis checks them first and throws out any plan that breaks them,
-before cost or speed get a say. You build inside those walls. You don't bargain with them.
+Some things you trade. Cost against reliability, speed against budget: those calls are yours. Security and
+compliance are not on that list. You don't loosen a safety rule to make a plan cheaper or faster. It holds
+no matter what else has to give. Build inside those walls. Don't bargain with them.
 
-### 9. Break-glass buys time, never permission
+### 9. Break glass to act now, not to skip the rules
 
-Sometimes the normal process can't run and something's on fire, so someone breaks the glass. Two people sign
-off, and the override changes things right now. It comes with a debt: once the fire's out, you either make
-the change official the normal way or you undo it. Recovering from one of these can take days, and the
-people at home pay for that week too. It's a last resort, not a shortcut.
+When the normal process can't run and something's on fire, you need to act right now. So you break the
+glass: an emergency override, signed by two people, that changes things this second. It doesn't make the
+change approved. Once the fire's out, you owe an answer: make it official the normal way, or undo it.
+Recovering from one of these can take days, and the people at home pay for that week too. It's a last
+resort, not a shortcut.
 
 ### 10. You set how much it matters; the system sets the rest
 
-Cheap is only cheap until you count what it costs you later. The bargain that dies in three years costs more
-than the tool that lasts seventeen. So instead of pricing every piece, you say how much each one matters.
-Call a service business-critical and Trellis spreads it across data centers and locks it down. Call a
-throwaway tool low and it stays small and cheap. You set the importance, and the cost and the design follow.
+Cheap is only cheap until you count what it costs you later. A bargain that dies in three years costs more
+than the tool that lasts seventeen. So price nothing in a vacuum. Decide how much a thing matters, and let
+its protection and its cost follow from that. What matters most earns real protection and real money. What
+barely matters stays small and cheap. Set the importance once, and the rest falls in line.
 
 ### 11. If you can't follow the plan, you can't approve it
 
@@ -88,10 +90,11 @@ argument, the approval didn't really happen.
 
 ### 12. Self-service shouldn't mean self-operate
 
-Hand people their own cloud before they're ready and disaster follows. The sharp ones know it, so they say
-no, and they're right to. You earn their yes by making it safe: put training wheels on the bike, and run
-alongside to catch it when a wheel wobbles. Each team gets a full set of tools, and Trellis keeps them
-running, with nothing to babysit. You set the guardrails. They drive.
+Letting people use their own infrastructure is not the same as making them run it. Hand someone a system
+they're not ready to operate and you've set them up to fail, and the sharp ones refuse it for exactly that
+reason. So earn their yes by making it safe: training wheels on the bike, and someone running alongside to
+catch it when a wheel wobbles. Let them use it and steer it. Don't make them keep it alive. You set the
+guardrails. They drive.
 
 ## Go deeper
 

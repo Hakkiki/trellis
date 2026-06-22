@@ -7,6 +7,14 @@ The simulator deploys continuously from `main`, so entries are grouped by date r
 
 ### Changed
 
+- **Principles rewritten in principle voice, plain English.** Reworked all twelve so each reads as a
+  conviction rather than a feature description: lead with the rule, drop "Trellis does X" narration, cut
+  insider shorthand and stray metaphors ("the keys"), and put the threat at the right scale (a failure can
+  climb from a team to an org to the whole company). Also retitled #9 from the riddle-ish "Break-glass buys
+  time, never permission" to the plain "Break glass to act now, not to skip the rules," reframed #5 around
+  planning for people being off rather than assigning blame, and held the line on active voice, no em-dash
+  tells, and reading well out loud.
+
 - **Blast radius is now a guided "three false hopes" walkthrough.** The page no longer toggles between a
   shared service and a sliced one — that framed blast radius as a topology choice and left it all-or-nothing.
   Instead it walks one bad change through five beats with a blast-radius counter (and a trail of its past
