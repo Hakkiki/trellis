@@ -1034,8 +1034,15 @@ compete.
 
 ## 9. The reconcile loop and reconciler safety
 
-```
-solve → PLAN (+ proof) → human approves → apply → reconcile → (drift / manifest change) → re-solve
+```mermaid
+flowchart LR
+  SOLVE([solve]) --> PLAN["PLAN<br/>(+ proof)"]
+  PLAN --> APPROVE{{human approves}}
+  APPROVE --> APPLY[apply]
+  APPLY --> RECONCILE[reconcile]
+  RECONCILE -->|drift / manifest change| SOLVE
+  classDef gate fill:#c8a04024,stroke:#c8a040,stroke-width:2px;
+  class APPROVE gate;
 ```
 
 - The **human-approves-the-plan** step is the platform's one gate — at a **rigor that scales with blast

@@ -7,6 +7,12 @@ The simulator deploys continuously from `main`, so entries are grouped by date r
 
 ### Changed
 
+- **Three ASCII text diagrams converted to themed Mermaid.** The provider-port seam (Architecture), and
+  the reconcile loop (Reconcile page + spec §9) are now live, on-brand Mermaid diagrams instead of
+  monospace box-art — the reconcile loop now draws its actual cycle with the human-approval gate
+  highlighted. Remaining text fences (the objective program, the privilege ladder, and the `state = f(…)`
+  / authorization formulas) stay as text: they're math/annotated notation, not node-edge graphs.
+
 - **Docs review: fewer pages, plainer voice.** Red-teamed the docs site and cut it to pages that earn
   their keep. Merged "The case", "Why Trellis — use case", and the overview into one `Why Trellis`
   narrative (`docs/the-case`); removed the now-empty `docs/use-case` and `docs/overview` pages and
