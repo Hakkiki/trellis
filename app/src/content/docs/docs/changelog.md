@@ -9,6 +9,21 @@ What's shipped to the live simulator, newest first. The footer shows the exact b
 
 Red-teamed the docs and cut them back to pages that earn their keep. The old "The case" and "Why Trellis — use case" pages, plus the overview, are merged into a single [Why Trellis](/trellis/docs/the-case) narrative. The sidebar is regrouped into Start here, The model, Architecture & decisions, and Reference. The per-page genre banners are gone, the FAQ no longer re-derives the bootstrap and security pages, and every page is rewritten in plain, active voice with far less bold and fewer em-dashes.
 
+## Diagrams you can open, zoom, and read as journeys
+
+Every Mermaid diagram now carries a small toolbar: **open it full-screen** (great in landscape on a
+phone) and **view/copy its source**. The full-screen view supports pan and zoom everywhere — pinch and
+drag on touch, wheel-zoom and click-drag on desktop, double-tap to reset. The
+[Roles](/trellis/docs/roles) page also gains three **user-journey** diagrams (the service engineer's,
+the operator's, and the break-glass responder's day) as an easier-to-read companion to the sequence
+diagrams.
+
+We also red-teamed the diagrams against the spec: the responsibility map had drawn the second
+write-path into a division's cloud as an external-vendor "break-glass," which contradicts the model
+(break-glass is the responder's, and dual-controlled). It now correctly shows the two write paths as the
+**reconciler** and the **break-glass responders**, with vendors routed through the loop as ephemeral,
+scoped credentials. (And a CI gate now parses every diagram, so a broken one can't ship again.)
+
 ## Roles & responsibilities — a day in the life
 
 New [Roles & responsibilities](/trellis/docs/roles) page covering nine personas (platform owner, security/governance author, division lead, platform operator, service teams, break-glass responders, auditor, FinOps, external vendor), each with its mandate, boundaries, and a day-in-the-life, told through six Mermaid diagrams. Throughline: many author and approve; one loop (plus sealed break-glass) writes, contained to its division.

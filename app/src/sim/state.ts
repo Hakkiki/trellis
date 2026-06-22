@@ -8,6 +8,9 @@ export type Control = "Settled" | "Reconciling" | "Stalled" | "Frozen";
 export type State =
   | "Unknown"
   | "Converged"
+  // Intentionally parked to save cost (docs: Cost & parity) — a good steady
+  // state, not down and not drift; the reconciler holds, never wakes it.
+  | "Dormant"
   | "Converging"
   | "Drifted"
   | "Degraded"
@@ -23,6 +26,7 @@ export type State =
 
 export const ALL_STATES: State[] = [
   "Converged",
+  "Dormant",
   "Converging",
   "Drifted",
   "Degraded",
@@ -41,6 +45,9 @@ export function stateColorVar(s: State): string {
     case "Converging":
     case "Running":
       return "var(--state-converging)";
+    case "Dormant":
+      // Intentionally suspended — reuse the calm "held" token, not an alarm color.
+      return "var(--state-frozen)";
     case "Degraded":
       return "var(--state-degraded)";
     case "Drifted":
@@ -63,6 +70,9 @@ export function stateColorVar(s: State): string {
 const SEVERITY: Record<State, number> = {
   Converged: 0,
   Succeeded: 0,
+  // Parked is a good steady state — benign, but visible in a roll-up so a frame
+  // with idle capacity reads "Dormant" rather than masquerading as fully live.
+  Dormant: 1,
   Pending: 1,
   Running: 1,
   Unknown: 2,
@@ -141,6 +151,15 @@ export function derive(
   if (d.lifecycle === "external") return deriveExternal(o);
 
   if (control === "Frozen") return "Frozen";
+
+  // Intentionally parked to save cost (docs: Cost & parity). Checked before the
+  // sync/health/quorum classification so a paused DB (quorum 0) or a scaled-to-
+  // zero service reads Dormant, never Unavailable/Degraded — and never drift.
+  if (o.dormant) return "Dormant";
+
+  // Warming back up after a park (cold start, docs: Cost & parity guardrail 4) —
+  // benign progress toward live, not drift. The reconciler holds while it warms.
+  if (o.resuming) return "Converging";
 
   const sync = classifySync(d, o, nowMs, stalenessBudgetMs);
 

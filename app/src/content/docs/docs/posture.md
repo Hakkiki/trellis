@@ -29,4 +29,13 @@ Precedence is explicit. An operator's explicit `optimize:` declaration overrides
 preset, which overrides the system default.
 
 Try it in the [simulator](/trellis/simulator/): switch C0 to C3 and re-plan to see the structure and
-cost move together. The [specification](/trellis/docs/spec) is the normative version of all of this.
+cost move together.
+
+## Cost without losing parity
+
+Lower environments cost less by parking idle capacity, not by shrinking the shape, so dev stays
+prod-like while still saving money. Two utilization levers (`elasticity` for stateless compute,
+`dormancy` for stateful services) realize the Budget objective without touching the Resilience shape. See
+[Cost & parity](/trellis/docs/cost-and-parity).
+
+The [specification](/trellis/docs/spec) is the normative version of all of this.

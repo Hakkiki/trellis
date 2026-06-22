@@ -53,4 +53,31 @@ describe("promotion fleet", () => {
     f.tick();
     expect(env(f, "dev").drifted).toBe(true);
   });
+
+  it("every environment shares the same desired shape (parity holds)", () => {
+    const f = new Fleet();
+    f.cutVersion();
+    settle(f);
+    f.promote("staging");
+    settle(f);
+    f.promote("prod");
+    settle(f);
+    expect(f.snapshot().parity.ok).toBe(true);
+    expect(f.snapshot().parity.violations).toHaveLength(0);
+  });
+
+  it("a more aggressive environment bills less for the identical shape", () => {
+    const f = new Fleet();
+    f.cutVersion();
+    settle(f);
+    f.promote("staging");
+    settle(f);
+    f.promote("prod");
+    settle(f);
+    const cost = (id: string) => env(f, id).costNow;
+    // Same shape → same provisioned ceiling (budget); dev just parks more.
+    expect(env(f, "dev").budget).toBe(env(f, "prod").budget);
+    expect(cost("dev")).toBeLessThan(cost("prod"));
+    expect(cost("staging")).toBeLessThan(cost("prod"));
+  });
 });
