@@ -66,6 +66,52 @@ The simulator deploys continuously from `main`, so entries are grouped by date r
 
 ### Added
 
+- **Third-party integrations brainstorm.** A new `docs/third-party-integrations.md` exploring how Trellis
+  makes deploying and governing vendor software easy — today a bespoke, ticket-driven snowflake per vendor.
+  Organized on the **open-loop vs closed-loop** spine (closed = a Service/Component from an external supply
+  chain we run, scan, and reconcile; open = an **External** node we govern only at the boundary), with: the
+  deployment-model zoo (Helm · AMI/non-idiomatic EC2 · AWS-service-backed · hybrid agent+SaaS · pure SaaS);
+  a single declared **Integration Profile** the planner compiles into network plumbing + least-priv
+  exceptions + a data contract + the supply-chain gate; network posture (PrivateLink > peering > public
+  allowlist); **traffic inspection as a `required-or-prove` posture** with provable compensating controls
+  where MITM is infeasible; a residency-checked **data-exchange contract**; **artifact scans + CVE** for
+  closed-loop artifacts and **attestation** for open-loop SaaS; gated, expiring, provable **capability
+  exceptions**; and the two-plane trap (a vendor must never become a Plane-1 synchronous dependency, R13).
+  Linked from `docs/README.md`. Brainstorm, not yet spec.
+
+- **Implementation-readiness & phasing assessment.** A new `docs/implementation-readiness.md` answering the
+  pre-funding questions the spec/buildability docs left implicit: a readiness verdict (ready — fund the thin
+  real-AWS slice, not the whole platform), the seven *implementation-level* open questions (led by the
+  build-standalone-vs-Crossplane substrate fork), an explicit **must/should/nice** breakdown of the §18
+  capability buckets and §19 scope, a **market-first phasing** that front-loads the two uncontested
+  differentiators (plan-as-proof + change-scoped credentials) so the wedge is demoable in months, a monthly
+  **AWS cost model** for building + testing (~$500 lean to ~$2.5k realistic, with the dominant drivers and
+  levers named), and the two-layer **guardrails** (spec-native budget-constraint + circuit-breakers +
+  least-privilege, plus AWS Budgets Actions / SCPs / anomaly-detection / ephemeral-teardown) — noting the
+  guardrails are the same machinery Trellis ships, so building them is dogfooding. Also captures a
+  **tech-stack** recommendation (Go spine · gRPC/protobuf fleet wire · Python solver · Node/TS console —
+  unsettled, downstream of the Crossplane fork and the planner-language reproducibility tradeoff) and a
+  **tiered test strategy** (Tier 0 pure-logic / Tier 1 LocalStack+Testcontainers / Tier 2 ephemeral real
+  AWS) with an honest map of what mocks are structurally blind to (IAM enforcement, eventual consistency,
+  quotas, cross-account trust, real cost). Adds a **day-one capability map** (§4) organized by theme into
+  two arcs — *leverage on day one* (declare/provision, compute, data, connectivity, delivery, observe) and
+  the *security "say-yes" surface* (identity/secrets, guardrails & policy, supply-chain, compliance/audit,
+  break-glass) — each row tagged **M/S/L** so it doubles as a Phase-1 adoption checklist, with a
+  self-service/say-yes test that names the "self-operated masking as self-service" anti-pattern and the
+  auto-merge-below-floor lever (Inv 18) that forecloses it. Adds a **two-plane model** (§3) separating
+  *Trellis's own stack* (Plane 1 — control-plane subsystems + the tech they're built from) from the
+  *app-team delivery stack* (Plane 2 — batteries + blueprints teams consume), with the "one rule" (never
+  let a Plane-2 workload tool become a Plane-1 control-plane dependency — the general form of the
+  reject-MSK-as-the-event-bus finding), a same-tool-two-roles table, and the insight that the
+  agnostic-vs-best-in-class tension resolves *per plane* (decisive in Plane 1, pluralistic in Plane 2).
+  **Red-teams the assessment with a Munger
+  inversion** (§10): twelve kill-paths for "follow this doc and guarantee the build fails," scored
+  guarded / partial / GAP — nine GAPs patched back into the relevant sections (the headline: the AWS cost
+  is the doc's most dangerous number because a funder may read it as build cost, when payroll is ~1000×
+  larger; plus demo-theater vs. real-cloud Phase-1 exit criteria, explicit kill/no-go criteria, the
+  persistent-org-substrate and bootstrapping-guardrails cost caveats, the perishable-white-space risk, and
+  re-rating the Crossplane fork and the wedge-customer question). Linked from `docs/README.md`.
+
 - **Principles — the twelve convictions.** A new front-of-house page stating, in plain spoken language,
   why Trellis is shaped the way it is: containment as the spine, the path-not-just-target view of safe
   change, the boundary-is-the-guarantee rule, the enforcer that obeys its own rule, the one law (only a
