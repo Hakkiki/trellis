@@ -22,13 +22,174 @@
   text-align: center;
   line-height: normal;
 }
-/* Hide the raw source until the runtime has rendered the SVG (avoid a flash). */
-.mermaid:not([data-processed]) {
+/* Hide the raw source until the runtime has rendered the SVG (avoid a flash).
+   Crucially this only applies while a render is still expected: the runtime
+   marks a block [data-mermaid-error] if it can't render it (failed/blocked
+   chunk load, parse error, unsupported browser) so the source is shown legibly
+   instead of an invisible-but-selectable empty box. */
+.mermaid:not([data-processed]):not([data-mermaid-error]) {
   color: transparent;
   min-height: 3rem;
 }
 .mermaid svg {
   max-width: 100%;
   height: auto;
+}
+/* Fallback: the SVG couldn't be produced — show the diagram source readably
+   rather than a blank panel, so the content is never lost. */
+.mermaid[data-mermaid-error] {
+  text-align: left;
+  white-space: pre;
+  overflow-x: auto;
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  font-size: 0.8125rem;
+  color: var(--sl-color-gray-2);
+}
+
+/* --- Interactive diagram viewer (diagram-viewer.ts) ------------------------ */
+
+/* The client wraps each rendered diagram in <figure class="diagram"> so the
+   toolbar can sit over the top-right corner of the panel. */
+.diagram {
+  position: relative;
+  margin: 1.75rem 0;
+}
+.diagram .mermaid {
+  margin: 0;
+}
+
+.diagram__toolbar {
+  position: absolute;
+  top: 0.55rem;
+  right: 0.6rem;
+  z-index: 2;
+  display: flex;
+  flex-direction: column; /* stacked, like map zoom controls */
+  align-items: center;
+  gap: 0.4rem;
+  opacity: 0.55;
+  transition: opacity 0.15s ease;
+}
+/* Inline toolbar buttons are icon-only: identical, centred squares. */
+.diagram__toolbar button {
+  width: 2rem;
+  height: 2rem;
+  margin: 0; /* defeat any inherited markdown-flow spacing */
+  padding: 0;
+  justify-content: center;
+}
+.diagram__toolbar button svg {
+  width: 18px;
+  height: 18px;
+}
+.diagram:hover .diagram__toolbar,
+.diagram:focus-within .diagram__toolbar {
+  opacity: 1;
+}
+
+/* Shared button look for the toolbar and the overlay bar. */
+.diagram__toolbar button,
+.diagram-overlay button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.32rem 0.45rem;
+  color: var(--sl-color-accent-high);
+  background: color-mix(in oklab, var(--sl-color-accent) 12%, var(--sl-color-bg));
+  border: 1px solid color-mix(in oklab, var(--sl-color-accent) 40%, transparent);
+  border-radius: 0.5rem;
+  font: inherit;
+  font-size: 0.8rem;
+  line-height: 1;
+  cursor: pointer;
+}
+.diagram__toolbar button:hover,
+.diagram-overlay button:hover {
+  background: color-mix(in oklab, var(--sl-color-accent) 24%, var(--sl-color-bg));
+}
+
+/* Full-screen overlay. */
+body.diagram-overlay-open {
+  overflow: hidden;
+}
+.diagram-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  display: flex;
+  flex-direction: column;
+  background: color-mix(in oklab, var(--sl-color-bg) 90%, #000);
+  backdrop-filter: blur(3px);
+}
+.diagram-overlay[hidden] {
+  display: none;
+}
+.diagram-overlay__bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.55rem 0.75rem;
+  border-bottom: 1px solid color-mix(in oklab, var(--sl-color-accent) 26%, var(--sl-color-gray-5));
+  background: color-mix(in oklab, var(--sl-color-accent) 5%, var(--sl-color-bg));
+}
+.diagram-overlay__tabs {
+  display: flex;
+  gap: 0.3rem;
+}
+.diagram-overlay__tabs button.is-active {
+  background: color-mix(in oklab, var(--sl-color-accent) 28%, var(--sl-color-bg));
+  border-color: var(--sl-color-accent);
+}
+.diagram-overlay__actions {
+  display: flex;
+  gap: 0.4rem;
+}
+.diagram-overlay__body {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+}
+.diagram-overlay__viewport {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  touch-action: none; /* we own pan/zoom gestures */
+  cursor: grab;
+}
+.diagram-overlay__viewport:active {
+  cursor: grabbing;
+}
+.diagram-overlay__content {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  box-sizing: border-box;
+  transform-origin: 0 0;
+  will-change: transform;
+  padding: 0.5rem;
+}
+.diagram-overlay__content svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  max-width: none;
+}
+.diagram-overlay__code {
+  position: absolute;
+  inset: 0;
+  margin: 0;
+  overflow: auto;
+  padding: 1.25rem 1.5rem;
+  background: var(--sl-color-bg);
+  white-space: pre;
+  font-size: 0.85rem;
+}
+.diagram-overlay:not([data-mode="code"]) .diagram-overlay__code {
+  display: none;
+}
+.diagram-overlay[data-mode="code"] .diagram-overlay__viewport {
+  display: none;
 }
 

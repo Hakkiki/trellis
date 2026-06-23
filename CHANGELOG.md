@@ -5,6 +5,65 @@ The simulator deploys continuously from `main`, so entries are grouped by date r
 
 ## Unreleased
 
+### Changed
+
+- **Three ASCII text diagrams converted to themed Mermaid.** The provider-port seam (Architecture), and
+  the reconcile loop (Reconcile page + spec §9) are now live, on-brand Mermaid diagrams instead of
+  monospace box-art — the reconcile loop now draws its actual cycle with the human-approval gate
+  highlighted. Remaining text fences (the objective program, the privilege ladder, and the `state = f(…)`
+  / authorization formulas) stay as text: they're math/annotated notation, not node-edge graphs.
+
+- **Docs review: fewer pages, plainer voice.** Red-teamed the docs site and cut it to pages that earn
+  their keep. Merged "The case", "Why Trellis — use case", and the overview into one `Why Trellis`
+  narrative (`docs/the-case`); removed the now-empty `docs/use-case` and `docs/overview` pages and
+  repointed all nav/links. Regrouped the sidebar into Start here / The model / Architecture & decisions /
+  Reference. Dropped the per-page genre banners, stopped the FAQ from re-deriving the bootstrap and
+  security pages, condensed the changelog, and rewrote every page in plain active voice with far less
+  bold and roughly two-thirds fewer em-dashes.
+
+- **Principles polish.** Retitled #1 to "One bad day shouldn't become everyone's bad day" so the heading
+  carries the same team → org → company scale as its body, and tightened #5 and #9 by a sentence each.
+
+- **Principles rewritten in principle voice, plain English.** Reworked all twelve so each reads as a
+  conviction rather than a feature description: lead with the rule, drop "Trellis does X" narration, cut
+  insider shorthand and stray metaphors ("the keys"), and put the threat at the right scale (a failure can
+  climb from a team to an org to the whole company). Also retitled #9 from the riddle-ish "Break-glass buys
+  time, never permission" to the plain "Break glass to act now, not to skip the rules," reframed #5 around
+  planning for people being off rather than assigning blame, and held the line on active voice, no em-dash
+  tells, and reading well out loud.
+
+- **Blast radius is now a guided "three false hopes" walkthrough.** The page no longer toggles between a
+  shared service and a sliced one — that framed blast radius as a topology choice and left it all-or-nothing.
+  Instead it walks one bad change through five beats with a blast-radius counter (and a trail of its past
+  values) always on screen: **shared → redundant (active-active/DR) → process (change board/freeze) →
+  partition (share-nothing) → recover**. The counter stays pinned at 100% through redundancy and process —
+  *probability levers that lower how often a bad change ships, never how far one reaches* — and only drops to
+  1/N when the architecture partitions, then to 0 on recovery from last-good. The throughline: redundancy and
+  process are probability levers; blast radius is a magnitude problem; only partitioning bounds the worst case.
+  Each fix maps to a real Trellis mechanism (staged promotion, reconcile/drift control). A new pure model
+  (`blast.ts`) makes the lesson — the settled trail `100 → 100 → 100 → 25 → 0` — unit-tested.
+
+### Fixed
+
+- **Mermaid diagrams no longer render as invisible empty boxes.** When the lazy-loaded Mermaid chunk
+  failed to load or run — a blocked/proxied desktop, a stale cached page pointing at an old chunk hash,
+  a flaky connection, or an older browser engine — the diagram source stayed in the DOM but the
+  "hide until rendered" CSS kept it permanently transparent, leaving a blank panel whose text was only
+  visible when selected. The runtime now renders each diagram independently (one bad block can't blank
+  the rest), retries the chunk import once, and falls back to showing the diagram source legibly (with
+  a safety-net timeout) so a diagram can never end up invisible-but-present.
+
+- **Cost & parity: stop saying "re-optimization," and map what effectiveness really requires.** The
+  Status section described the remaining gap as "continuous re-optimization," which smuggles optimization
+  back in as the goal — the exact framing the page repudiates. The loop's job is to **hold
+  cost-effectiveness** (regulate the cost/value ratio toward a moving setpoint), not to re-run an
+  optimizer on a timer. Reworded the offending spots, and rewrote the follow-ups as the honest **three
+  axes** effectiveness must read *through time*: temporal idle → **park** (aware of patterns, not blind —
+  we even ignore the `schedule: nightly` we already carry), low utilization → **right-size** (against
+  required headroom, the binding resource, and the load distribution — never blindly), and output →
+  **value term** (the denominator; we surface budget-vs-cost, which is numerator-only). All three surface
+  to the owner as gate-ratified proposals.
+
 ### Added
 
 - **Third-party integrations brainstorm.** A new `docs/third-party-integrations.md` exploring how Trellis
@@ -52,6 +111,384 @@ The simulator deploys continuously from `main`, so entries are grouped by date r
   larger; plus demo-theater vs. real-cloud Phase-1 exit criteria, explicit kill/no-go criteria, the
   persistent-org-substrate and bootstrapping-guardrails cost caveats, the perishable-white-space risk, and
   re-rating the Crossplane fork and the wedge-customer question). Linked from `docs/README.md`.
+
+- **Principles — the twelve convictions.** A new front-of-house page stating, in plain spoken language,
+  why Trellis is shaped the way it is: containment as the spine, the path-not-just-target view of safe
+  change, the boundary-is-the-guarantee rule, the enforcer that obeys its own rule, the one law (only a
+  human authors; everything else converges), plan-as-proof and loud failure, governance as a wall not a
+  dial, break-glass that buys time not permission, the one Criticality dial, legibility as a correctness
+  property, and self-service that isn't self-operate. Each principle's *claim is its heading*, so the
+  table of contents reads as the whole philosophy. Distilled from the spec and its invariants; linked from
+  a top-of-sidebar "Principles" group and the landing-page "Explore" grid.
+
+- **Simulator: the cost-effectiveness loop is now on screen.** The whole Cost & parity chapter — built in
+  the engine over the prior PRs — is surfaced in the simulator UI and the guided tour, which previously
+  predated all of it. The Posture form gains **cost levers** (elasticity · dormancy tiers); the **Inject**
+  panel gains **Park / Wake** (a parked resource reads Dormant, not down) and **Cold resume**; a new
+  **Value** tab shows **cost ÷ value served** (per-service value, served %, SLO %, the `ineffective` flag)
+  with accept-at-the-gate **right-sizing** proposals and a per-service demand slider; a **denial-of-wallet
+  guard** alert surfaces resume thrash with a resolve action. Demand/utilization are seeded on approve so
+  the Value tab is alive out of the box. The intro ("How to drive it", "What's included") and the tour
+  (now 10 steps, with cost-levers, park/cold-resume, and cost-vs-value) are refreshed to match. Selection
+  now reads at a glance via an **on-brand gold halo** (a thin ring + warm glow) on the highlighted
+  resource node and owner row. The **Inject** tiles now give real button feedback — an active press-scale
+  plus a momentary gold "fired" flash with a ✓ — so a click clearly registers (they were flat cards that
+  looked inert). Verified live in Chrome (cost levers, approve, Value tab, accept right-sizing → cost ÷
+  value drops, park → Dormant, the tour, the button flash) with zero console errors.
+
+- **Engine: value is served *well*, not just served (Cost & parity axis 3, SLO/quality term).** Refines
+  the value denominator: a `sloAttainment` factor discounts demand met while the serving capacity runs
+  **hot** — above ~80% utilization latency degrades toward an SLO floor at 100%. So a no-headroom service
+  keeps its quantity (`servedFraction` ≈ 1) but loses value (quality), which makes the recurring "headroom
+  isn't waste" point **quantitative**: shrinking away the slack lowers value even as it lowers cost.
+  Surfaced as `value[].sloAttainment`; value is now quantity × quality × Criticality weight. Test locks
+  that a hot service serves full quantity at reduced per-unit value vs a service with headroom.
+
+- **Engine: the value term — cost ÷ value served (Cost & parity axis 3).** The denominator that makes
+  "effective" measurable. `engine.setDemand()` feeds the demand offered to a Service; each tick the engine
+  records how much its *serving* compute actually met (parked, cold, or degraded compute serves nothing;
+  under-capacity serves only what it can), weighted by Criticality. The headline is no longer
+  numerator-only: `snapshot().value` and `costPerValue` surface **cost-vs-value** (not cost-vs-budget),
+  spend that serves nothing is flagged **`ineffective`**, and the levers consult it — the autoscaler
+  **won't park a Service that's serving**, and right-sizing **won't shrink below the demand it's serving**.
+  So right-sizing a Service that serves the same demand for less money *measurably* raises effectiveness
+  (lower cost per value). Tests cover served-tracks-state, parking-drops-value, the ineffective flag, the
+  park value-consult, and right-sizing improving cost-per-value. Still open: demand/value are injected, not
+  yet inferred from real traffic/SLOs, and value is *quantity* served (a quality/SLO term is next).
+
+- **Engine: right-sizing from observed utilization (Cost & parity axis 2).** A new `rightsizing.ts`
+  recommends the smallest size that still covers a resource's observed **peak** load plus headroom — never
+  the naive "50% used = 50% waste": it sizes on the **binding resource** (`max(cpu, mem)`, so 25% CPU at
+  75% memory does not shrink), keeps **25% headroom** (cut it and the next spike breaks SLA), and sizes to
+  the windowed **peak** (a spike blocks a shrink the average would suggest). The sim grows a load model
+  (`setLoad` + a trailing-window peak); the engine surfaces proposals in `snapshot().rightSizing` and —
+  because the size *is* the parity-held shape — applies them only via `acceptRightSizing()`, an owner gate
+  action that sets a **shared** size override and re-plans, cascading with parity preserved (cost drops
+  for the same workload). Tests cover the recommender (pure) and the wired flow (telemetry-gated, refuse a
+  memory-bound shrink, size to peak not average, accept → shrink + cheaper). Still open: per-cell
+  granularity and driving the proposal from prod's utilization in the fleet.
+
+- **Engine: a temporal demand model (Cost & parity axis 1, declared half).** The autoscaler stops parking
+  blind to time. A new `schedule.ts` turns the `schedule` Trellis already carries on a Job (e.g.
+  `nightly`) into a recurring **demand window** on the job's same-Service, same-region neighbours;
+  `autoscale()` reads it to **pre-warm ahead of predicted demand** and **refuse to park into** it — so the
+  DB is no longer parked at 11:58 and cold-started by the midnight job, and a parked DB wakes *before* the
+  window so it's live when demand lands. A reactive floor still catches unpredicted demand; conservative
+  tiers stay a hands-off warm floor. Tests cover the schedule calendar (pure) and the wired behaviour
+  (refuse-to-park-into-demand, pre-warm-before-the-window). Still open: *inferring* undeclared patterns
+  (the month-end spike) from observed telemetry — the other half of axis 1.
+
+- **Engine: a demand-driven utilization loop + cold-resume + denial-of-wallet guard.** The remaining
+  [Cost & parity](https://hakkiki.github.io/trellis/docs/cost-and-parity) follow-ups land. `autoscale()`
+  runs each tick: it **parks** a parkable resource once observed idle past its **tier** threshold
+  (aggressive parks quickly; conservative never — a warm floor) and **resumes** on returning demand — so
+  parking is driven by an observed idle signal (`setIdle`), not an env label or a manual call. A **cold
+  resume** (`coldResume`) brings a resource back **Degraded** (dropped connections / cold buffers) for the
+  reconciler to self-heal — guardrail 4's failure path, tested. And a **denial-of-wallet guard**
+  (guardrail 7) detects resume thrash, **pins the resource warm**, and alerts (surfaced as `walletGuard`,
+  cleared by `resolveWalletGuard`) — because churn costs more than a warm floor. Tests cover all four
+  behaviours.
+
+- **Cost & parity: "cost-effectiveness, not cost optimization."** A new framing section on the
+  [Cost & parity](https://hakkiki.github.io/trellis/docs/cost-and-parity) page argues cost is a property
+  **held continuously**, not a saving banked once — the same reason a desired state needs a reconcile
+  loop, applied to spend. Optimization is open-loop (solve once); effectiveness is closed-loop (track a
+  moving setpoint, reject disturbances). "Effective" needs a denominator (value/outcome), and the optimum
+  *moves* with business drivers — over-optimizing even eats the slack you need to respond. The section is
+  explicit that the page's current levers are the **static, plan-time** version, and names the honest
+  reconciled model (a value term in the loop, a moving cost setpoint in Posture, demand-driven tiers) as
+  the biggest open follow-up.
+
+- **Engine: elasticity / dormancy levers + a first-class `Dormant` state.** The first slice of the
+  [Cost & parity](https://hakkiki.github.io/trellis/docs/cost-and-parity) model lands in the simulator.
+  `Posture` gains `elasticity` and `dormancy` tiers (`aggressive · balanced · conservative`), the fleet
+  cascade varies them by environment (dev aggressive → prod conservative), and `parkClass()` assigns each
+  resource its lever from the same state-bearing test the security tier uses (`cell === "data" ||
+  lifecycle === "stateful"`). A new **`Dormant` state** (via `engine.park()` / `wake()`, modelled in the
+  sim) is derived *before* any health/quorum reading, so a paused DB (quorum 0) or scaled-to-zero service
+  reads **parked, not down** — and the reconciler **holds** on it: never wakes it, never treats it as
+  drift, never trips the blast-radius breaker. A load balancer is elasticity-class but never parks; jobs
+  and external dependencies have no lever. Parked capacity counts as settled, so it doesn't break
+  convergence.
+- **Planner: the parity invariant (`parityCheck`).** A pure check that every environment shares the same
+  desired *shape* — excluding the promoted version and the utilization tier — so a lower env that runs a
+  *smaller* shape (fewer replicas, a dropped resource) is flagged, while a different release tag is not.
+  This is what keeps "more aggressive in dev" from silently decaying into "smaller in dev."
+- **Fleet: parity of shape, savings from tiers.** The promotion cascade is now a **single shape** — dev,
+  staging, and prod share the same Criticality, resilience, regions, and provisioned budget ceiling, so a
+  lower environment is the *prod topology*, not a smaller stand-in. They differ only in the version they
+  run and their elasticity/dormancy tiers. The fleet snapshot carries a live **`parity`** signal, and a
+  new `expectedCost()` (a clearly-labelled, tier-discounted duty-cycle *estimate* — never the feasibility
+  ceiling) makes dev bill less than prod for the identical shape. `promotion.md` updated to match.
+- **Resume latency (cold start).** Waking a parked resource is data-consistent but **not instant** — it
+  warms through a `Converging` window before it is live, so guardrail 4's "the DB came back" path is a
+  tested path, not a free one.
+- **Tests** lock the lot: park-class assignment, Dormant-not-down (incl. paused quorum), reconciler holds
+  and resumes, fixed LB never parks, resume latency, parity pass/fail, and the fleet (parity holds + a
+  more aggressive env bills less for the same shape).
+
+### Fixed
+
+- **Simulator: `running` version now survives a reload.** A bug: after deploying (e.g. `running v2`), a
+  page refresh reset the Owners panel to `running v1` while the audit kept the deploys — the running
+  version wasn't persisted, so on reload `approve()` re-seeded v1. Now each Service's running version and
+  next-version counter persist to IndexedDB (saved on the tick a deploy settles) and restore on load, so
+  `running` reflects the live state across reloads — including holding the last-healthy version after a bad
+  deploy rolls back. (Matches the store's intent: the sim is a stateful control plane, not a toy that
+  resets on refresh.)
+
+### Changed
+
+- **Owners panel: the rollout badge now shows canary progress.** It read `▶ Progressing v2`, which looked
+  stuck as the state oscillated `Progressing ⇄ Verifying`. It now appends the traffic share — `▶ Progressing
+  v2 · 10%` → `· 50%` → `· 100%` — so a canary reads as forward progress (`ServiceRollup.rolloutShare`).
+- **Simulator reframed to the observer model.** The rollout engine now *says* what the spec says: the
+  class that holds a Service's running version and drives its canary is `TeamRollout` (it stands in for the
+  team's own Argo/Flagger/Spinnaker), and the Engine **observes** it rather than running it
+  (`observeTeamRollouts`, audit actor `team-tool`). Behaviour is unchanged — the inner/outer separation
+  still holds (a bad deploy is the team's `RolledBack`, the reconciler never engages); only the naming and
+  comments now match the "team drives, Trellis observes" model.
+- **§11 prose pass.** Split three run-on sentences the checker flagged (the auto-merge caveat, the
+  sealed-floor narrowing, the per-environment gate) into shorter clauses that read cleanly aloud; no
+  meaning change.
+
+### Added
+
+- **Spec §11 — the deploy bridge (observer model, trust handshake, CI/CD-agnostic).** Realigns the seam to
+  how teams actually deploy. Trellis **never reads the team's git and never runs their canary**: teams
+  declare a posture (maker-checker gated) and get a `trellis.yaml` + provisioned infra, then deploy from
+  **their own CI/CD** — GitLab, GitHub, Bitbucket, any OIDC-issuing pipeline — and **notify** Trellis, which
+  **honors** the (leased) window and **observes** App-Cell health. Adds the **trust handshake**: the CI job
+  presents a short-lived **OIDC** token, Trellis verifies it and mints a credential scoped to that **App
+  Cell only**; the **deploy binding** (which identity may ship which Service) is **checker-approved**, never
+  self-asserted. The release contract (`strategy`/`steps`/`bake`/`healthy_when`) lives **in the team's
+  pipeline**, not `trellis.yaml`; Trellis observes outcomes. Includes a CI/CD-agnostic walkthrough and a
+  trust red-team (spoofed notify, cross-service write, self-granted rights, honor-abuse, token replay — each
+  closed; honest residual: Trellis sees infra-visible health, not app SLOs). Reframes Invariant 27
+  (admission via verified identity + scoped credential, not an in-path adapter) and the rollout state
+  machine (states Trellis **observes**; the team's tool drives). Completes the posture example with
+  `optimize`.
+
+### Fixed
+
+- **Owners panel is honest about who ships.** The release controls were labelled "Ship", which implied
+  teams deploy *from the Trellis UI* — backwards. They are now an explicit **simulate · Deploy / Deploy ✗**,
+  with a caption making the real flow plain: releases run through each team's **own CI/CD pipeline** (it
+  calls `trellis release`); Trellis **observes** the rollout, it does not trigger it — the buttons stand in
+  for that pipeline so you can watch a rollout (and a bad deploy self-revert). Spec §11 gains a matching
+  rationale — **"Aware, not passive — why the platform observes the rollout"** — arguing why observation is
+  load-bearing (self-heal to the live version, keep the two loops from colliding, tell an app bug from an
+  infra fault, govern admission, stay the honest map): *observe-and-govern, never trigger.*
+
+- **Diagram viewer, verified in a real browser.** Fixes found by driving headless Chromium against the
+  built site (`scripts/verify-viewer.mjs`): the full-screen overlay now **fits and centres** the diagram
+  on open (it had opened at natural size in the top-left corner); the cloned SVG is given an explicit
+  viewBox-based size with Mermaid's `max-width` cap removed, so it **zooms without a ceiling** and stays
+  crisp (max zoom raised to 40×); and the inline toolbar buttons are now **equal-size squares in a row**
+  with full-screen rightmost. Verified: 9/9 diagrams render with no syntax errors, overlay opens above
+  the header with body-scroll lock, wheel/drag/deep-zoom/reset/code-tab/Esc all work, and the overlay
+  fills the viewport in mobile landscape — no console errors.
+
+
+
+- **Interactive diagram viewer.** Every rendered Mermaid diagram now has an on-brand toolbar: open it in
+  a full-screen overlay (ideal in landscape on mobile) and view/copy its source. The overlay supports
+  pan + zoom through one Pointer-Events path — drag-to-pan and pinch-to-zoom on touch, wheel-to-zoom and
+  click-drag-pan on desktop, double-tap/click to reset. Pan/zoom maths is pure and unit-tested
+  (`diagram-viewer.ts`, `diagram-viewer.test.ts`).
+- **User-journey diagrams.** Three Mermaid `journey` diagrams on the Roles page give an easier-to-read
+  "day in the life" view alongside the sequence diagrams — for the service engineer, the platform
+  operator, and the break-glass responder.
+
+### Changed
+
+- **FAQ: dropped the redundant "Who is this for?" heading.** It sat directly under the "Who it's for"
+  section heading and repeated it. The audience paragraph now hangs straight off the section, with "Who is
+  it *not* for?" kept as the contrast.
+
+- **FAQ entries rewritten to the plain-English, read-aloud bar.** The two newest answers — "Why not just
+  chat with an AI agent to provision infrastructure just-in-time?" and "Can different divisions run on
+  different clouds?" — were rewritten in active voice, with the throat-clearing ("the honest reply," "the
+  short answer," "point by point," "this isn't hypothetical") removed and the em-dash-heavy phrasing cut
+  back into short sentences that read cleanly out loud. Same argument and links; cleaner delivery.
+
+- **Roles page rewritten for clarity and plain English.** The "day in the life of a change" section now
+  states outright that Git is the front door of the control plane, not a way around it: the engineer
+  authors in Git, the planner and reconciler are the control plane, the PR does nothing on its own, and
+  only the reconciler holds standing write into the cloud. Names the maker-checker pattern where
+  dual-control already appears (service teams propose, the security author clears). Prose moved to active
+  voice with the em-dash-heavy phrasing cut back so it reads cleanly out loud.
+
+- **Roles page diagram accuracy (red-team fix).** The responsibility map wrongly drew the second
+  write-arrow into a division's cloud as an *External vendor* "break-glass" path — contradicting the spec
+  (break-glass is the responder's, dual-controlled — §7/Inv 14) and the page's own vendor section. The
+  map now shows the two write paths as the **reconciler** and the **break-glass responders** (added as a
+  node), with the vendor routed through the loop as an ephemeral, scoped credential. The service-team
+  flow also now shows the planner/plan-proof step before the gate.
+
+### Fixed
+
+- **Broken Mermaid diagrams on the Roles page.** They threw `Syntax error in text` in production: a
+  `classDef` used `fill:rgba(...)` (Mermaid's classDef parser rejects the `(`) and a sequence message
+  contained a `;` (a statement separator). Converted tints to 8-digit hex and removed the `;`. Added
+  `scripts/validate-mermaid.mjs` (real Mermaid parse under jsdom) wired into `npm run check`, so CI and
+  the pre-push hook now fail on any unparseable diagram.
+
+- **Invariants 20–26 — the manifest-substrate hardening set (Git red-team).** A focused fourth red-team
+  pass (`docs/trellis-redteam-git.md`) stress-tested the **five jobs the word "Git" does** in the spec
+  (desired-state store, generation/provenance, the merge gate, promotion/rollback, meta-DR source) and
+  found ten leaks in the *seams between the roles*. Folded into seven new invariants: the proof must bind
+  the **merged** generation, not the proposal (20); the reconciler must verify **gate-passage by an in-band
+  attestation** because "approval" is a forge fact it cannot read in Git (21); the **gate's own config is
+  reconciled**, not hand-held outside the loop (22); generations are **immutable, retained,
+  collision-resistant** (23); a **federated generation is a coordinated vector**, Git having no cross-repo
+  atomicity (24); the manifest substrate is **never on the liveness or recovery-blocking path** (25); and
+  promotion is **ordered and override-proved** (26).
+
+### Added
+
+- **FAQ: what foundational layers Trellis owns.** A new "Where it fits" entry answering directly whether
+  Trellis owns the **security baseline** and sets up **OUs, accounts, VPCs, and Kubernetes** — with an
+  ownership table per layer and the one boundary that matters (Trellis owns the *cluster as a resource*;
+  the in-cluster loop owns workloads). Pulls the answers that were scattered across Bootstrap and the
+  Operating model into one place, and keeps the spec-design-vs-simulator line honest.
+
+- **Spec §15 + FAQ: "Can different divisions run on different clouds?"** Clarified the provider rule in
+  [spec §15] — "one provider at a time" is scoped **per execution path / per desired state**, so with the
+  per-division control-plane slicing it reads **per-instance**: distinct divisions *may* target distinct
+  providers (*federated single-cloud divisions*, still not active multi-cloud). A companion FAQ entry works
+  the consequence: the cost — building/parity-gating each adapter, losing the single org-root/SCP governance
+  floor to a multi-root / trust-federation boundary, forking the catalog, cross-cloud Weave edges — fences
+  it to the separate-root (M&A / strict-regulatory) posture, never "spread one estate across clouds for
+  resilience."
+
+- **FAQ: "Why not just chat with an AI agent to provision infrastructure just-in-time?"** A new entry
+  answering the sharpest objection to a control plane head-on — provisioning-by-conversation isn't an
+  alternative to Trellis, it's a faster way to cause the 2&nbsp;a.m. outage it prevents (a transcript isn't
+  a proof, it hands the agent standing god-write, there's no reconcile loop, and one chat surface is the
+  re-centralized SPOF). The throughline: the agent belongs at the *declare-and-explain* ends of the loop,
+  not as the unaudited actuator. Illustrated with a real screenshot of a coding agent admitting it ran
+  `git reset --hard` over uncommitted work — an irreversible destructive action with no plan, approval, or
+  recovery, which is exactly the failure mode the action model forecloses.
+
+- **The simulator now demonstrates the break-glass trigger discipline.** Two engine-driven additions make
+  the spec's new §7/§13 claims visible in the model: (§13) the break-glass control now surfaces *the loop's
+  current belief about the selected resource* — its State and the reconciler's own reason (e.g. "drift:
+  unauthored change, correcting") plus the generation it's converging toward — so the operator decides on
+  evidence, not panic, and can tell "the loop is fighting me" from "the loop is right"; (§7) **break-glass
+  *rate* is now a first-class gate-health signal** — computed from the persisted audit log (survives
+  reload, no extra state). The **§13 incident surface** is now the single home for the override loop: it
+  rolls up Stalled and Frozen (break-glass debt) resources, each row showing the loop's belief and the
+  right action (Resolve root cause / Ratify the debt), and it carries the break-glass *rate* banner —
+  "check the gate, not the operator" — since the spec routes that signal *via* §13. So an override is
+  decided on evidence, the Frozen debt is loud (never a silent un-healed hole), and a miscalibrated gate
+  is visible. A new **guided-tour step** walks break-glass → debt → ratify. Locked by four engine tests.
+
+- **Break-glass triggers — inversion red-team.** A new doc
+  ([`docs/trellis-breakglass-redteam.md`](docs/trellis-breakglass-redteam.md)) reasons about the one state
+  transition Trellis never derives: `Converged → Frozen` has no `f(desired, observed, health)` behind it —
+  it's a human judgment, which is *why* break-glass feels mysterious. It names the **six sensations** that
+  make an operator reach for the glass (and shows only three are clean triggers — the rest have cheaper
+  correct responses), then runs **Munger inversion** on the trigger itself (B1–B7): the machinery is
+  well-defended, but the *decision* to open the glass is the unguarded surface — economic trigger-inflation
+  (B1), fog-of-war misreads (B6), and the missing trigger taxonomy (B7). The three trigger gaps are now
+  **folded into the spec** (§7 + §13) — no change to the break-glass machinery: §7 gains the six-sensation
+  trigger table (only three sensations should open the glass; the rest route to scope-freeze /
+  observe-only / liveness escalation) and makes break-glass *rate* a first-class gate-health signal; §13's
+  incident surface now shows the reconciler's reasoning *before* an override, so the most dangerous
+  triggers are decided on evidence, not panic.
+
+- **Release inner loop wired into the live engine + UI.** `Engine` now drives a `ReleaseRuntime` each
+  `tick()` alongside the reconcile loop: an `Engine.ship(slug, broken)` ships a release into a Service's
+  App Cell (strategy by Criticality — C0/C1 canary, else rolling), the gate-check handshake holds rollouts
+  during a change-freeze (Blocked), and the running version + active rollout state surface per Service in
+  the snapshot (`ServiceRollup.version` / `.rollout`). The Owners panel gains **Ship** / **Ship ✗**
+  controls and a live rollout badge; a new `Release` audit class records ship / healthy / rolled-back.
+  Three engine tests lock it: a good release advances the version with the env undisturbed, a broken
+  release self-reverts (version holds, no `STALLED`, env stays converged), and a change-freeze parks the
+  rollout in Blocked. The §11 inner/outer separation now runs in the actual simulator, not just a unit
+  test.
+
+- **Simulator models the release inner loop (`sim/release.ts`).** Teaches the engine the §11 rollout
+  state machine — `Pending → Blocked → Progressing ⇄ Verifying → {Healthy | RolledBack | Superseded}` —
+  as a `ReleaseRuntime` that holds each Service's running version while the existing `Reconciler` owns the
+  Cell *shape*. Models canary steps, Criticality-bounded strategies (Invariant 27: C0 cannot big-bang
+  roll), the gate-check hold (Blocked), and latest-wins supersede. A new test (`sim/release.test.ts`, 9
+  cases) **proves the inner/outer-loop separation holds in code**: a failed rollout self-reverts to the
+  last-healthy version and the reconciled App Cell stays `Converged` with the flap breaker never engaging
+  — a bad deploy is the team's `RolledBack`, not the platform's `Stalled`. Verifies in code what spec
+  §11 + Invariants 20–22 assert.
+
+- **Spec §11 — the platform↔app seam + single-team authoring.** Two additions to *Manifest lifecycle and
+  promotion*. (1) **One manifest, environments as values:** for a single team owning one app there is one
+  manifest, with dev/staging/prod as inline posture overlays on a shared environment-blind base —
+  separate manifests track *ownership boundaries, never environments*, and the per-environment Structure
+  is compiled, not authored. Independent gating comes from the per-environment plan, not file separation.
+  (2) **The platform↔app seam:** how a team's CI/CD pipeline consumes provisioned infra — the
+  **coordinates** export (`trellis env coordinates`, derived not committed), **workload identity** bound
+  to the App Cell (the app resolves secret refs via its own scoped identity, never handling the value),
+  and the **gate-check** temporal handshake (`trellis env gate-check`) as the sole coupling between the
+  fast app-delivery loop and the slow gated reconcile loop. Closes the previously-implicit gap between a
+  converged Structure and the deploy targets a pipeline needs.
+
+- **Spec §11 — the App Cell's release interface (what `app_target` is).** Deepens the seam: `app_target`
+  is a provider-neutral **deploy contract** (`trellis release …`), not an ECS/k8s handle — a release
+  adapter (a runtime capability) realizes it. Establishes **two nested loops** (Trellis converges Cell
+  *shape*; the runtime converges the running *version*; moving the artifact is not drift), the Criticality
+  cascade reaching delivery (substrate isolation + permitted rollout strategy per C-level), **team-defined
+  readiness** distinct from infra Health, and **two rollbacks/two owners** (release revert vs. posture
+  revert). Includes a non-normative AWS v1 realization (Fargate/ECS or EKS, ECR digests).
+
+- **Spec §11 — multiple Services in one environment.** Scopes the seam to a Service: the Service (not the
+  environment) is the unit sized, isolated, and deployed. Criticality is a function of **(Service ×
+  environment)** via the §2 cascade (environment default → per-Service override — e.g. `internal-dashboard`
+  stays C3 even in a C0 prod), so isolation and release substrate differ per Service within one
+  environment. Coordinates and releases are **keyed by (environment, Service)** (`trellis release
+  payments-prod/payments-api …`); Services **promote independently** (no environment lockstep) while a
+  posture change re-plans the whole environment against its shared budget. Service discovery rides the same
+  export, gated by Weave adjacency (§7).
+
+- **Spec §11 — the release rollout state machine (the inner loop formalized).** Models a release as the
+  workload-altitude analogue of §4's Job mode — a finite, **derived-not-stored** terminal progression:
+  `Pending → Blocked → Progressing ⇄ Verifying → {Healthy | RolledBack | Superseded}`, with a Mermaid
+  state diagram. The canary is the Progressing⇄Verifying cycle; **latest-wins** supersedes in-flight
+  rollouts. Key boundary made explicit: a failed rollout **self-reverts to the last-healthy version below
+  the outer loop**, so the App Cell returns to Converged on the prior artifact and the reconciler's
+  self-heal/flap breaker (§9) never engages — a bad deploy is the team's RolledBack, not the platform's
+  Stalled. On Healthy, the runtime's current-version pointer advances and the Service returns to
+  converge-and-hold.
+
+- **Spec §11 — worked end-to-end example.** A single trace promoting `payments-api` v7 through
+  dev → staging → prod that exercises the whole seam: per-environment plans → provision → coordinates →
+  build-once → per-Service release. The prod release **parks in `Blocked`** while a posture migration
+  expands `eu-west-1` (the temporal handshake), then a **failed canary bake self-reverts to `RolledBack`**
+  below the outer loop (the reconciler never engages), and the team **fixes forward to v8**. Includes a
+  Mermaid sequence diagram of the prod arc and a per-environment version table; `internal-dashboard` rides
+  along untouched to show per-Service promotion.
+
+- **Spec §11/§17/§21 — fifth inversion pass on the app-delivery seam (red team).** Applied Munger
+  inversion to the new seam and hardened the findings into **Invariants 27–30**: (27) the fast loop is
+  approval-ungated but **admission-governed** — the workload identity can write only through the release
+  adapter, which enforces the handshake (closes the bypass/TOCTOU hole); (28) **promotion is authored
+  intent**, not derived, and staging-green below the target Criticality is not prod-proof; (29) **data
+  changes are expand-contract and Data-Protection-gated**, decoupled from the code release; (30) **the
+  catalog is the routine extension point**, with catalog velocity a watched signal against shadow-infra
+  re-centralization. Also corrected two defects in the §11 prose: the single-manifest example now shows
+  Governance/budget as **inherited and sealed** (`inherits:`, narrow-only under Invariant 6) rather than
+  team-authored, and `gate-check` is now **adapter-enforced admission** rather than an advisory pipeline
+  step. Recorded as the fifth pass in §21 with honest residuals named.
+
+- **Cost & parity — elasticity and dormancy.** A new applied-decision page stating how lower environments
+  save money *without* losing prod parity: keep the desired **shape** identical everywhere and take the
+  savings from **utilization** (parking idle capacity), not from a smaller dev. Two levers share one
+  three-tier vocabulary — `elasticity` (stateless compute: ASG/Karpenter, scale to zero) and `dormancy`
+  (stateful services: pause, keep durable storage) — with the class boundary grounded in the engine's
+  existing `sensitive = cell === "data" || lifecycle === "stateful"` test. Includes an **explicit AWS
+  position** per service class (EKS/Karpenter, Lambda no-op, ALB never-zero; Aurora pause-not-delete,
+  quorum all-or-nothing, ElastiCache discard-safe) and a **guardrails** section derived by inversion
+  (first-class `Dormant` state, an enforced parity invariant, consistency/determinism protections,
+  denial-of-wallet). Documented position only — the page is explicit that the engine does **not** yet
+  implement the levers, the `Dormant` state, or the parity invariant; that is sequenced follow-up.
 
 - **Roles & responsibilities — a day in the life.** A new page mapping the nine personas (Platform Owner,
   Security/Governance author, Division/Product lead, Platform Operator, Service/Eng teams, Break-glass

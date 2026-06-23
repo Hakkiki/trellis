@@ -115,3 +115,11 @@
     scroll-behavior: auto !important;
   }
 }
+
+/* On-brand selection halo: a thin gold ring with a warm outer glow, applied to
+   the highlighted resource node + owner row so selection reads at a glance. */
+.sel-halo {
+  box-shadow:
+    0 0 0 1.5px var(--ring),
+    0 0 22px 2px color-mix(in oklch, var(--ring) 50%, transparent);
+}

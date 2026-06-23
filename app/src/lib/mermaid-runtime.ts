@@ -8,6 +8,8 @@
  * `classDef` (converged/converging/degraded/drifted/stalled) in any diagram.
  */
 
+import { enhanceDiagram } from "./diagram-viewer";
+
 type ThemeVars = Record<string, string>;
 
 // Match the site body font (no web font is loaded; stay on the system stack).
@@ -96,6 +98,32 @@ function currentTheme(): "light" | "dark" {
   return document.documentElement.dataset.theme === "light" ? "light" : "dark";
 }
 
+/**
+ * Reveal the raw source of any diagram we never managed to render. Marking it
+ * `data-mermaid-error` drops the "hide until processed" CSS so the content is
+ * shown legibly instead of an invisible-but-selectable empty panel. Called both
+ * on hard failures and from a safety-net timeout, so a chunk that never loads
+ * (blocked proxy, stale cache, offline) can't leave a blank box behind.
+ */
+function reveal(nodes: Iterable<HTMLElement>): void {
+  for (const el of nodes) {
+    if (!el.dataset.processed) {
+      if (el.dataset.src !== undefined) el.textContent = el.dataset.src;
+      el.setAttribute("data-mermaid-error", "");
+    }
+  }
+}
+
+// Load Mermaid, retrying once — the chunk is large and a single transient
+// network blip otherwise leaves every diagram blank for the whole session.
+async function loadMermaid(): Promise<typeof import("mermaid").default> {
+  try {
+    return (await import("mermaid")).default;
+  } catch {
+    return (await import("mermaid")).default;
+  }
+}
+
 let lastTheme: string | null = null;
 let running = false;
 
@@ -109,18 +137,24 @@ async function render(force = false): Promise<void> {
   if (running) return;
   running = true;
 
-  try {
-    const { default: mermaid } = await import("mermaid");
+  // Stash the original source once, before Mermaid replaces it with SVG.
+  for (const el of nodes) {
+    if (el.dataset.src === undefined) el.dataset.src = el.textContent ?? "";
+  }
 
-    // Stash the original source once, before Mermaid replaces it with SVG.
-    for (const el of nodes) {
-      if (el.dataset.src === undefined) el.dataset.src = el.textContent ?? "";
-    }
+  // Safety net: if rendering hasn't completed in time (chunk blocked/hung),
+  // reveal the source so the diagram is never an invisible empty box. A later
+  // successful render clears the marker via `data-processed`.
+  const safety = window.setTimeout(() => reveal(nodes), 8000);
+
+  try {
+    const mermaid = await loadMermaid();
 
     const reset = force || theme !== lastTheme;
     for (const el of nodes) {
       if (reset || !el.dataset.processed) {
         el.removeAttribute("data-processed");
+        el.removeAttribute("data-mermaid-error");
         el.textContent = el.dataset.src ?? "";
       }
     }
@@ -136,11 +170,24 @@ async function render(force = false): Promise<void> {
       sequence: { useMaxWidth: true, actorMargin: 56, noteMargin: 12, mirrorActors: false },
     });
 
-    const pending = nodes.filter((n) => !n.dataset.processed);
-    await mermaid.run({ nodes: pending });
+    // Render each diagram independently so one bad block can't blank the rest.
+    for (const el of nodes.filter((n) => !n.dataset.processed)) {
+      try {
+        await mermaid.run({ nodes: [el] });
+        el.removeAttribute("data-mermaid-error");
+        // Wrap the rendered diagram with the toolbar (fullscreen + view-source).
+        // Idempotent: re-theming re-renders the SVG but keeps the existing toolbar.
+        enhanceDiagram(el);
+      } catch (err) {
+        console.error("[mermaid] diagram failed to render", err);
+        reveal([el]);
+      }
+    }
   } catch (err) {
-    console.error("[mermaid] render failed", err);
+    console.error("[mermaid] runtime failed to load", err);
+    reveal(nodes);
   } finally {
+    window.clearTimeout(safety);
     running = false;
   }
 }
