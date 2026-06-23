@@ -7,6 +7,19 @@ The simulator deploys continuously from `main`, so entries are grouped by date r
 
 ### Added
 
+- **Third-party integrations brainstorm.** A new `docs/third-party-integrations.md` exploring how Trellis
+  makes deploying and governing vendor software easy — today a bespoke, ticket-driven snowflake per vendor.
+  Organized on the **open-loop vs closed-loop** spine (closed = a Service/Component from an external supply
+  chain we run, scan, and reconcile; open = an **External** node we govern only at the boundary), with: the
+  deployment-model zoo (Helm · AMI/non-idiomatic EC2 · AWS-service-backed · hybrid agent+SaaS · pure SaaS);
+  a single declared **Integration Profile** the planner compiles into network plumbing + least-priv
+  exceptions + a data contract + the supply-chain gate; network posture (PrivateLink > peering > public
+  allowlist); **traffic inspection as a `required-or-prove` posture** with provable compensating controls
+  where MITM is infeasible; a residency-checked **data-exchange contract**; **artifact scans + CVE** for
+  closed-loop artifacts and **attestation** for open-loop SaaS; gated, expiring, provable **capability
+  exceptions**; and the two-plane trap (a vendor must never become a Plane-1 synchronous dependency, R13).
+  Linked from `docs/README.md`. Brainstorm, not yet spec.
+
 - **Implementation-readiness & phasing assessment.** A new `docs/implementation-readiness.md` answering the
   pre-funding questions the spec/buildability docs left implicit: a readiness verdict (ready — fund the thin
   real-AWS slice, not the whole platform), the seven *implementation-level* open questions (led by the
