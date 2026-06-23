@@ -7,6 +7,17 @@ The simulator deploys continuously from `main`, so entries are grouped by date r
 
 ### Added
 
+- **Implementation-readiness & phasing assessment.** A new `docs/implementation-readiness.md` answering the
+  pre-funding questions the spec/buildability docs left implicit: a readiness verdict (ready — fund the thin
+  real-AWS slice, not the whole platform), the seven *implementation-level* open questions (led by the
+  build-standalone-vs-Crossplane substrate fork), an explicit **must/should/nice** breakdown of the §18
+  capability buckets and §19 scope, a **market-first phasing** that front-loads the two uncontested
+  differentiators (plan-as-proof + change-scoped credentials) so the wedge is demoable in months, a monthly
+  **AWS cost model** for building + testing (~$500 lean to ~$2.5k realistic, with the dominant drivers and
+  levers named), and the two-layer **guardrails** (spec-native budget-constraint + circuit-breakers +
+  least-privilege, plus AWS Budgets Actions / SCPs / anomaly-detection / ephemeral-teardown) — noting the
+  guardrails are the same machinery Trellis ships, so building them is dogfooding. Linked from `docs/README.md`.
+
 - **Roles & responsibilities — a day in the life.** A new page mapping the nine personas (Platform Owner,
   Security/Governance author, Division/Product lead, Platform Operator, Service/Eng teams, Break-glass
   responders, Auditor, FinOps, External vendor) to the model: each one's mandate, what it owns, what it
