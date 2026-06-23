@@ -105,6 +105,30 @@ alternatives **behind the contract**). Different answers per plane; the model te
 Data-tier tools (dbt, lakehouse, catalog, BI) are **Plane 2** — Trellis *provisions and governs* them, it
 does not *implement* them; the open seam to pick first is **Apache Iceberg**.
 
+**Inversion check (red-team of this model).** Three ways the two-plane lens itself misleads — and the
+sharpenings that foreclose them (red-team R14):
+
+- **It is a lens, not a wall (TP1).** Trellis manages *itself* as a C0 environment (§12, §16), so Plane 1
+  is *eventually* a Plane-2 workload — the recursion is the point (it is what makes meta-DR and self-upgrade
+  possible). Build Plane 1 so it is **governable as a Plane-2 workload** (dogfood), never as an ungovernable
+  snowflake.
+- **The "one rule" forbids tenant-coupling, not shared tool *types* (TP3).** The control plane legitimately
+  *uses* Git, an OCI registry, S3, a lock store — tools that also appear in Plane 2. The rule is precise:
+  **no tenant-provisioned battery instance on the control plane's *synchronous critical path***; shared
+  infra it does use is **fail-static, pull-and-cache, version-pinned** (Inv 12), never a synchronous-fate
+  dependency.
+- **The planes are an *ownership* axis, not a *sequencing* axis (TP5).** "Plane 1 is what you build" must
+  **not** be read as "build the whole control plane first, expose capabilities later" — that is the cathedral
+  failure. Phase 1 cuts **vertically through both planes** (a thin Plane 1 + one blueprint's Plane 2 together).
+
+Two operating cautions: keep Plane-1 *decisiveness* honoring the one mandatory seam (the cloud provider,
+§15) — decisive ≠ AWS-hardcoded (TP2); keep Plane-2 *pluralism* **curated and finite** (best-in-class
+default + a vetted alternative set behind the contract), never anything-goes sprawl. The membrane (the
+capability contract) is the **only** coupling — no privileged Plane-1 team gatekeeping battery creation, or
+the §5 self-service promise reverts to tickets (TP6). And where the trust boundary allows, **one** deployment
+serves both planes via tenancy/RBAC (one registry with P1 + P2 projects), not two stacks — separate only at
+real trust lines (eventing: gRPC/SQS for P1, never the shared Kafka) (TP7).
+
 ---
 
 ## 4. Must / Should / Nice — what services ship when  *(Plane 1 — the control-plane subsystems to build)*
@@ -493,12 +517,14 @@ in *this* doc, now patched in the section noted). Strongest finding first.
 | **R11** | **Security says yes to a half-guarded surface.** Arc 1 (self-service) ships fast while some Arc-2 items (signed images/SBOM/CVE, compliance evidence) are **S** — but the likely wedge (regulated/audit-heavy) needs those *day one*, so security says no, or yes to something not yet safe. | ◑ partial → §5 | Reinforced: the wedge segment (Q6) **pulls** specific Arc-2 rows into Phase 1 — the MoSCoW is partner-dependent, not fixed (§5 already flags "**M** if regulated"). |
 | **R12** | **Python in the TCB festers as "ratify later."** §7 flags the planner-language reproducibility tradeoff (Inv 9) but defaults to nothing; "decide later" + Python's weak build-reproducibility = a TCB invariant quietly compromised for dev convenience. | ◑ partial → §7 | Standing guidance: in the TCB, **reproducibility (Inv 9) outranks ecosystem convenience** — bias the planner to Go, keep Python offline (catalog-time) until proven reproducible. |
 | **R13** | **Import a Plane-2 workload tool into the Plane-1 backbone** (the general form of the MSK mistake): make a teams-facing battery — Kafka/MSK, a lakehouse, a team DB — a control-plane dependency, recreating the near-stateless/no-SPOF violation the spec forbids (Inv 12/19). | ➕ GAP → §3 | Promoted to the **§3 "one rule"**: never let a Plane-2 tool become a Plane-1 dependency; the control plane stays broker-free/near-stateless, batteries are provisioned per-tenant behind the contract. |
+| **R14** | **The two-plane model itself misleads.** Read as a *wall* it denies the self-hosting recursion (Plane 1 is eventually a Plane-2 workload, §12/§16) → no dogfood, no meta-DR; read as a *sequence* it becomes build-P1-first (the cathedral); and the absolute "one rule" is violated day-one by Git/OCI/S3 and then discarded. | ➕ GAP → §3 | Added an **inversion check** to §3: *lens-not-wall* (build P1 as a governable P2 workload), *ownership-not-sequencing* (Phase 1 cuts vertically through both), and a *sharpened rule* (no tenant-provisioned battery on the synchronous critical path; shared infra is fail-static/pinned). Residual cautions (TP2/6/7): provider-seam, curated P2, single-deployment-with-tenancy. |
 
-**What the inversion produced.** Ten genuine holes in this assessment (R1–R9, R13), patched in the sections
-noted; three residuals (R10–R12) named and bounded. Two headlines: **the most dangerous artifact in this
-document is its cheapest number** — the AWS cost — because it invites funding the build on a sliver of its
-true cost (R1 is the direct fix); and the most dangerous *architectural* temptation is collapsing the two
-planes — letting a Plane-2 battery become a Plane-1 dependency (R13, foreclosed by the §3 one rule).
+**What the inversion produced.** Eleven genuine holes in this assessment (R1–R9, R13–R14), patched in the
+sections noted; three residuals (R10–R12) named and bounded. Two headlines: **the most dangerous artifact in
+this document is its cheapest number** — the AWS cost — because it invites funding the build on a sliver of
+its true cost (R1 is the direct fix); and the most dangerous *architectural* temptation is collapsing the two
+planes — letting a Plane-2 battery become a Plane-1 dependency (R13), or rigidly walling them so Trellis
+can't host itself (R14) — both foreclosed by the §3 model + its inversion check.
 
 ---
 
