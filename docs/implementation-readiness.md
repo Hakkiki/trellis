@@ -110,7 +110,100 @@ AI blueprint generation, active multi-cloud, edge, runtime workload-behavior con
 
 ---
 
-## 4. Phasing to stack wins and reach market faster
+## 4. Day-one capability map — what teams leverage, and what makes security say yes
+
+§3 is the *subsystem* view (what we build). This is the *adoption* view (what a team gets, and what lets
+security delegate). The test the spec is built to pass: a platform fails the moment "self-service" is
+secretly a ticket to the platform team, or security gates by **reviewing every change** instead of
+**authoring an envelope once**. A capability is genuinely self-service only when a team invokes it via
+**Author (a PR) inside its delegated `accepts`/`fits` envelope**, with the platform present as **golden
+paths + guardrails** — and security says yes because it trusts the **proof + mint + audit**, not the team's
+diligence. Two questions to apply to every row:
+
+1. **Self-service test** — can a team invoke it via a PR inside its envelope, platform-as-guardrails only?
+   *(If routine use needs a platform ticket → it's self-operated; fix with a blueprint + the auto-merge
+   floor, Inv 18.)*
+2. **Say-yes test** — can security delegate it by authoring the envelope once and trust enforcement?
+   *(If security must review each instance → governance bottleneck.)*
+
+**Day-one cut:** **`M`** = Phase 1 (day one) · **`S`** = Phase 2 (soon) · **`L`** = Phase 3+ (later); tags
+align with §3 and the §5 phasing. The **`M`** rows ≈ the Phase-1 adoption checklist.
+
+### Arc 1 — leverage on day one
+
+**Theme 1 · Declare & provision**
+- **`M`** Self-service workload declaration — Posture per Service, infra without bespoke IaC (§2, §6).
+- **`M`** Golden-path blueprint catalog (≥1 blueprint) — select + parameterize (§5 rungs 0–2).
+- **`M`** Plan-as-proof *preview* — "what will exist and why" before apply (§5).
+- **`S`** Environments + promotion pipeline — promote an immutable validated version dev→stg→prod (§11).
+
+**Theme 2 · Compute & serve traffic** *(the minimum to run something reachable)*
+- **`M`** Compute (containers / serverless / VMs) · **`M`** Traffic/LB · **`M`** DNS · **`M`** Certs (§18).
+- **`M`** Service discovery + ingress/egress (basic).
+
+**Theme 3 · Data & state** *(teams own their data — §6)*
+- **`M`** One managed relational store — the first blueprint needs persistence (Q3: RDS Postgres).
+- **`S`** Data Protection battery — backup/PITR/retention, posture-derived (§10).
+- **`S`** Stateful migration: backup→restore→cutover · **`L`** live replicate→verify→cutover (§10).
+- **`S`** Data-residency enforcement (**`M`** if a regulated design partner) — Governance hard constraint (§2).
+
+**Theme 4 · Connectivity (Weave)**
+- **`M`** Service-to-service connectivity — declared reachability (§3).
+- **`M`** Default-deny adjacency + self-service allowed crossings — planner compiles SG/route/IAM, proves
+  admit/deny (§6).
+- **`L`** Cross-region / replication links — active-active is C0 (§3).
+
+**Theme 5 · Delivery & change safety** *(trust the autonomy)*
+- **`M`** Self-healing within the approved envelope (§9).
+- **`S`** Progressive delivery — rolling/canary/blue-green, auto-rollback, blast-radius breaker (§10, Inv 11).
+- **`S`** Transitions as reversible gated paths (§10) · **`S`** team-controlled change-freeze windows (§9).
+
+**Theme 6 · Observe, cost & operate**
+- **`M`** Per-team audit trail — who/why/when (§7, TCB-essential).
+- **`S`** Views — health/SLO, cost, security, compliance, incident (§13).
+- **`S`** FinOps — per-team allocation, budget, cost-drift, showback (§13).
+- **`S`** Incident mgmt — alert routing by Frame+Criticality, on-call, runbooks (§13).
+
+### Arc 2 — security & security-adjacent (the "say yes" surface)
+
+**Theme 7 · Identity, access & secrets**
+- **`M`** Workload identity, no long-lived keys — STS/OIDC (§12).
+- **`M`** Change-scoped ephemeral credentials — mint scoped to exactly the diff, expires (Inv 4;
+  *differentiator #2*).
+- **`M`** Secrets store battery — referenced, never in Git (§11).
+- **`M`** Human RBAC scoped to the Frame (§7).
+
+**Theme 8 · Guardrails & policy** *(the anti-ticket engine)*
+- **`M`** Governance contract — whitelist, compliance regime, permissions, residency, declared once (§2).
+- **`M`** Admission at the gate — `accepts`/`fits` + three-way `authorized-by`, auto-reject with proof (§7).
+- **`M`** Monotonic-tightening delegated envelopes — org floor + team tightening; how a team *gets* its
+  sandbox (§8, Inv 6).
+- **`S`** Gate rigor scales to blast radius — **auto-merge below the floor** (Inv 18); *the single
+  highest-leverage anti-ticket capability — pull forward; needs the Q4 blast-radius metric.*
+- **`S`** Drift policy — `enforce | warn | ignore` per scope (§4).
+
+**Theme 9 · Supply-chain & artifact trust**
+- **`M`** Signed, versioned catalog + transitive pins — no `latest` (Inv 12; part of the TCB spine).
+- **`S`** Signed images + SBOM + CVE gate at admission (**`M`** if regulated) (§7).
+- **`S`** Provenance / attestation.
+
+**Theme 10 · Compliance & audit**
+- **`S`** Retained observed-state history — evidence over time (§14).
+- **`S`** Continuous compliance evidence / attestation packages (§14).
+- **`S`** Independent auditor read access, split from Security (§7).
+
+**Theme 11 · Break-glass & recovery** *(teams need a defined emergency exit)*
+- **`M`** Scoped, time-boxed, dual-controlled break-glass — ratify-or-revert debt (§7).
+- **`M`** Out-of-band kill-switch (Inv 13) · **`S`** meta-DR re-bootstrap (§12).
+
+**Net:** the **`M`** rows are the Phase-1 adoption bar — enough for a team to *declare → run → serve →
+observe* a real workload, and enough for security to delegate an envelope it trusts. The one item to pull
+forward from **`S`** is the **auto-merge-below-floor** policy (Inv 18): without it, routine changes queue
+behind a human and the platform quietly reverts to "self-operated."
+
+---
+
+## 5. Phasing to stack wins and reach market faster
 
 Each phase ships something **demoable or sellable** — the antidote to the #1 killer (boiling the ocean).
 The order front-loads the two differentiators so the wedge is provable before the platform is finished.
@@ -134,7 +227,7 @@ the proof is genuinely reviewable and the loop feels good, the rest is large-but
 
 ---
 
-## 5. Tech stack — not settled, but a sensible default with clear roles
+## 6. Tech stack — not settled, but a sensible default with clear roles
 
 **Nothing in the spec or any doc names an implementation language — deliberately** ("*the grammar is an
 ontology, not a runtime*"; "*build concrete controllers for the fixed, known cloud levels*"). The only code
@@ -170,7 +263,7 @@ typed service boundary.
 
 ---
 
-## 6. Test strategy — how far LocalStack/Testcontainers get you (and where they stop)
+## 7. Test strategy — how far LocalStack/Testcontainers get you (and where they stop)
 
 > **Verdict.** LocalStack + Testcontainers carry the inner loop and most of CI, but they **cannot replace a
 > small, ephemeral real-AWS account.** They cover ~80% of the *test count* — but it's the **low-risk 80%**.
@@ -216,7 +309,7 @@ account catching where it doesn't.
 
 ---
 
-## 7. What it costs to build and test on AWS — monthly
+## 8. What it costs to build and test on AWS — monthly
 
 Two distinct buckets people conflate. **These are engineering estimates with assumptions stated, not
 quotes** — actuals depend on always-on vs. ephemeral discipline, region count, and EKS-vs-ECS.
@@ -261,7 +354,7 @@ default**, burst to multi-region only for the active-active tests; (5) **one** s
 
 ---
 
-## 8. Guardrails — and yes, building them *is* the product
+## 9. Guardrails — and yes, building them *is* the product
 
 Cost (and blast-radius) guardrails come in two layers. The happy accident: **the spec-native guardrails are
 the same machinery the test-account guardrails need — so building Trellis builds its own guardrails
@@ -294,15 +387,18 @@ design, not vigilance.
 
 ---
 
-## 9. The one-paragraph answer
+## 10. The one-paragraph answer
 
 We have enough to start; the only honestly-open questions are implementation-level (led by the
 build-vs-Crossplane substrate fork) and are cheapest to answer by **building Phase 1**, not by more design.
 The must-haves are the differentiated spine (reconcile loop + plan-as-proof planner + diff-scoped credential
 mint + gate) plus exactly the batteries one real workload needs; transitions, FinOps, and TCB-hardening are
 should-haves right behind it; self-upgrade, org-change, and multi-cloud are nice-to-haves for later.
-Phasing front-loads the two things no competitor ships so the wedge is demoable in months. The stack isn't
-settled — **Go for the spine, gRPC/protobuf for the fleet wire, Python for the solver, Node/TS for the
+Phasing front-loads the two things no competitor ships so the wedge is demoable in months. Day-one
+adoption turns on the **`M`** capability rows (§4) — a team can declare→run→serve→observe a real workload
+by PR inside a delegated envelope, and security says yes because it authors that envelope once and trusts
+the proof + mint + audit rather than reviewing each change; skip the auto-merge-below-floor lever and the
+"self-service" quietly reverts to tickets. The stack isn't settled — **Go for the spine, gRPC/protobuf for the fleet wire, Python for the solver, Node/TS for the
 console** is a sensible default to ratify, but it's downstream of the Crossplane fork and the
 planner-language reproducibility tradeoff. **LocalStack + Testcontainers carry the inner loop and most of
 CI, but can't replace a small ephemeral real-AWS account** — the 20% they can't mock (IAM enforcement,

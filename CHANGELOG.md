@@ -21,7 +21,12 @@ The simulator deploys continuously from `main`, so entries are grouped by date r
   unsettled, downstream of the Crossplane fork and the planner-language reproducibility tradeoff) and a
   **tiered test strategy** (Tier 0 pure-logic / Tier 1 LocalStack+Testcontainers / Tier 2 ephemeral real
   AWS) with an honest map of what mocks are structurally blind to (IAM enforcement, eventual consistency,
-  quotas, cross-account trust, real cost). Linked from `docs/README.md`.
+  quotas, cross-account trust, real cost). Adds a **day-one capability map** (§4) organized by theme into
+  two arcs — *leverage on day one* (declare/provision, compute, data, connectivity, delivery, observe) and
+  the *security "say-yes" surface* (identity/secrets, guardrails & policy, supply-chain, compliance/audit,
+  break-glass) — each row tagged **M/S/L** so it doubles as a Phase-1 adoption checklist, with a
+  self-service/say-yes test that names the "self-operated masking as self-service" anti-pattern and the
+  auto-merge-below-floor lever (Inv 18) that forecloses it. Linked from `docs/README.md`.
 
 - **Roles & responsibilities — a day in the life.** A new page mapping the nine personas (Platform Owner,
   Security/Governance author, Division/Product lead, Platform Operator, Service/Eng teams, Break-glass
