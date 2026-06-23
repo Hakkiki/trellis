@@ -134,7 +134,89 @@ the proof is genuinely reviewable and the loop feels good, the rest is large-but
 
 ---
 
-## 5. What it costs to build and test on AWS — monthly
+## 5. Tech stack — not settled, but a sensible default with clear roles
+
+**Nothing in the spec or any doc names an implementation language — deliberately** ("*the grammar is an
+ontology, not a runtime*"; "*build concrete controllers for the fixed, known cloud levels*"). The only code
+that exists is the simulator (TypeScript / Astro / React / Node), which is a docs+sim site, **not** the
+control plane. So a **Go / gRPC / Python / Node** stack is a reasonable default to *ratify*, not a recorded
+decision. Each maps cleanly onto §18/§7:
+
+| Layer | Language | Why it fits |
+|---|---|---|
+| **Reconciler fleet · actuators · mint · gate** (the privileged spine) | **Go** | Lingua franca of cloud infra (controller-runtime, Crossplane, AWS SDK, operators). Great concurrency for converge loops; static binaries + low memory directly serve Inv 19 (*near-stateless, scale-to-zero, cheap*). The **hands + the loop**. |
+| **Internal wire between the partitioned fleet** | **gRPC + protobuf** | §7/§18 are a fleet of partitioned least-privilege services that must talk over **authenticated** channels (Inv 15). Protobuf gives typed, **versioned** contracts — exactly what self-upgrade's version-skew tolerance (§16) needs — plus mTLS and streaming for the observe path. The §15 **capability contract** is naturally proto service definitions. The **nervous system**. |
+| **Planner / solver · catalog-time · FinOps analytics** | **Python** | The planner is an explainable objective solver (rungs, bounded leaf optimization, constraint validation); Python owns that ecosystem (OR-Tools, PuLP, z3, scipy). Unprivileged control plane — the **brain**. |
+| **Console · Views · proof rendering** (Experience) | **Node / TypeScript** | The spec makes operator **Experience** a *correctness property* (the Function·Form·Substance·Finish lineage; Inv 18 — *an unreadable proof fails the gate*). The simulator already proves this stack. The **eyes**. |
+
+**How they connect:** the Python planner emits a signed plan+proof → the Go **mint re-derives** the
+credential scope from the *signed generation* (Inv 4 — never trusts the planner's asserted scope) → Go
+actuators apply → all over gRPC/mTLS → Node renders the proof + Views for the human gate. The language split
+*reinforces* the confused-deputy firewall (§7): the planner literally cannot hand the mint a scope across a
+typed service boundary.
+
+**Two things to decide consciously before locking it:**
+
+1. **It's downstream of Q1 (Crossplane vs. standalone).** Crossplane/controller-runtime ⇒ you're committed
+   to **Go + Kubernetes controllers**, and the internal contract becomes **CRDs / the k8s API**, not your own
+   gRPC fleet. Standalone ⇒ the gRPC-fleet design is the right shape. **Don't lock the wire protocol before
+   the Phase-1 spike resolves Q1.**
+2. **The planner language is a real tradeoff.** Python buys the solver ecosystem, but the planner is *in the
+   TCB*, where determinism (Inv 1) + reproducible builds (Inv 9) + dual-planner parity (Inv 17) reward build
+   reproducibility — Python's weakest area. Either accept stronger pinning discipline for a Python planner, or
+   do the planner in **Go** and keep Python for *offline* catalog-time solving only. Bonus: Inv 17 *wants* two
+   independent planner implementations above the blast-radius threshold — a Go + Python pair is a **feature**
+   there, not redundancy.
+
+---
+
+## 6. Test strategy — how far LocalStack/Testcontainers get you (and where they stop)
+
+> **Verdict.** LocalStack + Testcontainers carry the inner loop and most of CI, but they **cannot replace a
+> small, ephemeral real-AWS account.** They cover ~80% of the *test count* — but it's the **low-risk 80%**.
+> The 20% they're structurally blind to is exactly where the two differentiators and the biggest failure
+> modes live (buildability #5: "*the gap between the clean spec and the provider's actual behavior is where
+> most of the ugly work lives*"). Reaching "80% done" without real AWS means 80% confidence on the *least*
+> risky 80%.
+
+**Three fidelity tiers:**
+
+- **Tier 0 — pure logic, no cloud** *(every commit; the bulk)*: the **planner** (Inv 1 makes it a pure
+  function of pinned inputs — it must *not* touch live cloud), the State function, drift detection,
+  authorization (`authorized-by ∩ accepts ∩ role`), proof generation, transition-pattern selection. The
+  simulator already proves this tier. ~90% of unit tests need nothing.
+- **Tier 1 — LocalStack + Testcontainers** *(per-PR CI)*: actuator **API-contract tests** (right call, right
+  args, idempotent), apply-step idempotency/resumability against a fake, the GitOps gate end-to-end, basic
+  reconcile against a fake provider. Testcontainers also covers the non-AWS deps (Postgres, a Git server, the
+  bus) and runs LocalStack itself. Catches "the code talks to AWS correctly."
+- **Tier 2 — real AWS, ephemeral + guarded** *(nightly / pre-merge / the Phase-1 slice)*: small in test
+  *count*, but it's the risk coverage — bounded by the §8 Budgets-Actions / SCP / nuke guardrails.
+
+**Why Tier 2 is non-negotiable** — mocks return *instantly, consistently, and without enforcing policy*, so
+every novel claim sits in the gap that creates:
+
+| Spec claim | Why a mock is blind to it |
+|---|---|
+| **Diff-scoped least-privilege creds** (Inv 4 — *differentiator #2*) | LocalStack doesn't faithfully evaluate IAM denies; only real STS/IAM proves AWS *enforces* the minted scope. Validating this **is** the point. |
+| **State model: Unknown / confidence-decay / staleness budgets** (Inv 7) | Built for **eventual consistency + async** (RDS ~15 min, IAM propagation, intermediate states); a mock is instant + consistent, so those paths never fire. |
+| **Quota / throttling as a hard planner constraint** (§5, Q5) | LocalStack enforces no quotas and doesn't throttle. |
+| **Multi-account Org · SCP floor · cross-account assume-role** (§8, §12, Inv 6) | SCP *enforcement* and real cross-account trust — the security backbone — barely exist in mocks. |
+| **Leased apply** (Inv 16) | Needs real STS session expiry + real long-running ops. |
+| **Stateful live cutover, RPO≈0** (§10) | Bespoke real RDS cross-region replication mechanics; zero signal from a mock. |
+| **Cost-drift loop** (§13) | Real billing/Cost Explorer (mock the *pricing* for the planner; actual-vs-planned needs real bills). |
+
+*(One exception in your favor: the EKS / reconciler-managing-a-reconciler slice (§6) is well-served by a
+local **kind/k3s** cluster — better than LocalStack — so that piece can be largely local.)*
+
+**The architectural unlock:** §15's provider **capability contract** + Inv 1's snapshot boundary mean you're
+building a provider abstraction with a fake backing *anyway*. So write **contract tests that run the same
+suite against both the fake/LocalStack and real AWS** — "the same agreement discipline that keeps the
+reconciler honest" (§15), applied to your test doubles: cheap fidelity where the contract holds, the real
+account catching where it doesn't.
+
+---
+
+## 7. What it costs to build and test on AWS — monthly
 
 Two distinct buckets people conflate. **These are engineering estimates with assumptions stated, not
 quotes** — actuals depend on always-on vs. ephemeral discipline, region count, and EKS-vs-ECS.
@@ -179,7 +261,7 @@ default**, burst to multi-region only for the active-active tests; (5) **one** s
 
 ---
 
-## 6. Guardrails — and yes, building them *is* the product
+## 8. Guardrails — and yes, building them *is* the product
 
 Cost (and blast-radius) guardrails come in two layers. The happy accident: **the spec-native guardrails are
 the same machinery the test-account guardrails need — so building Trellis builds its own guardrails
@@ -212,14 +294,19 @@ design, not vigilance.
 
 ---
 
-## 7. The one-paragraph answer
+## 9. The one-paragraph answer
 
 We have enough to start; the only honestly-open questions are implementation-level (led by the
 build-vs-Crossplane substrate fork) and are cheapest to answer by **building Phase 1**, not by more design.
 The must-haves are the differentiated spine (reconcile loop + plan-as-proof planner + diff-scoped credential
 mint + gate) plus exactly the batteries one real workload needs; transitions, FinOps, and TCB-hardening are
 should-haves right behind it; self-upgrade, org-change, and multi-cloud are nice-to-haves for later.
-Phasing front-loads the two things no competitor ships so the wedge is demoable in months. A dev/test AWS
+Phasing front-loads the two things no competitor ships so the wedge is demoable in months. The stack isn't
+settled — **Go for the spine, gRPC/protobuf for the fleet wire, Python for the solver, Node/TS for the
+console** is a sensible default to ratify, but it's downstream of the Crossplane fork and the
+planner-language reproducibility tradeoff. **LocalStack + Testcontainers carry the inner loop and most of
+CI, but can't replace a small ephemeral real-AWS account** — the 20% they can't mock (IAM enforcement,
+eventual consistency, quotas, cross-account trust, real cost) is the load-bearing part. A dev/test AWS
 footprint runs **~$500/mo lean to ~$2.5k/mo realistic**, and the guardrails that keep it there are the same
 Budget-constraint, circuit-breaker, and least-privilege mechanisms Trellis exists to provide — so we build
 them once and use them twice.

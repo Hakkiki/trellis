@@ -16,7 +16,12 @@ The simulator deploys continuously from `main`, so entries are grouped by date r
   **AWS cost model** for building + testing (~$500 lean to ~$2.5k realistic, with the dominant drivers and
   levers named), and the two-layer **guardrails** (spec-native budget-constraint + circuit-breakers +
   least-privilege, plus AWS Budgets Actions / SCPs / anomaly-detection / ephemeral-teardown) — noting the
-  guardrails are the same machinery Trellis ships, so building them is dogfooding. Linked from `docs/README.md`.
+  guardrails are the same machinery Trellis ships, so building them is dogfooding. Also captures a
+  **tech-stack** recommendation (Go spine · gRPC/protobuf fleet wire · Python solver · Node/TS console —
+  unsettled, downstream of the Crossplane fork and the planner-language reproducibility tradeoff) and a
+  **tiered test strategy** (Tier 0 pure-logic / Tier 1 LocalStack+Testcontainers / Tier 2 ephemeral real
+  AWS) with an honest map of what mocks are structurally blind to (IAM enforcement, eventual consistency,
+  quotas, cross-account trust, real cost). Linked from `docs/README.md`.
 
 - **Roles & responsibilities — a day in the life.** A new page mapping the nine personas (Platform Owner,
   Security/Governance author, Division/Product lead, Platform Operator, Service/Eng teams, Break-glass
