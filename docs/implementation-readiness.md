@@ -32,7 +32,9 @@ that's just work, and do we have a first slice that tells us the truth cheaply."
   finds **no one** ships the two differentiators — **plan-as-proof derivation** and **change-scoped
   ephemeral credentials** — but everything else (self-hosting, reconcile loop, intent provisioning, policy
   gating) is table stakes, and Humanitec/Crossplane/AWS are a feature-layer away. **Lead with the planner,
-  not the loop**, and get the wedge demoable fast.
+  not the loop**, and get the wedge demoable fast. **The window is perishable, not a moat (R7):** the same
+  scan flags Humanitec a feature-layer away and some claims at medium confidence — so re-scan competitors
+  each phase and treat the *coherent loop*, not any single feature, as the durable advantage.
 
 **The reframe that decides success** (straight from buildability): build **concrete controllers for the
 fixed, known cloud levels** and use the grammar only to stay coherent — *do not* build a generic recursive
@@ -49,12 +51,12 @@ cheaper to answer in code than in argument:
 
 | # | Open question | Why it's open | How we close it |
 |---|---|---|---|
-| Q1 | **Reconcile substrate: build standalone vs. stand on Crossplane/controller-runtime?** | Crossplane gives a proven reconcile loop + CRDs but *requires a Kubernetes control plane* and couples us to it; standalone keeps the near-stateless/scale-to-zero property (Inv 19) but is more to build. **The one genuine architecture fork.** | A 2-week spike in Phase 1 building the same thin reconcile loop both ways; decide on the demoable result. |
+| Q1 | **Reconcile substrate: build standalone vs. stand on Crossplane/controller-runtime?** | Crossplane gives a proven reconcile loop + CRDs but *requires a Kubernetes control plane* and couples us to it; standalone keeps the near-stateless/scale-to-zero property (Inv 19) but is more to build. **The one genuine architecture fork.** | A Phase-1 spike building the thin loop both ways — but treat it as a **foundational, hard-to-reverse fork** that determines the whole stack (§6), *not* a throwaway experiment (R8): the output is a decision with an explicit reversibility cost, not a vibe. |
 | Q2 | **The IAM-can't-express-"exactly-this-diff" gap.** | Inv 4 hair-cuts diff-scoped creds to *resource-set × action-set* + a re-validate-against-observed check. Whether that residual gap is tight enough in practice is unproven. | Implement the mint + re-validate against a real account; measure the over-grant; it's our #2 differentiator, so this is load-bearing. |
 | Q3 | **Which stateful stores get live (RPO≈0) cutover first?** | Replicate→verify→atomic-cutover (§10) is bespoke per engine; we can't do all of RDS/Aurora/DynamoDB/Kafka at once. | Pick one (RDS Postgres) for v1; backup→restore→cutover for the rest. |
 | Q4 | **The concrete blast-radius function.** | Invariants 11/17/18 all key off "computed blast radius crosses a posture-set threshold" — the spec leaves the *metric* abstract. | Define a first concrete metric (resources touched × Criticality × irreversibility) in Phase 2; tune against real plans. |
 | Q5 | **Provider-quirk surface** — eventual consistency, service quotas, rate limits. | Buildability #5: "the gap between the clean spec and the provider's actual behavior is where most of the ugly work lives." | Bake quota-as-hard-constraint (§5) and snapshot-pinned determinism in from Phase 1; expect iteration. |
-| Q6 | **First-customer wedge segment** *(product, not engineering)*. | Differentiators favor regulated / audit-heavy / platform-team buyers, but the design-partner target isn't named. | Pick 1–2 design partners alongside Phase 1; their workload shapes blueprint #1. |
+| Q6 | **First-customer wedge segment** *(a product question that kills via building-the-wrong-thing)*. | Differentiators favor regulated / audit-heavy / platform-team buyers, but the design-partner target isn't named — and no partner means blueprint #1 fits no real workload and the demo lands on nobody (R9). | **Co-equal with the build, not a later concern:** name 1–2 design partners *as a Phase-1 input*; their workload defines blueprint #1 and *pulls* specific Arc-2 security rows (§4) into Phase 1. |
 | Q7 | **EKS vs ECS for the compute battery + the K8s-slice (§6) validation.** | EKS is needed to prove "reconciler managing a reconciler," but it's a cost driver and adds scope. | ECS/Fargate for the first blueprint; add one EKS cluster in Phase 2 to validate the cluster-not-namespace slice. |
 
 ---
@@ -201,6 +203,14 @@ observe* a real workload, and enough for security to delegate an envelope it tru
 forward from **`S`** is the **auto-merge-below-floor** policy (Inv 18): without it, routine changes queue
 behind a human and the platform quietly reverts to "self-operated."
 
+> **Two red-team caveats on this MoSCoW.** **(R10)** `M` is the bar for a real *tenant*, not the *thin
+> slice* — read literally, "build all of `M`" is the boil-the-ocean killer §1 warns against. Phase 1 builds
+> only the **`M`-subset the first blueprint transitively requires** (one compute kind + LB + DNS + certs +
+> one store + secrets + identity + gate/mint + audit + the governance envelope); the rest of `M` waits for
+> the first real tenant. **(R11)** the cut is **partner-dependent** — a regulated wedge (Q6) *pulls* Arc-2
+> rows (signed images / SBOM / CVE, compliance evidence) from `S` into `M`, because security can't say yes
+> without them.
+
 ---
 
 ## 5. Phasing to stack wins and reach market faster
@@ -222,8 +232,22 @@ demo sells, while deferring the elegant edges (M&A, multi-cloud, self-upgrade) t
 for yet. The dependencies are preserved; the emphasis is moved to the differentiators.
 
 **Time-to-market reality** (from buildability): a useful real slice in **months**; a credible v1 in **~a
-couple of years with a funded team**; the elegant edges **later**. Phase 1 is the cheap truth-teller — if
-the proof is genuinely reviewable and the loop feels good, the rest is large-but-derisked execution.
+couple of years with a funded team**; the elegant edges **later**. Phase 1 is the cheap truth-teller.
+
+**Phase-1 exit criteria — guard against demo theater (R2/R4).** "The proof is reviewable and the loop feels
+good" is a *UX* bar — necessary, not sufficient. Phase 1 is derisked only when, on a **real** AWS account,
+the slice also: (a) has a minted credential **denied by AWS IAM** when it attempts an out-of-scope action
+(Q2, differentiator #2 — *proven*, not asserted); (b) converges correctly through a **real async /
+eventually-consistent** resource lifecycle (Q5, Inv 7); and (c) **detects and corrects a real out-of-band
+drift**. A slice that demos the happy path but skips these has tested none of the 20% §7 calls load-bearing
+— that is theater, not derisking. This also keeps the *market-first* order honest: front-loading the
+differentiators for the demo must still prove the **hard kernel**, not a pretty proof over a shallow planner.
+
+**Kill / no-go criteria — the off-ramp (R3).** buildability's "you learn cheaply if it's clumsy" only works
+if stopping is allowed. Do **not** advance past the Phase-1 gate if: the proof is not legibly reviewable by
+a non-author (Inv 18); the diff-scoped credential can't be clamped tightly enough to be meaningfully
+least-privilege (Q2 fails); or deterministic-plan ↔ real-cloud reconciliation is too flaky to trust (Q5
+unbounded). Each is a *stop-and-rethink*, not a *push-through* — surfacing them cheaply is the slice's job.
 
 ---
 
@@ -314,7 +338,12 @@ account catching where it doesn't.
 Two distinct buckets people conflate. **These are engineering estimates with assumptions stated, not
 quotes** — actuals depend on always-on vs. ephemeral discipline, region count, and EKS-vs-ECS.
 
-### 5a. The Trellis control plane itself (dev/test)
+> ⚠️ **This is *AWS* spend, not the cost to build Trellis.** The dominant cost of the build is **payroll** —
+> a funded team for ~2 years (buildability) — i.e. **~3 orders of magnitude** more than the figures below.
+> Never quote the monthly AWS number as the build cost; it is a sliver. The only claim it supports is that
+> the *running* footprint is cheap by construction (Inv 19), which is a different and narrower claim (R1).
+
+### 8a. The Trellis control plane itself (dev/test)
 The spec makes this *cheap by construction* — near-stateless, no consensus store, scale-to-zero (Inv 19):
 
 | Item | Choice | ~$/mo |
@@ -328,7 +357,7 @@ The spec makes this *cheap by construction* — near-stateless, no consensus sto
 | Networking | **VPC endpoints over a NAT gateway** (NAT is the silent ~$32/mo+egress trap) | 5–70 |
 | **Control plane subtotal** | | **~$70–400** (≈ $150 typical) |
 
-### 5b. The managed/test infrastructure Trellis provisions
+### 8b. The managed/test infrastructure Trellis provisions
 Where cost actually lives — exercising a full C0 active-active stack. Per persistent test environment:
 
 | Driver | Note | ~$/mo |
@@ -340,7 +369,7 @@ Where cost actually lives — exercising a full C0 active-active stack. Per pers
 | ALB ×2, Route53, ACM, KMS, misc | | 40–90 |
 | **Per persistent C0 env subtotal** | | **~$500–1,400** |
 
-### 5c. Blended monthly (build + test)
+### 8c. Blended monthly (build + test)
 
 | Posture | Assumptions | ~$/mo |
 |---|---|---|
@@ -352,6 +381,15 @@ Where cost actually lives — exercising a full C0 active-active stack. Per pers
 (Trellis itself enables this); (2) **VPC endpoints over NAT**; (3) **ECS before EKS**; (4) **single-region by
 default**, burst to multi-region only for the active-active tests; (5) **one** stateful engine in v1.
 
+**Two costs the ephemeral lever can't touch (from the red-team).** **(R5)** The **org substrate** — AWS
+Organizations / Control Tower / multi-account / SCPs (the §8-delegation + §12-bootstrap backbone) — is
+*persistent and slow*: account create/close is rate-limited, closed accounts linger ~90 days, Control Tower
+is heavyweight to stand up. Budget it as a standing cost + a setup-time tax, separate from the nukeable
+workload envs. **(R6)** Until Trellis's own guardrails (§9) are trustworthy, **they don't protect the dev
+account** — they're the thing under construction, and a reconciler bug (our own code) can provision a
+fortune before its breaker exists. Run the build on **external AWS-native guardrails** (Budgets Actions
+hard-stop, SCP instance/region denials, low per-account limits) until the platform's own can be trusted.
+
 ---
 
 ## 9. Guardrails — and yes, building them *is* the product
@@ -360,7 +398,7 @@ Cost (and blast-radius) guardrails come in two layers. The happy accident: **the
 the same machinery the test-account guardrails need — so building Trellis builds its own guardrails
 (dogfooding).**
 
-### 6a. Spec-native guardrails (already designed — §13, §17)
+### 9a. Spec-native guardrails (already designed — §13, §17)
 - **Budget is a planner constraint**, not a bolt-on alarm — the structure is shaped to fit the budget, and a
   **budget-breach throttles or blocks provisioning** (§13). *(This is itself a differentiator — competitors
   gate on budget* after *authoring; Trellis compiles against it.)*
@@ -372,7 +410,7 @@ the same machinery the test-account guardrails need — so building Trellis buil
   before they're ever provisioned.
 - **Change-freeze** windows govern the autonomous reconciler (§9).
 
-### 6b. AWS-account cost guardrails for the build (standard, ship day one)
+### 9b. AWS-account cost guardrails for the build (standard, ship day one)
 - **AWS Budgets + Budget Actions** — per-account and per-tag budgets that **auto-stop/deny** at threshold.
 - **SCPs** — deny expensive instance families, deny non-approved regions, require tagging — the org-floor
   (monotonic-tightening, Inv 6) applied to *our own* dev org.
@@ -387,7 +425,36 @@ design, not vigilance.
 
 ---
 
-## 10. The one-paragraph answer
+## 10. Red-team — how this assessment kills the build (Munger inversion)
+
+Turning the spec's own discipline on this document: not "is the plan good?" but **"how would we *guarantee*
+the build fails while following this readiness doc to the letter?"** Each kill-path is scored **✓ guarded**
+(the doc already forecloses it), **◑ partial** (named, residual remains), or **➕ GAP → fixed** (a real hole
+in *this* doc, now patched in the section noted). Strongest finding first.
+
+| # | Kill-path (follow the doc and die) | Status | Defense / fix |
+|---|---|---|---|
+| **R1** | **Read "$500–2.5k/mo" as the cost to build Trellis.** The doc's most concrete number answers "AWS monthly spend," but a funder conflates it with *build* cost — ~1000× larger (a funded team for ~2 years). The project is funded on a false premise and runs dry at 10% done. | ➕ GAP → §8 | Added a loud caveat: **the dominant cost is payroll, not AWS**; the monthly figure is a sliver and must never be quoted as build cost. The only claim it supports is that the *running* footprint is cheap (Inv 19). |
+| **R2** | **Demo theater passes for derisking.** Phase 1's success bar ("proof reviewable, loop feels good") is a *UX* bar. Ship a happy-path demo on one account, declare "derisked," then die in Phase 2 on the 20% §7 calls load-bearing (IAM enforcement, eventual consistency, multi-account, stateful). | ➕ GAP → §5 | Added **Phase-1 exit criteria**: the slice must hit the hard 20% on real AWS — an IAM-*denied* out-of-scope action, an async/eventually-consistent convergence, a real drift-stomp — not just a legible proof. |
+| **R3** | **No off-ramp → sunk-cost march.** The doc only says how to proceed, never when to stop; buildability's "you learn cheaply if it's clumsy" is never operationalized, so a failing Phase 1 continues anyway. | ➕ GAP → §5 | Added explicit **kill / no-go criteria** at the Phase-1 gate. |
+| **R4** | **Front-loading the differentiators front-loads the research risk.** §5 pulls the two *least-proven* pieces (the compiler bet + the unmeasured IAM-diff gap, Q2) into Phase 1 for *market* reasons; if Phase 1 must also *sell*, the temptation is to fake the hard kernel (a pretty proof over a shallow planner). | ➕ GAP → §5 | Named the tension; Phase 1's job is the **hard kernel** (sound proof + genuinely clamped credential), enforced by R2's exit criteria — not a demo veneer. |
+| **R5** | **"Ephemeral test envs" doesn't apply to the org substrate.** §8's lean estimate leans on spin-up/tear-down, but AWS **Organizations / Control Tower / multi-account / SCP** testing (the §8 delegation + §12 bootstrap backbone) is *persistent and slow*: account create/close is rate-limited, closed accounts linger ~90 days, Control Tower is heavyweight. The cheap number assumes away the un-nukeable part. | ➕ GAP → §8 | Added: budget a **persistent org/Control-Tower substrate** as a standing cost + setup-time tax the ephemeral lever can't touch. |
+| **R6** | **Building the cost guardrails *with* the cost guardrails.** §9's breakers (budget, blast-radius, FinOps) are the *thing under construction* — they don't protect the dev account until they work, and a reconciler bug (our own code) can provision a fortune before its breaker exists. | ➕ GAP → §8/§9 | Added: until Trellis's own guardrails are trusted, the dev account runs on **external AWS-native guardrails** (Budgets Actions hard-stop, SCP instance/region denials, low account limits), never the half-built ones. |
+| **R7** | **The white space is perishable, treated as durable.** §1 leans on an *uncontested* moat from a June-2026 scan that itself flags Humanitec "a feature-layer away" and some claims medium-confidence. A 2-year build toward a moat a rival closes in month 6. | ➕ GAP → §1 | Added: the window is **perishable** — re-scan competitors each phase; the durable advantage is the *coherent loop*, not any single feature (the competitive doc's own conclusion). |
+| **R8** | **"2-week spike" understates the Crossplane fork.** Q1 reads as a cheap experiment, but §6 says it *determines the whole stack* and is near-irreversible if found late. A breezy spike picks wrong and Phase 2 is a rewrite. | ➕ GAP → §2 | Re-framed Q1 as a **foundational, hard-to-reverse fork**; the spike must output a decision with an explicit reversibility cost, not a vibe. |
+| **R9** | **Defer the wedge customer as "product, not engineering."** Q6's parenthetical demotes the one question that kills by *building the wrong blueprint*: no partner → Phase 1 demos to nobody and blueprint #1 fits no real workload. | ➕ GAP → §2 | Re-rated Q6 to **co-equal with the build** — a named design partner is a Phase-1 *input*, their workload defines blueprint #1. |
+| **R10** | **The "M" set is a platform, not a thin slice.** §4 tags ~20 capabilities **M** ("day one"), but §1/§5 promise a *thin* slice — read literally, "day-one Must" = boil the ocean = the #1 killer. | ◑ partial → §4 | Clarified: Phase 1 builds only the **M-subset the first blueprint transitively requires**; the rest of M is "day-one for a real *tenant*," deferred to the first real tenant. |
+| **R11** | **Security says yes to a half-guarded surface.** Arc 1 (self-service) ships fast while some Arc-2 items (signed images/SBOM/CVE, compliance evidence) are **S** — but the likely wedge (regulated/audit-heavy) needs those *day one*, so security says no, or yes to something not yet safe. | ◑ partial → §4 | Reinforced: the wedge segment (Q6) **pulls** specific Arc-2 rows into Phase 1 — the MoSCoW is partner-dependent, not fixed (§4 already flags "**M** if regulated"). |
+| **R12** | **Python in the TCB festers as "ratify later."** §6 flags the planner-language reproducibility tradeoff (Inv 9) but defaults to nothing; "decide later" + Python's weak build-reproducibility = a TCB invariant quietly compromised for dev convenience. | ◑ partial → §6 | Standing guidance: in the TCB, **reproducibility (Inv 9) outranks ecosystem convenience** — bias the planner to Go, keep Python offline (catalog-time) until proven reproducible. |
+
+**What the inversion produced.** Nine genuine holes in this assessment (R1–R9), patched in the sections
+noted; three residuals (R10–R12) named and bounded. The headline mirrors the spec's own inversion result:
+**the most dangerous artifact in this document is its cheapest number** — the AWS cost — because it invites
+funding the build on a sliver of its true cost. R1 is the direct fix.
+
+---
+
+## 11. The one-paragraph answer
 
 We have enough to start; the only honestly-open questions are implementation-level (led by the
 build-vs-Crossplane substrate fork) and are cheapest to answer by **building Phase 1**, not by more design.

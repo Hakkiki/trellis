@@ -26,7 +26,13 @@ The simulator deploys continuously from `main`, so entries are grouped by date r
   the *security "say-yes" surface* (identity/secrets, guardrails & policy, supply-chain, compliance/audit,
   break-glass) — each row tagged **M/S/L** so it doubles as a Phase-1 adoption checklist, with a
   self-service/say-yes test that names the "self-operated masking as self-service" anti-pattern and the
-  auto-merge-below-floor lever (Inv 18) that forecloses it. Linked from `docs/README.md`.
+  auto-merge-below-floor lever (Inv 18) that forecloses it. **Red-teams the assessment with a Munger
+  inversion** (§10): twelve kill-paths for "follow this doc and guarantee the build fails," scored
+  guarded / partial / GAP — nine GAPs patched back into the relevant sections (the headline: the AWS cost
+  is the doc's most dangerous number because a funder may read it as build cost, when payroll is ~1000×
+  larger; plus demo-theater vs. real-cloud Phase-1 exit criteria, explicit kill/no-go criteria, the
+  persistent-org-substrate and bootstrapping-guardrails cost caveats, the perishable-white-space risk, and
+  re-rating the Crossplane fork and the wedge-customer question). Linked from `docs/README.md`.
 
 - **Roles & responsibilities — a day in the life.** A new page mapping the nine personas (Platform Owner,
   Security/Governance author, Division/Product lead, Platform Operator, Service/Eng teams, Break-glass
