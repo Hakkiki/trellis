@@ -42,6 +42,12 @@ property** per integration — not a silent accumulation.
 function). The one rule applies — a third party may never sit on the control plane's synchronous-fate path;
 if a control-plane function consumes a vendor, it must be **fail-static / pull-and-cache** (Inv 12).
 
+The highest-risk version is subtle (red-team TPI8): a **platform-team-adopted** observability / alerting /
+identity SaaS — e.g. the Datadog example below — that the control plane quietly comes to *depend* on. The
+control plane's own observability must stay **fail-static and on an independent channel** (Inv 15), never
+solely a vendor. And open-loop exposure is a **posture-set budget with a breach action** (block new
+open-loop integrations above a threshold / escalate the gate), not just a reported number (TPI6).
+
 ---
 
 ## 2. The deployment-model zoo (and how Trellis handles each)
@@ -59,6 +65,12 @@ closed vs open.
 
 The **Integration Profile** (below) is the one manifest that captures *which model* plus the cross-cutting
 axes — so onboarding collapses to "fill the profile," not "open ten tickets."
+
+**The hybrid agent is the liability point, not just the leverage point (red-team TPI3).** It runs *vendor
+code* with *our creds* inside *our perimeter* — the ideal lateral-movement pivot, and a supply-chain hit on
+the agent image is an instant insider. Treat it as **untrusted-by-default and most-sandboxed**: its own
+microsegment, egress only to the vendor backend, short-lived workload identity (no standing creds), and
+anomaly-monitored.
 
 ---
 
@@ -104,6 +116,16 @@ scan gate, **with a proof** ("egress via PrivateLink because `inspection: requir
 CW-read granted because exception X"). Approve = merge = a scoped credential applies it; the reconciler holds
 it. **The integration is now a first-class, drift-corrected, audited object** — not a forgotten console
 change.
+
+**Enforced vs asserted — the honesty the profile must keep (red-team TPI1/TPI5).** The profile and its proof
+must *visibly separate* **enforced** controls — compiled into SG / IAM / PrivateLink / route, actually
+guaranteed — from **asserted** ones — vendor attestation, `pii: deny` on traffic we can't inspect — which are
+merely declarative. For open-loop, residency is enforced on *placement + path* (strong) but payload-level PII
+control is only as strong as feasible DLP (weak). A green profile must never imply a guarantee it can't keep.
+Profiles are **signed + transitively pinned** (chart / image / AMI *digests*, Inv 12) — no floating vendor
+versions, and a profile change re-plans dependents (TPI4) — and carry a gated **escape hatch** for
+un-profileable vendors (max-audited, time-boxed, with a debt to convert to a profile) so the genuinely weird
+ones stay *inside* governance instead of routing around it (TPI7).
 
 ---
 
@@ -213,7 +235,7 @@ a parameterized, governed, reconciled artifact.
 
 ---
 
-## 10. Open questions / honest gaps (for a later red-team)
+## 10. Open questions / honest gaps
 
 - **The open-loop scanning gap is real and unclosable.** You cannot CVE-scan a SaaS you don't run; attestation
   + boundary control + data minimization is the ceiling. Be honest that pure-SaaS assurance is *assertive*.
@@ -226,3 +248,28 @@ a parameterized, governed, reconciled artifact.
   control plane's synchronous path, enforced, not just advised.
 - **Hybrid-agent blast radius:** the agent we run for a vendor has *our* creds and *their* code — it's a
   confused-deputy risk; how tightly can we sandbox it?
+
+---
+
+## 11. Red-team — how this integration model fails (Munger inversion)
+
+*"How would adopting this third-party model **guarantee** the catastrophe it's meant to prevent — an
+ungoverned, compromised, or data-leaking vendor?"* Scored **✓ guarded** / **◑ partial** / **➕ GAP → fixed**
+(folded into the section noted).
+
+| # | Kill-path | Status | Defense / fix |
+|---|---|---|---|
+| **TPI1** | The Integration Profile makes an open-loop SaaS *look* governed (scan gate, data contract) while nothing is enforced at runtime — teams trust a green checkmark over controls that are merely asserted. | ➕ GAP → §3 | Profile + proof **split enforced controls** (compiled into SG/IAM/PrivateLink — real) **from asserted ones** (attestation, `pii: deny` on E2E traffic — declarative); the gate shows which is which. The "assertive not inherent" trap, integration edition. |
+| **TPI3** | The hybrid **agent** — vendor code + our creds inside our perimeter — is the perfect lateral-movement pivot; a supply-chain hit on the agent image = instant insider. | ➕ GAP → §2 | Treat it as **untrusted-by-default, most-sandboxed**: own microsegment, egress only to the vendor backend, short-lived workload identity, anomaly-monitored. Leverage point *and* liability point. |
+| **TPI4** | A pre-vetted **profile rots** or pins `latest`; one bad profile auto-deploys a vulnerable vendor everywhere (the §7 catalog supply-chain bomb, vendor edition). | ➕ GAP → §3 | Profiles signed + **transitively pinned** (chart/image/AMI digests, Inv 12); a profile change is a gated, re-planning Author action; no floating vendor versions. |
+| **TPI7** | The profile can't express a weird vendor → teams **route around** Trellis ("just give me console access for this one") — recreating the snowflake *outside* governance. | ➕ GAP → §3 | A gated **escape hatch** that keeps un-profileable vendors *inside* the envelope: max-audited, scoped, time-boxed, carrying a **debt** to convert to a profile. Better an ugly governed integration than a clean ungoverned one. |
+| **TPI8** | A **platform-team-adopted SaaS** (observability/alerting/identity — the doc's own Datadog example!) quietly becomes a control-plane dependency, defeating R13 from the inside. | ➕ GAP → §1 | Named the **highest-risk Plane-1 vector**; the control plane's own observability must be **fail-static + on an independent channel** (Inv 15), never solely a vendor. |
+| **TPI2** | `required-or-prove` inspection degrades to "prove" universally — every vendor claims infeasibility, the escape hatch swallows the rule. | ◑ partial → §5 | Infeasibility must be **proven** (demonstrated TLS-pin), not asserted; compensating set costlier than inspecting where possible; track the **inspected : compensated ratio** as a watched signal. |
+| **TPI5** | Residency / `pii: deny` is enforced on the **path** (where the pipe goes) but not the **payload** (what flows) for open-loop/E2E — a stronger guarantee is implied than kept. | ◑ partial → §3/§6 | Stated: residency enforced on **placement + path** (strong); payload PII control only as strong as feasible DLP (weak). Same enforced-vs-asserted split as TPI1. |
+| **TPI6** | "Measure open-loop exposure" without teeth = a number that only grows (the §19 visible-but-unstopped analog). | ◑ partial → §1 | Exposure is a **posture-set budget with a breach action** (block new open-loop above threshold / escalate the gate), not a dashboard. |
+
+**Headline:** the model's most dangerous move is **dressing asserted controls as enforced ones**
+(TPI1/TPI5) — a governed-*looking* profile over an open-loop SaaS manufactures a false sense of safety. The
+enforced-vs-asserted split is the direct fix, and it is the same "assertive, not inherent" honesty the spec
+turns on itself. The runner-up: the **hybrid agent** (TPI3) is the one place a third party gets our creds
+inside our perimeter — sandbox it like an adversary, not a partner.
