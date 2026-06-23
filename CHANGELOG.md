@@ -26,7 +26,13 @@ The simulator deploys continuously from `main`, so entries are grouped by date r
   the *security "say-yes" surface* (identity/secrets, guardrails & policy, supply-chain, compliance/audit,
   break-glass) — each row tagged **M/S/L** so it doubles as a Phase-1 adoption checklist, with a
   self-service/say-yes test that names the "self-operated masking as self-service" anti-pattern and the
-  auto-merge-below-floor lever (Inv 18) that forecloses it. **Red-teams the assessment with a Munger
+  auto-merge-below-floor lever (Inv 18) that forecloses it. Adds a **two-plane model** (§3) separating
+  *Trellis's own stack* (Plane 1 — control-plane subsystems + the tech they're built from) from the
+  *app-team delivery stack* (Plane 2 — batteries + blueprints teams consume), with the "one rule" (never
+  let a Plane-2 workload tool become a Plane-1 control-plane dependency — the general form of the
+  reject-MSK-as-the-event-bus finding), a same-tool-two-roles table, and the insight that the
+  agnostic-vs-best-in-class tension resolves *per plane* (decisive in Plane 1, pluralistic in Plane 2).
+  **Red-teams the assessment with a Munger
   inversion** (§10): twelve kill-paths for "follow this doc and guarantee the build fails," scored
   guarded / partial / GAP — nine GAPs patched back into the relevant sections (the headline: the AWS cost
   is the doc's most dangerous number because a funder may read it as build cost, when payroll is ~1000×
