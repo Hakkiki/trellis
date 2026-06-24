@@ -66,6 +66,7 @@ import {
 import { isSize, SIZE_CAPACITY } from "@/sim/rightsizing";
 import { ALL_STATES, type State, stateColorVar } from "@/sim/state";
 import { clearSession, loadSession, saveSession } from "@/sim/store";
+import { headline, type Metric, type RoleTier, TIERS, type Tone, tierView } from "./dashboard";
 import Stage3D from "./Stage3D";
 import { startTour } from "./tour";
 import {
@@ -531,6 +532,8 @@ export default function Simulator() {
             </div>
           </div>
 
+          {phase === "applied" && snap && <SummaryStrip snap={snap} />}
+
           {phase === "empty" && <EmptyState onPlan={onPlan} />}
 
           {phase !== "empty" && plan && !plan.feasible && (
@@ -815,11 +818,14 @@ export default function Simulator() {
         {/* ---- Right: Proof + audit ---- */}
         <Card className="h-fit min-w-0">
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm">Plan = proof</CardTitle>
+            <CardTitle className="text-sm">Readouts</CardTitle>
           </CardHeader>
           <CardContent>
-            <Tabs defaultValue="proof">
+            <Tabs defaultValue="dashboard">
               <TabsList className="w-full">
+                <TabsTrigger value="dashboard" className="flex-1">
+                  Dashboard
+                </TabsTrigger>
                 <TabsTrigger value="proof" className="flex-1">
                   Proof
                 </TabsTrigger>
@@ -833,6 +839,9 @@ export default function Simulator() {
                   Audit
                 </TabsTrigger>
               </TabsList>
+              <TabsContent value="dashboard" className="mt-3">
+                <RoleDashboard snap={snap} focus={serviceFocus} />
+              </TabsContent>
               <TabsContent value="proof" className="mt-3">
                 <ProofPanel snap={snap} selectedId={sel?.id ?? null} />
               </TabsContent>
@@ -1310,6 +1319,139 @@ function OwnersPanel({
           </div>
         );
       })}
+    </div>
+  );
+}
+
+/** Map a metric's severity tone to the shared State palette. */
+function toneColor(tone: Tone): string {
+  switch (tone) {
+    case "good":
+      return "var(--state-converged)";
+    case "warn":
+      return "var(--state-degraded)";
+    case "bad":
+      return "var(--state-stalled)";
+    default:
+      return "var(--foreground)";
+  }
+}
+
+/** The always-on KPI strip: one headline read of the estate, same for everyone. */
+function SummaryStrip({ snap }: { snap: EngineSnapshot }) {
+  const h = headline(snap);
+  const color = stateColorVar(h.state);
+  const stats: { label: string; value: string; tone: Tone }[] = [
+    {
+      label: "spend",
+      value: `${h.spend} · ${h.spendPct}%`,
+      tone: h.breach ? "bad" : h.spendPct >= 90 ? "warn" : "good",
+    },
+    {
+      label: "reliability",
+      value: `${h.convergedPct}% converged`,
+      tone: h.convergedPct >= 95 ? "good" : h.convergedPct >= 80 ? "warn" : "bad",
+    },
+    { label: "incidents", value: `${h.incidents}`, tone: h.incidents > 0 ? "bad" : "good" },
+  ];
+  return (
+    <Card>
+      <CardContent className="flex flex-wrap items-center gap-x-6 gap-y-2 py-3">
+        <span
+          className="flex items-center gap-2 text-sm font-semibold"
+          style={{ color }}
+          title={snap.envNote}
+        >
+          <span
+            className="size-2.5 rounded-full"
+            style={{ background: color, boxShadow: `0 0 6px ${color}` }}
+          />
+          {h.state}
+        </span>
+        {stats.map((s) => (
+          <div key={s.label} className="flex flex-col leading-tight">
+            <span className="text-muted-foreground text-[10px] font-semibold tracking-wide uppercase">
+              {s.label}
+            </span>
+            <span className="text-sm font-medium tabular-nums" style={{ color: toneColor(s.tone) }}>
+              {s.value}
+            </span>
+          </div>
+        ))}
+        <span className="text-muted-foreground ml-auto max-w-[14rem] text-right text-[11px]">
+          the bottom line — read it by role in the Dashboard tab
+        </span>
+      </CardContent>
+    </Card>
+  );
+}
+
+/** One metric line (figure + optional bar), tinted by its tone. */
+function MetricRow({ m }: { m: Metric }) {
+  const color = toneColor(m.tone);
+  return (
+    <div className="space-y-1">
+      <div className="flex items-center justify-between">
+        <span className="text-muted-foreground">{m.label}</span>
+        <span className="font-medium tabular-nums" style={{ color }}>
+          {m.value}
+        </span>
+      </div>
+      {m.pct != null && (
+        <div className="bg-secondary h-1.5 w-full overflow-hidden rounded-full">
+          <div
+            className="h-full rounded-full"
+            style={{ width: `${Math.min(100, m.pct)}%`, background: color }}
+          />
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** Role-switcher lens: the same Structure, reframed to each audience's altitude
+ *  and its bottom line (§roles). The Teams lens follows the topology's focus. */
+function RoleDashboard({ snap, focus }: { snap: EngineSnapshot | null; focus: string }) {
+  const [tier, setTier] = React.useState<RoleTier>("exec");
+  if (snap?.phase !== "applied")
+    return <p className="text-muted-foreground text-xs">Approve a plan to see the dashboard.</p>;
+  const meta = TIERS.find((t) => t.id === tier);
+  const view = tierView(snap, tier, focus);
+  const color = stateColorVar(view.state);
+  return (
+    <div className="space-y-3 text-xs">
+      <div className="bg-secondary/50 flex rounded-md p-0.5">
+        {TIERS.map((t) => (
+          <button
+            key={t.id}
+            onClick={() => setTier(t.id)}
+            className={cn(
+              "flex-1 rounded px-2 py-1 text-[11px] font-medium transition",
+              tier === t.id
+                ? "bg-primary text-primary-foreground"
+                : "text-muted-foreground hover:text-foreground",
+            )}
+          >
+            {t.label}
+          </button>
+        ))}
+      </div>
+      <div className="border-border/60 flex items-center justify-between border-b pb-2">
+        <span className="flex items-center gap-1.5 font-medium">
+          <span
+            className="size-2 rounded-full"
+            style={{ background: color, boxShadow: `0 0 6px ${color}` }}
+          />
+          {view.title}
+        </span>
+        <span style={{ color }}>{view.state}</span>
+      </div>
+      <p className="text-muted-foreground text-[10px]">{meta?.personas}</p>
+      <div className="space-y-2.5">
+        {view.metrics.map((m) => (
+          <MetricRow key={m.label} m={m} />
+        ))}
+      </div>
     </div>
   );
 }

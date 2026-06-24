@@ -66,6 +66,16 @@ The simulator deploys continuously from `main`, so entries are grouped by date r
 
 ### Added
 
+- **Mini dashboard — the bottom line, by role.** The simulator now reads back the estate, not just the
+  topology. An always-on **KPI strip** above the topology gives one headline (status · spend vs budget ·
+  reliability · incidents), same for everyone. A new **Dashboard** tab adds a role-switcher lens that
+  reframes that bottom line to each of the three altitudes — CEO/CIO, Division leader, Teams — mapped to
+  the nine personas from the roles page: the exec sees estate posture (spend, reliability, risk, exposure,
+  governance), the division leader sees operations (budget headroom, incidents, approvals, off-target
+  services), and a team sees its own service (health, drift, its cost vs plan, last deploy). The Teams
+  lens follows the topology's service focus. All derived purely from the engine snapshot (no new state),
+  in `app/src/components/sim/dashboard.ts` with unit tests locking the projection.
+
 - **Third-party integrations brainstorm.** A new `docs/third-party-integrations.md` exploring how Trellis
   makes deploying and governing vendor software easy — today a bespoke, ticket-driven snowflake per vendor.
   Organized on the **open-loop vs closed-loop** spine (closed = a Service/Component from an external supply
@@ -489,7 +499,6 @@ The simulator deploys continuously from `main`, so entries are grouped by date r
   (first-class `Dormant` state, an enforced parity invariant, consistency/determinism protections,
   denial-of-wallet). Documented position only — the page is explicit that the engine does **not** yet
   implement the levers, the `Dormant` state, or the parity invariant; that is sequenced follow-up.
-
 - **Roles & responsibilities — a day in the life.** A new page mapping the nine personas (Platform Owner,
   Security/Governance author, Division/Product lead, Platform Operator, Service/Eng teams, Break-glass
   responders, Auditor, FinOps, External vendor) to the model: each one's mandate, what it owns, what it
